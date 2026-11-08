@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0-beta.14 (2026-11-08)
 
 - No changes to the plugin. CI runs with read-only repository access, and the connection tests wait for events instead of fixed delays, so a slow CI machine can't make them fail.
 
