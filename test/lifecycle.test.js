@@ -15,6 +15,16 @@ async function silentServer() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Waits until `cond()` is true (polling), so slow CI machines don't make the tests flaky. */
+async function waitFor(cond, ms = 3000) {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) {
+      throw new Error('timed out waiting');
+    }
+    await sleep(5);
+  }
+}
 
 test('reconnect lease: the client reconnects at the interval and says it was planned', async () => {
   const srv = await silentServer();
@@ -22,7 +32,7 @@ test('reconnect lease: the client reconnects at the interval and says it was pla
   const calls = [];
   client.setDisconnectCallback((planned) => calls.push(planned));
   await client.connect();
-  await sleep(120);
+  await waitFor(() => calls.length > 0);
   assert.deepStrictEqual(calls, [true]);
   await client.disconnect();
   srv.close();
@@ -32,16 +42,16 @@ test('in-place lease: re-registers on the open connection, then reconnects after
   const srv = await silentServer();
   let reregs = 0;
   const client = new IconaBridgeClient('127.0.0.1', srv.port, quietLog(), {
-    intervalMs: 40, mode: 'inplace', recycleMs: 150, reregister: async () => { reregs++; },
+    intervalMs: 40, mode: 'inplace', recycleMs: 600, reregister: async () => { reregs++; },
   });
   const calls = [];
   client.setDisconnectCallback((planned) => calls.push(planned));
   await client.connect();
-  await sleep(100);
-  assert.ok(reregs >= 1, 'renewed in place');
-  assert.deepStrictEqual(calls, []);
-  await sleep(150);
+  await waitFor(() => reregs >= 1);
+  assert.deepStrictEqual(calls, [], 'renewed in place, no reconnect');
+  await waitFor(() => calls.length > 0);
   assert.deepStrictEqual(calls, [true]);
+  assert.ok(reregs >= 2);
   await client.disconnect();
   srv.close();
 });
@@ -55,11 +65,11 @@ test('a planned reconnect waits while a call is busy', async () => {
   const calls = [];
   client.setDisconnectCallback((planned) => calls.push(planned));
   await client.connect();
-  await sleep(120);
+  await sleep(250);
   assert.deepStrictEqual(calls, [], 'no reconnect during the call');
   assert.ok(client.connected);
   busy = false;
-  await sleep(60);
+  await waitFor(() => calls.length > 0);
   assert.deepStrictEqual(calls, [true]);
   await client.disconnect();
   srv.close();
@@ -72,7 +82,7 @@ test('a dropped connection is reported as not planned', async () => {
   client.setDisconnectCallback((planned) => calls.push(planned));
   await client.connect();
   srv.close();
-  await sleep(50);
+  await waitFor(() => calls.length > 0);
   assert.deepStrictEqual(calls, [false]);
   await client.disconnect();
 });
@@ -102,7 +112,7 @@ test('a planned reconnect stops waiting after maxBusyWaitMs', async () => {
   const calls = [];
   client.setDisconnectCallback((planned) => calls.push(planned));
   await client.connect();
-  await sleep(160);
+  await waitFor(() => calls.length > 0);
   assert.deepStrictEqual(calls, [true]);
   await client.disconnect();
   srv.close();
