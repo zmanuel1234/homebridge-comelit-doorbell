@@ -103,6 +103,16 @@ export function encodeChannelCloseAck(serverChannelId: number): Buffer {
   return Buffer.concat([encodeHeader(body.length, 0), body]);
 }
 
+/** Closes a channel by its handle (as comelit-vip does): END/3 on the management channel. */
+export function encodeCloseChannel(handle: number): Buffer {
+  const body = Buffer.alloc(10);
+  body.writeUInt16LE(MessageType.END, 0);
+  body.writeUInt16LE(3, 2);
+  body.writeUInt32LE(2, 4);
+  body.writeUInt16LE(handle, 8);
+  return Buffer.concat([encodeHeader(body.length, 0), body]);
+}
+
 export function parseCommandResponse(body: Buffer): { msgType: number; seq: number; serverChannelId: number } {
   return {
     msgType: body.readUInt16LE(0),

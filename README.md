@@ -90,8 +90,9 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. You can
 | One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds once the intercom confirms, then Locked again. If the intercom refuses, it goes straight back to Locked and the log says why. |
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
+| Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Experimental. Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera-experimental). |
 
-The plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
+Without the doorbell camera, the plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
 
 ## Settings
 
@@ -130,8 +131,29 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 
 | Setting | Default | Description |
 |---|---|---|
-| Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring-experimental). `off`, `handshake` or `answer-on-open`. |
+| Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring-experimental). `off`, `handshake`, `answer-on-open` or `answer-on-view`. |
 | Register as a push device (`registerPush`) | `false` | Original behavior. Leave off: it diverts calls away from Homebridge. |
+
+### Experimental: doorbell camera
+
+| Setting | Default | Description |
+|---|---|---|
+| Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera-experimental). |
+| Talk back from the Home app (`talkBack`) | `false` | Sends the Home app's microphone to the intercom's speaker during a live view |
+| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for the intercom's largest picture (640x240 on a 6741W) |
+| Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
+| ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (installed with homebridge-camera-ffmpeg), else `ffmpeg` from the path |
+| Picture when there is no call (`snapshotImage`) | dark picture | A JPEG shown when no call is in progress |
+
+### Experimental: media timing
+
+For tuning the doorbell camera's live view after real tests. The defaults follow what comelit-vip measured on a 6741W.
+
+| Setting | Default | Description |
+|---|---|---|
+| Wait for the first video or audio (`mediaStartTimeoutSeconds`) | `10` | After answering, hang up if nothing arrives within this time |
+| End the call after media stops for (`mediaSilenceSeconds`) | `5` | Treat the call as over when video and audio stop for this long |
+| Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 
 ## How ring and unlock work
 
@@ -148,8 +170,20 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 | `off` | The plugin never takes part in the call. Unlocking during a ring is refused as busy. |
 | `handshake` | The plugin replies to the call without answering it, for testing. Phones keep ringing. |
 | `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices stop ringing. |
+| `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Needs the doorbell camera. |
 
 Every message of the call is logged with the prefix `call:`. Please share those logs in an issue if you try it.
+
+### Doorbell camera (experimental)
+
+With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
+
+- **It rings by itself.** You no longer need the homebridge-camera-ffmpeg doorbell, and you can clear the trigger URL.
+- **Live video needs a call.** The intercom only sends video and audio inside a call, so set **Answer the ring** to `answer-on-view`. Opening the live view during a ring then answers it, like pressing Answer in the Comelit app, and the other devices stop ringing. Outside a call, the camera shows a still picture.
+- **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
+- **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it.
+
+The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). It is untested on a real intercom, so look for the `call:` lines in the log, which count the video and audio packets received.
 
 ## Migrating from homebridge-comelit-intercom
 
@@ -173,7 +207,7 @@ Turn on **debug mode** for the child bridge to see every protocol message (`VIP 
 ## Known limits
 
 - Unlocking from HomeKit **during** a ring needs `answerMode: answer-on-open`, which is experimental.
-- No live video or two-way audio yet.
+- Live video and talk-back (doorbell camera) are experimental and untested on a real intercom.
 - Only tested on one model and firmware (see above).
 
 ## Development
@@ -191,7 +225,9 @@ npm test        # unit tests, using frames captured from a real intercom
 | `client.ts` | TCP connection, channels, and the registration lease |
 | `ctp.ts` | CTP frames on the CTPP channel: building, parsing, ACK/FIN words |
 | `vipListener.ts` | Rings and other intercom messages; acknowledgements; answers to door opens |
-| `call.ts` | Experimental: taking part in a ringing call (`answerMode`) |
+| `call.ts` | Experimental: taking part in a ringing call (`answerMode`), and its media |
+| `media.ts` | RTP, H.264 depacketizing, keyframes |
+| `camera.ts` | Experimental doorbell camera: HomeKit streaming through ffmpeg, talk-back |
 | `door.ts` | Door release, waiting for the intercom's answer |
 | `platform.ts` | Homebridge platform: connection lifecycle, accessories, ring window |
 | `config.ts` | Settings and their defaults |

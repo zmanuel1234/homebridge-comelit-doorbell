@@ -14,6 +14,7 @@ import {
   encodeChannelCloseAck,
   encodeChannelOpen,
   encodeChannelOpenResponse,
+  encodeCloseChannel,
   encodeHeader,
   encodeJsonMessage,
   isCommand,
@@ -47,6 +48,8 @@ export class IconaBridgeClient extends EventEmitter {
   private sequenceCounter = 0;
   private readonly channels = new Map<string, Channel>();
   private readonly pendingCallbacks = new Map<number, (body: Buffer) => void>();
+  private readonly binaryHandlers = new Map<number, (body: Buffer) => void>();
+  private readonly unknownFrames = new Map<number, number>();
   private pushCallback?: (msg: JsonMessage) => void;
   private disconnectCallback?: () => void;
   private deadTimer?: NodeJS.Timeout;
@@ -220,6 +223,11 @@ export class IconaBridgeClient extends EventEmitter {
       this.handleControlMessage(body);
       return;
     }
+    const handler = this.binaryHandlers.get(requestId);
+    if (handler) {
+      handler(body);
+      return;
+    }
     const cb = this.pendingCallbacks.get(requestId);
     if (cb) {
       this.pendingCallbacks.delete(requestId);
@@ -233,7 +241,12 @@ export class IconaBridgeClient extends EventEmitter {
       }
     }
     if (!isJsonBody(body)) {
-      this.log?.info(`diag: frame on unknown channel ${requestId} (${body.length} B): ${body.subarray(0, 64).toString('hex')}`);
+      // Log the first few frames per channel, then only now and then (media can be many per second).
+      const n = (this.unknownFrames.get(requestId) ?? 0) + 1;
+      this.unknownFrames.set(requestId, n);
+      if (n <= 3 || n % 500 === 0) {
+        this.log?.info(`diag: frame #${n} on unknown channel ${requestId} (${body.length} B): ${body.subarray(0, 64).toString('hex')}`);
+      }
       return;
     }
     try {
@@ -249,11 +262,12 @@ export class IconaBridgeClient extends EventEmitter {
     }
     const { msgType, seq, serverChannelId } = parseCommandResponse(body);
     if (isCommand(msgType) && seq === 1 && body.length >= 10) {
-      // The device opens a channel towards us.
-      const nullIdx = body.indexOf(0, 8);
-      const devReqId = nullIdx >= 0 && nullIdx + 3 <= body.length ? body.readUInt16LE(nullIdx + 1) : body.readUInt16LE(body.length - 3);
+      // The device opens a channel towards us: [cd ab 01 00][type LE32][name, 4 chars][handle LE16]...
+      const name = body.length >= 14 ? body.subarray(8, 12).toString('latin1') : '';
+      const devReqId = body.length >= 14 ? body.readUInt16LE(12) : body.readUInt16LE(body.length - 3);
       this.socket?.write(encodeChannelOpenResponse(devReqId));
-      this.log?.info(`diag: device opened channel ${devReqId}: ${body.subarray(8).toString('latin1').replace(/[^\x20-\x7e]/g, '.')}`);
+      this.log?.info(`diag: device opened channel ${name || '?'} as ${devReqId}`);
+      this.emit('channel', name, devReqId);
       for (const ch of this.channels.values()) {
         if (!ch.isOpen && ch.serverChannelId === 0 && ch.requestId === 0) {
           ch.serverChannelId = devReqId;
@@ -287,11 +301,15 @@ export class IconaBridgeClient extends EventEmitter {
 
   // ─── Channels ──────────────────────────────────────────────────────────────
 
-  openChannel(name: string, channelType: number, extraData?: string, trailingByte = 0): Promise<Channel> {
+  /**
+   * Opens a channel. `name` is the key it is kept under; `wireName` (default: `name`) is what
+   * the device is told, so several channels with the same wire name (RTPC) can be open.
+   */
+  openChannel(name: string, channelType: number, extraData?: string, trailingByte = 0, wireName = name): Promise<Channel> {
     const requestId = ++this.requestIdCounter;
     const channel = createChannel(name, channelType, requestId);
     this.channels.set(name, channel);
-    const packet = encodeChannelOpen(name, channelType, 1, requestId, extraData, trailingByte);
+    const packet = encodeChannelOpen(wireName, channelType, 1, requestId, extraData, trailingByte);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new ProtocolError(`Timeout waiting for channel ${name} to open`)), READ_TIMEOUT_MS);
       channel.openResolve = () => {
@@ -313,6 +331,29 @@ export class IconaBridgeClient extends EventEmitter {
     }
     this.channels.delete(name);
     await this.send(encodeChannelClose(++this.sequenceCounter, channel.serverChannelId));
+  }
+
+  /** Closes a channel by handle and forgets it (used for media channels). */
+  async closeHandle(name: string | undefined, handle: number): Promise<void> {
+    this.binaryHandlers.delete(handle);
+    if (name) {
+      this.channels.delete(name);
+    }
+    await this.send(encodeCloseChannel(handle)).catch(() => undefined);
+  }
+
+  /** Routes raw frames on `handle` to `handler` (or stops routing them with undefined). */
+  setBinaryHandler(handle: number, handler?: (body: Buffer) => void): void {
+    if (handler) {
+      this.binaryHandlers.set(handle, handler);
+    } else {
+      this.binaryHandlers.delete(handle);
+    }
+  }
+
+  /** Sends raw bytes on a channel handle (media). */
+  async sendOnHandle(handle: number, data: Buffer): Promise<void> {
+    await this.send(Buffer.concat([encodeHeader(data.length, handle), data]));
   }
 
   removeChannel(name: string): void {
