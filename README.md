@@ -8,6 +8,7 @@ Homebridge plugin for **Comelit ViP** Wi-Fi intercoms (6701W / 6741W Mini). It t
 - **Doorbell notifications** in the Home app
 - **Door release** as a HomeKit lock, allowed only shortly after a ring
 - **Experimental:** answer the ring from HomeKit, so anyone in your Home can open the door without the Comelit app
+- **Experimental:** a HomeKit video doorbell showing the intercom's video and audio during a ring, with optional talk-back
 - Every setting is in the Homebridge config editor
 
 It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homebridge-comelit-intercom) 1.1.1 by danimal4326, whose repository is no longer available. See [NOTICE](NOTICE) and [CHANGELOG](CHANGELOG.md).
@@ -148,7 +149,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 |---|---|---|
 | Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera-experimental). |
 | Talk back from the Home app (`talkBack`) | `false` | Sends the Home app's microphone to the intercom's speaker during a live view |
-| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for the intercom's largest picture (640x240 on a 6741W) |
+| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for up to 800x480 (the intercom sends the largest picture it has, up to that) |
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
@@ -168,7 +169,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 ## How ring and unlock work
 
 1. Someone rings. The intercom calls every registered receiver at once: the wall monitor, the Comelit apps and Homebridge.
-2. The plugin activates the Doorbell motion sensor and calls the trigger URL, and the HomeKit doorbell notification arrives.
+2. The plugin activates the Doorbell motion sensor, and the HomeKit doorbell notification arrives: from the plugin's doorbell camera if it is on, or from the camera-ffmpeg doorbell through the trigger URL if that is set.
 3. During **Unlock allowed for** (90 s by default), anyone in your Home can unlock from the notification or from the lock tile. Outside that window, HomeKit shows the unlock as failed and the log says `Open refused`.
 
 ### Answering the ring (experimental)
@@ -229,6 +230,7 @@ Turn on **debug mode** for the child bridge to see every protocol message (`VIP 
 - Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, or `answer-on-view` from the camera's live view. Both are experimental.
 - Live video and talk-back (doorbell camera) are experimental and untested on a real intercom.
 - Only tested on one model and firmware (see above).
+- In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 
 ## Development
 
