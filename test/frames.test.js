@@ -40,6 +40,12 @@ vip.channel = channel; vip.running = true;
   await vip._processMessage(Buffer.concat([Buffer.from([0x60, 0x18, pk2[2] ^ 0x80, pk2[3], 1, 2, 0, 3, 0, 0x0e, 0, 0]), hex('ffffffff')]));
   const r2 = await p2;
   check(r2 && r2.confirmed === true, 'cause 0 confirms the open');
+  // a message arriving after a timed-out wait must not be lost
+  const { AsyncQueue } = require(D + '/channels.js');
+  const q = new AsyncQueue();
+  await q.dequeue(5);
+  q.enqueue('ring');
+  check((await q.dequeue(5)) === 'ring', 'message after a timed-out wait is delivered');
   console.log(ok ? 'ALL PASS' : 'SOME FAILED');
   process.exit(ok ? 0 : 1);
 })();

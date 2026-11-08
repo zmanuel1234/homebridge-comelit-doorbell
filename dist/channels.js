@@ -39,16 +39,19 @@ class AsyncQueue {
             return Promise.resolve(this.items.shift());
         }
         return new Promise((resolve) => {
+            // Remove this exact waiter on timeout. Removing `resolve` (never in the list) left an
+            // expired waiter behind, and the next enqueued item went to it and was lost.
+            const waiter = (item) => {
+                clearTimeout(timer);
+                resolve(item);
+            };
             const timer = setTimeout(() => {
-                const idx = this.waiters.indexOf(resolve);
+                const idx = this.waiters.indexOf(waiter);
                 if (idx >= 0)
                     this.waiters.splice(idx, 1);
                 resolve(null);
             }, timeoutMs);
-            this.waiters.push((item) => {
-                clearTimeout(timer);
-                resolve(item);
-            });
+            this.waiters.push(waiter);
         });
     }
     clear() {

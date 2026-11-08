@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.4 (2026-11-07)
+
+### Fixed
+
+- Messages from the intercom could be lost. After the listener had waited a minute without anything arriving, the next message went to that expired wait and was dropped, and one more expired wait piled up for each further idle minute. A ring after a quiet period only got through if the intercom resent the INVITE often enough. This may also be why rings stopped arriving when the registration was refreshed less often.
+
 ## 2.0.3 (2026-11-07)
 
 ### Fixed
