@@ -129,3 +129,14 @@ test('a failed media setup leaves nothing behind and keeps the call', async () =
   assert.ok(retry);
   await retry.end('test');
 });
+
+test('a new ring drops calls that have ended', async () => {
+  const { call } = setup('handshake');
+  await ring(call);
+  call.activeCall().ended = true;
+  const next = parseFrame(frames.invite);
+  next.conn0 ^= 0x01; // another connection: a new call
+  await call.onFrame(next, ['SB000002']);
+  assert.strictEqual(call.calls.size, 1);
+  assert.strictEqual(call.activeCall().conn0, next.conn0);
+});

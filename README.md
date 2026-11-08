@@ -92,7 +92,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 
 | Accessory | HomeKit type | Notes |
 |---|---|---|
-| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds once the intercom confirms, then Locked again. If the intercom refuses, it goes straight back to Locked and the log says why. |
+| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds once the intercom confirms, then Locked again. Extra taps while an open is on its way are ignored. If the intercom refuses, it goes straight back to Locked and the log says why. |
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
 | Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Experimental. Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera-experimental). |
@@ -127,10 +127,10 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 
 | Setting | Default | Description |
 |---|---|---|
-| Registration refresh mode (`leaseRefreshMode`) | `reconnect` | `reconnect`: drop and reopen the connection. `inplace`: renew on the open connection, with no gap (recommended). |
+| Registration refresh mode (`leaseRefreshMode`) | `reconnect` | `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed). `inplace`: renew on the open connection, with no gap (recommended). |
 | Registration refresh interval (`leaseRefreshMinutes`) | `2` | Minutes between refreshes. 2 is proven; longer intervals may miss rings. |
 | Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often |
-| Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops |
+| Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops. Planned reconnects for the registration wait at most 2 s. |
 | Longest reconnect wait (`maxReconnectDelay`) | `300` | If the intercom can't be reached, the wait doubles after each failed attempt (10, 20, 40 … s) up to this many seconds. It goes back to the reconnect delay once connected. |
 
 ### Advanced and experimental
@@ -209,6 +209,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | No rings at all, but the phones ring | Make sure `subaddress` is a user of its own, not shared with a phone, and that `registerPush` is off. On the intercom's Extender page, the Homebridge user should appear under **Registered slaves**. |
 | Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
 | Rings arrive, but camera-ffmpeg's doorbell no longer rings (after updating to 2.1.0-beta.7) | The trigger URL has no default any more. Set **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. |
+| Live view ends with `video ffmpeg stopped` | ffmpeg failed; the lines before it in the log say why (often a missing encoder: check **Video encoder** and **ffmpeg path**). The plugin ends the view instead of leaving a frozen picture. |
 | `Reconnecting in … s` with growing waits | The intercom can't be reached (powered off, Wi-Fi, IP changed). The plugin keeps trying, at most every **Longest reconnect wait**. Check the IP address. |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
@@ -249,7 +250,7 @@ CI runs the checks on Node 24 (the required `check` job) and the build and tests
 | `platform.ts` | Homebridge platform: connection lifecycle, accessories, ring window |
 | `config.ts` | Settings and their defaults |
 
-Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag.
+Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag. The release tag must be `v` followed by the version in `package.json` (e.g. `v2.1.0-beta.8`), or the publish stops.
 
 ## Credits
 

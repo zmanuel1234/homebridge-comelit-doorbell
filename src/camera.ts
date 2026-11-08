@@ -355,6 +355,13 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       }
     }
     active.media = media;
+    if (this.active.get(sessionID) !== active) {
+      // The viewer left while the media was starting: end the media if nobody else watches it.
+      if (media && ![...this.active.values()].some((s) => s.media === media)) {
+        void media.end('viewer left');
+      }
+      return;
+    }
     const v = request.video;
     this.log.info(`Doorbell camera: streaming ${v.width}x${v.height} ${v.fps} fps ${v.max_bit_rate} kbps (${media ? 'live from the intercom' : 'still image, no call to show'})`);
 
@@ -411,6 +418,14 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         void this.stopStream(sessionID, 'viewer inactive');
       }, Math.max(v.rtcp_interval, 0.5) * 5 * 1000 + 5000);
     };
+    // If the video ffmpeg dies, HomeKit would keep showing a frozen picture: end the view.
+    active.video.once('exit', (code, signal) => {
+      if (this.active.get(sessionID) === active) {
+        this.log.warn(`Doorbell camera: video ffmpeg stopped (${signal ?? `exit ${code}`}); ending the live view`);
+        this.controller.forceStopStreamingSession(sessionID);
+        void this.stopStream(sessionID, 'ffmpeg stopped');
+      }
+    });
     socket.on('message', armInactivity);
     armInactivity();
     socket.bind(p.videoReturnPort);

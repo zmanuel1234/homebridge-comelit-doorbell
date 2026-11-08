@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0-beta.8 (2026-11-08)
+
+### Fixed
+
+- A connection that dropped during setup, before the plugin was watching for drops (for example while registering for push), was never reconnected: the plugin stayed offline until restarted.
+- Opening the live view and closing it again before the intercom's media had started left the call answered with media running and nobody watching. The media is now ended.
+- If the video ffmpeg stopped (for example a missing encoder), the live view stayed frozen until HomeKit gave up. It now ends right away, with the reason in the log.
+- Several quick taps on Unlock sent several door opens. Taps while an open is on its way are ignored.
+- Finished calls were kept in memory until the next door open or live view. They are now dropped when the next ring arrives.
+- A reconnect could still be scheduled while Homebridge was shutting down.
+
+### Changed
+
+- Registration refresh in `reconnect` mode: the plugin reconnects within 2 s instead of after `reconnectDelay` (10 s), so the gap in which rings are missed is short. Dropped connections still wait `reconnectDelay`.
+- Accessories are only rebuilt when the intercom's doors or cameras change, not on every reconnect. Before, each reconnect (every 2 minutes in `reconnect` mode) rewrote Homebridge's accessory cache.
+
+### Added
+
+- Tests for the above (51 in all).
+- README: the 2 s reconnect gap, ignored extra taps, troubleshooting for `video ffmpeg stopped`, the release tag rule.
+
 ## 2.1.0-beta.7 (2026-11-08)
 
 ### Fixed

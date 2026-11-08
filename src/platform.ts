@@ -33,6 +33,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private reconnectTimer?: NodeJS.Timeout;
   /** Failed connection attempts in a row, for the back-off. */
   private failures = 0;
+  private shuttingDown = false;
+  /** Doors and cameras the accessories were last built from, to skip rebuilding them on every reconnect. */
+  private builtFrom?: string;
   private lastRingAt = 0;
   private camera?: DoorbellCamera;
   private cameraConfigured = false;
@@ -73,6 +76,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   private async setupDevice(): Promise<void> {
     const s = this.settings;
+    if (this.shuttingDown) {
+      return;
+    }
     if (!s.host || !s.token) {
       this.log.error('Missing required config: host and token are required');
       return;
@@ -134,7 +140,11 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }
     }
     if (!client.connected) {
-      return; // closed during the CTPP setup; the reconnect is already scheduled
+      // Closed during the setup. If it closed before the disconnect callback was set, nothing
+      // has scheduled a reconnect yet; scheduling again only restarts the timer.
+      this.client = undefined;
+      this.scheduleReconnect(true);
+      return;
     }
     if (s.enableNotifications && client.getChannel('CTPP')) {
       const ourAddress = `${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`;
@@ -177,6 +187,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   }
 
   private teardown(): void {
+    this.shuttingDown = true;
     this.stopKeepalive();
     clearTimeout(this.reconnectTimer);
     this.vipListener?.stop().catch(() => undefined);
@@ -197,13 +208,20 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.vipListener = undefined;
     this.callHandler = undefined;
     this.client = undefined;
-    this.scheduleReconnect(false);
+    this.scheduleReconnect(planned ? 'planned' : 'dropped');
   }
 
-  /** After a failed attempt the wait doubles each time, up to maxReconnectDelay. */
-  private scheduleReconnect(failed: boolean): void {
+  /**
+   * `planned`: a registration refresh, reconnect within 2 s. `dropped`: after reconnectDelay.
+   * After a failed attempt the wait doubles each time, up to maxReconnectDelay.
+   */
+  private scheduleReconnect(why: 'planned' | 'dropped' | true): void {
     clearTimeout(this.reconnectTimer);
-    const delay = reconnectDelay(this.settings, failed ? this.failures : 0);
+    if (this.shuttingDown) {
+      return;
+    }
+    const failed = why === true;
+    const delay = reconnectDelay(this.settings, why === 'planned' ? -1 : failed ? this.failures : 0);
     if (failed) {
       this.failures++;
     }
@@ -278,6 +296,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   }
 
   discoverAccessories(config: DeviceConfig): void {
+    // The accessories only change if the intercom's doors or cameras do; rebuilding them on
+    // every reconnect would rewrite Homebridge's accessory cache each time.
+    const from = JSON.stringify([config.doors, config.cameras, this.settings.camera]);
+    if (from === this.builtFrom) {
+      return;
+    }
+    this.builtFrom = from;
     const keep = new Set<string>();
     for (const door of config.doors) {
       const accessory = this.accessoryFor(`lock-${door.index}`, door.name || `Door ${door.index + 1}`, keep, (a) => {

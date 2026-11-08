@@ -1,6 +1,6 @@
 import type { PlatformConfig } from 'homebridge';
 import type { AnswerMode } from './call';
-import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT } from './settings';
+import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_MS } from './settings';
 
 /** The plugin's block in config.json (see config.schema.json). */
 export interface ComelitPlatformConfig extends PlatformConfig {
@@ -107,9 +107,13 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
 
 /**
  * Wait before reconnect attempt number `failures` (0 = first): the reconnect delay, doubled after
- * each failed attempt, up to the maximum.
+ * each failed attempt, up to the maximum. -1 is a planned reconnect (registration refresh).
  */
 export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconnectDelayMs'>, failures: number): number {
+  if (failures < 0) {
+    // A planned reconnect: keep the gap without a registration short.
+    return Math.min(s.reconnectDelayMs, PLANNED_RECONNECT_DELAY_MS);
+  }
   return Math.min(s.reconnectDelayMs * 2 ** Math.min(failures, 20), Math.max(s.maxReconnectDelayMs, s.reconnectDelayMs));
 }
 
