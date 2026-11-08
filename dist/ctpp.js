@@ -8,6 +8,7 @@ exports.CTR_INCR_BOTH = 0x01010000;
 const CTPP_RESPONSE_MIN_LEN = 8;
 const PREFIX_VIP_EVENT = 0x1860;
 const ACK_TS_INCREMENT = 0x01000000;
+function zmanAckTs(t) { const c0 = (t & 0xff) ^ 0x80, c1 = (t >>> 8) & 0xff, s = (t >>> 16) & 0xff, a = (t >>> 24) & 0xff; return (c0 | (c1 << 8) | (a << 16) | (((s + 1) & 0xff) << 24)) >>> 0; } // zman: proper CTP ack
 async function ctppInitSequence(client, channel, aptAddr, aptSub, ourAddr, timestamp, responseTimeoutMs = 5_000, sendAck = true, log) {
     log?.debug(`CTPP init: sending init ts=0x${timestamp.toString(16)} addr=${ourAddr}`);
     await client.sendBinary(channel, (0, protocol_1.encodeCttpInit)(aptAddr, aptSub, timestamp));
@@ -36,7 +37,7 @@ async function readResponseCtpp(client, channel, responseTimeoutMs = 5_000, log,
             if (prefix === PREFIX_VIP_EVENT && ackConfig) {
                 const { aptAddr, ourAddr } = ackConfig;
                 const msgTs = resp.readUInt32LE(2);
-                const ackTs = (msgTs + ACK_TS_INCREMENT) >>> 0;
+                const ackTs = zmanAckTs(msgTs);
                 log?.debug(`CTPP init: sending fast renewal ACK ts=0x${ackTs.toString(16)}`);
                 try {
                     await client.sendBinary(channel, (0, protocol_1.encodeCallResponseAck)(ourAddr, aptAddr, ackTs));

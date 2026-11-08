@@ -19,6 +19,7 @@ const ACTION_DOOR_OPENED = 0x0003;
 const ACTION_REGISTRATION_RENEWAL = 0x0010;
 // Event ACK: only ONE counter increments (matches Python vip_listener.py)
 const ACK_TS_INCREMENT = 0x01000000;
+function zmanAckTs(t) { const c0 = (t & 0xff) ^ 0x80, c1 = (t >>> 8) & 0xff, s = (t >>> 16) & 0xff, a = (t >>> 24) & 0xff; return (c0 | (c1 << 8) | (a << 16) | (((s + 1) & 0xff) << 24)) >>> 0; } // zman: proper CTP ack
 const MIN_MSG_SIZE = 8;
 const DEDUP_WINDOW_MS = 10_000;
 function parseCtppMessage(data) {
@@ -143,7 +144,7 @@ class VipEventListener {
             return;
         const vipAddress = `${this.config.aptAddress}${this.config.aptSubaddress}`;
         const entranceAddr = msg.addresses[0] ?? this.config.aptAddress;
-        const ackTs = (msg.timestamp + ACK_TS_INCREMENT) >>> 0;
+        const ackTs = zmanAckTs(msg.timestamp);
         try {
             await this.client.sendBinary(channel, (0, protocol_1.encodeCallResponseAck)(vipAddress, entranceAddr, ackTs));
         }
@@ -159,7 +160,7 @@ class VipEventListener {
             return;
         const vipAddress = `${this.config.aptAddress}${this.config.aptSubaddress}`;
         const aptAddr = this.config.aptAddress;
-        const ackTs = (msg.timestamp + ACK_TS_INCREMENT) >>> 0;
+        const ackTs = zmanAckTs(msg.timestamp);
         this.log?.debug(`VIP: renewal ACK ts=0x${ackTs.toString(16)} caller=${vipAddress} callee=${aptAddr} msg-addrs=${msg.addresses.join(',')}`);
         try {
             await this.client.sendBinary(channel, (0, protocol_1.encodeCallResponseAck)(vipAddress, aptAddr, ackTs));
