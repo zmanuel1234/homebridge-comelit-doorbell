@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0-beta.3 (2026-11-07)
+
+- No changes to the plugin. Published with setup-node v6, which removes the `always-auth` warnings from the publish run.
+
 ## 2.1.0-beta.2 (2026-11-07)
 
 Experimental features, all off by default.
