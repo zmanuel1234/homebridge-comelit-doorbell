@@ -1,0 +1,79 @@
+import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+import type { Door } from '../models';
+import type { ComelitIntercomPlatform } from '../platform';
+
+const SHOW_UNLOCKED_MS = 3_000;
+const REFUSED_LOG_INTERVAL_MS = 5_000;
+
+/**
+ * One door relay as a HomeKit lock. Unlock opens the door; the lock shows Unlocked for a
+ * few seconds once the intercom confirms, then Locked again.
+ */
+export class LockAccessory {
+  private readonly service: Service;
+  private lockState: number;
+  private lastRefusedLog = 0;
+
+  constructor(
+    private readonly platform: ComelitIntercomPlatform,
+    readonly accessory: PlatformAccessory,
+    private readonly door: Door,
+  ) {
+    const { Service, Characteristic } = platform;
+    this.lockState = Characteristic.LockCurrentState.SECURED;
+    accessory
+      .getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, 'Comelit')
+      .setCharacteristic(Characteristic.Model, 'ViP door relay')
+      .setCharacteristic(Characteristic.SerialNumber, `door-${door.index}`);
+    this.service = accessory.getService(Service.LockMechanism) || accessory.addService(Service.LockMechanism, door.name);
+    this.service.getCharacteristic(Characteristic.LockCurrentState).onGet(() => this.lockState);
+    this.service
+      .getCharacteristic(Characteristic.LockTargetState)
+      .onGet(() =>
+        this.lockState === Characteristic.LockCurrentState.UNSECURED ? Characteristic.LockTargetState.UNSECURED : Characteristic.LockTargetState.SECURED,
+      )
+      .onSet((value) => this.onTarget(value));
+  }
+
+  private onTarget(value: CharacteristicValue): void {
+    const { Characteristic } = this.platform;
+    if (value !== Characteristic.LockTargetState.UNSECURED) {
+      return;
+    }
+    if (!this.platform.isUnlockAllowed()) {
+      const now = Date.now();
+      if (now - this.lastRefusedLog > REFUSED_LOG_INTERVAL_MS) {
+        this.lastRefusedLog = now;
+        this.platform.log.warn(`Open refused: no ring in the last ${this.platform.settings.ringWindowMs / 1000} s`);
+      }
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE);
+    }
+    // Answer HomeKit right away; the door command can take several seconds.
+    void this.triggerOpen();
+  }
+
+  async triggerOpen(): Promise<void> {
+    const { Characteristic } = this.platform;
+    const relock = () => {
+      this.lockState = Characteristic.LockCurrentState.SECURED;
+      this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.SECURED);
+      this.service.updateCharacteristic(Characteristic.LockTargetState, Characteristic.LockTargetState.SECURED);
+    };
+    try {
+      const result = await this.platform.openDoor(this.door);
+      if (result.confirmed) {
+        this.platform.log.info(`Door '${this.door.name}' opened`);
+      } else {
+        this.platform.log.warn(`Door '${this.door.name}': open sent, but the intercom did not confirm it`);
+      }
+    } catch (e) {
+      this.platform.log.error(`Door open failed: ${(e as Error).message}`);
+      relock();
+      return;
+    }
+    this.lockState = Characteristic.LockCurrentState.UNSECURED;
+    this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.UNSECURED);
+    setTimeout(relock, SHOW_UNLOCKED_MS);
+  }
+}

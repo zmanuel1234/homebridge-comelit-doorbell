@@ -18,7 +18,9 @@ jobs:
         run: |
           v="v$(node -p "require('./package.json').version")"
           [ "$v" = "${{ github.event.release.tag_name }}" ] || { echo "Tag ${{ github.event.release.tag_name }} does not match $v"; exit 1; }
+      - run: npm ci
       - run: npm run check
+      - run: npm run build
       - run: npm test
       - name: Use an npm with trusted publishing (11.5.1 or later)
         run: npm install -g npm@latest

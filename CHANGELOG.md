@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.0-beta.1 (2026-11-07)
+
+Rewritten in TypeScript, with the same behavior as 2.0.3: the CTP frames the plugin sends were checked byte for byte against 2.0.3 for a ring, the handshake, renewals, closes, door opens and registration.
+
+### Fixed
+
+- Messages from the intercom could be lost. After the listener had waited a minute without anything arriving, the next message went to that expired wait and was dropped, so after an idle period the first message, possibly a ring, was lost. Rings captured on 2026-11-07 only got through because the intercom sends the INVITE twice. This may also be why rings stopped arriving when the registration was refreshed less often.
+- With **Listen for rings** off, a door open no longer waits 10 s for an answer that can't arrive.
+
+### Changed
+
+- Settings are passed through the plugin instead of global variables, so two intercoms in one Homebridge no longer share settings.
+- Log prefixes: `zman-call` is now `call:`, and `zman-diag` is now `diag:`.
+- The accessory model shown in the Home app is now `ViP door relay` / `ViP doorbell` instead of `6701W`.
+- Removed unused video-call code and an unreachable door-open sequence. The untested actuator (gate) path is kept, but no longer reports a confirmed open.
+
+### Added
+
+- Unit tests for the frame encoding, ACK words, rings, door-open answers, the handshake, registration across reconnects, the lock states and the settings defaults, most of them using frames captured from a real intercom.
+
 ## 2.0.3 (2026-11-07)
 
 ### Fixed
