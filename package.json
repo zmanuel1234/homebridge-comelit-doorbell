@@ -1,6 +1,6 @@
 {
   "name": "homebridge-comelit-doorbell",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Homebridge plugin for Comelit ViP intercoms (6701W/6741W Mini): doorbell notifications, door release and an experimental answer, fully local",
   "main": "dist/index.js",
   "files": [
