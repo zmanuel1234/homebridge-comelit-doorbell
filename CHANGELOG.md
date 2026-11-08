@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0-beta.6 (2026-11-08)
+
+- No changes to the plugin. The publish workflow checks the release tag with a script, so the log reads "Release tag … matches package.json" instead of printing the failure text.
+
 ## 2.1.0-beta.5 (2026-11-07)
 
 ### Fixed
