@@ -24,7 +24,7 @@
         "default": 64100
       },
       "token": {
-        "title": "Auth Token (32-char hex — from device admin page at http://<host>:8080)",
+        "title": "Auth Token (32-char hex \u2014 from device admin page at http://<host>:8080)",
         "type": "string",
         "required": true
       },
@@ -37,8 +37,68 @@
         "title": "Reconnect Delay (seconds)",
         "type": "integer",
         "default": 10,
-        "minimum": 5,
+        "minimum": 1,
         "maximum": 300
+      },
+      "subaddress": {
+        "title": "ViP sub-address",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 15,
+        "description": "Row number (#) of the Comelit user whose token is used. Must not be used by another app."
+      },
+      "leaseRefreshMode": {
+        "title": "Registration refresh mode",
+        "type": "string",
+        "default": "reconnect",
+        "oneOf": [
+          {
+            "title": "Reconnect (proven)",
+            "enum": [
+              "reconnect"
+            ]
+          },
+          {
+            "title": "Re-register in place (no gap)",
+            "enum": [
+              "inplace"
+            ]
+          }
+        ]
+      },
+      "leaseRefreshMinutes": {
+        "title": "Registration refresh interval (minutes)",
+        "type": "number",
+        "default": 2,
+        "minimum": 0.5,
+        "maximum": 55
+      },
+      "leaseRecycleMinutes": {
+        "title": "In-place mode: full reconnect every (minutes)",
+        "type": "number",
+        "default": 50,
+        "minimum": 5,
+        "maximum": 55
+      },
+      "ringWindowSeconds": {
+        "title": "Allow opening only this long after a ring (seconds)",
+        "type": "integer",
+        "default": 90,
+        "minimum": 0,
+        "maximum": 600,
+        "description": "0 allows opening at any time."
+      },
+      "doorbellTriggerUrl": {
+        "title": "Doorbell camera trigger URL",
+        "type": "string",
+        "default": "http://localhost:8089/doorbell?Doorbell",
+        "description": "Called on every ring (homebridge-camera-ffmpeg). Leave empty to disable."
+      },
+      "registerPush": {
+        "title": "Register as a push device (original behavior)",
+        "type": "boolean",
+        "default": false,
+        "description": "Leave off: push registration diverts calls away from Homebridge."
       }
     }
   }

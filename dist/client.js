@@ -134,7 +134,7 @@ class IconaBridgeClient extends events_1.EventEmitter {
         const ms = global.__zmanLeaseMs || 120000;
         clearTimeout(this.__zmanLease);
         this.__zmanLease = setTimeout(async () => {
-            if (global.__zmanLeaseMode === 'inplace' && global.__zmanReregister && Date.now() - (this.__zmanBorn || 0) < 50 * 60000) {
+            if (global.__zmanLeaseMode === 'inplace' && global.__zmanReregister && Date.now() - (this.__zmanBorn || 0) < (global.__zmanRecycleMs || 3000000)) {
                 try { await global.__zmanReregister(); this.__zmanTick(); return; }
                 catch (e) { this.log?.warn(`In-place re-register failed (${e.message}); reconnecting`); }
             }

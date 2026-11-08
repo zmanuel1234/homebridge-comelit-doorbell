@@ -50,6 +50,11 @@ class ComelitIntercomPlatform {
         const { host, port, token, enableNotifications = true } = this.platformConfig;
         global.__zmanLeaseMs = (Number(this.platformConfig.leaseRefreshMinutes) > 0 ? Number(this.platformConfig.leaseRefreshMinutes) : 2) * 60000; // zman: lease refresh setting
         global.__zmanLeaseMode = this.platformConfig.leaseRefreshMode === 'inplace' ? 'inplace' : 'reconnect'; // zman: inplace
+        { const zc = this.platformConfig; // zman: settings
+          global.__zmanRecycleMs = (Number(zc.leaseRecycleMinutes) > 0 ? Number(zc.leaseRecycleMinutes) : 50) * 60000;
+          global.__zmanRingWindowMs = (zc.ringWindowSeconds === undefined || zc.ringWindowSeconds === null || zc.ringWindowSeconds === '' ? 90 : Number(zc.ringWindowSeconds)) * 1000;
+          global.__zmanDoorbellUrl = (zc.doorbellTriggerUrl === undefined ? 'http://localhost:8089/doorbell?Doorbell' : String(zc.doorbellTriggerUrl)).trim();
+          global.__zmanRegisterPush = zc.registerPush === true; }
         global.__zmanReregister = async () => {
             const ch = this.client && this.client.getChannel('CTPP');
             const cfg = this.config_;

@@ -44,7 +44,7 @@ class DoorbellAccessory {
         this.platform.log.info('Doorbell ring');
         // zman: ring the HomeKit doorbell camera (homebridge-camera-ffmpeg, localhost-only)
         try {
-            require('http').get('http://localhost:8089/doorbell?Doorbell', (res) => res.resume())
+            if (global.__zmanDoorbellUrl) require('http').get(global.__zmanDoorbellUrl, (res) => res.resume()) // zman: settings
                 .on('error', (e) => this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`));
         } catch (e) { this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`); }
         this.sensorService.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);

@@ -21,8 +21,8 @@ function buildPushMsg(config) {
 }
 async function registerPush(client, config, callback) {
     // zman: no push - comelit-vip never registers for push; keep the link alive with server-info instead
-    const channel = await client.openChannel('INFO', channels_1.ChannelType.INFO);
-    await client.sendJson(channel, zmanInfoMsg());
+    const channel = await client.openChannel(zmanChName(), zmanChType());
+    await client.sendJson(channel, zmanMsg(config));
     client.setPushCallback((raw) => {
         const event = parsePushEvent(raw);
         if (event)
@@ -30,12 +30,12 @@ async function registerPush(client, config, callback) {
     });
 }
 async function sendPushKeepalive(client, config) {
-    let channel = client.getChannel('INFO');
+    let channel = client.getChannel(zmanChName());
     if (!channel) {
-        client.removeChannel('INFO');
-        channel = await client.openChannel('INFO', channels_1.ChannelType.INFO);
+        client.removeChannel(zmanChName());
+        channel = await client.openChannel(zmanChName(), zmanChType());
     }
-    await client.sendJson(channel, zmanInfoMsg());
+    await client.sendJson(channel, zmanMsg(config));
 }
 function parsePushEvent(raw) {
     const msgType = raw['message'];
@@ -59,3 +59,7 @@ function parsePushEvent(raw) {
 }
 
 function zmanInfoMsg() { return { message: 'server-info', 'message-type': 'request', 'message-id': channels_1.ViperMessageId.SERVER_INFO }; } // zman: no push
+// zman: settings - registerPush=true restores the original push registration
+function zmanChName() { return global.__zmanRegisterPush ? 'PUSH' : 'INFO'; }
+function zmanChType() { return global.__zmanRegisterPush ? channels_1.ChannelType.PUSH : channels_1.ChannelType.INFO; }
+function zmanMsg(config) { return global.__zmanRegisterPush ? buildPushMsg(config) : zmanInfoMsg(); }
