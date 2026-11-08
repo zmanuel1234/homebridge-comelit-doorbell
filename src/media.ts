@@ -152,3 +152,105 @@ export class KeyframeCache {
     return Buffer.concat([this.sps, this.pps, ...this.idr]);
   }
 }
+
+/** Picture size and profile from an H.264 SPS, for the log. */
+export interface SpsInfo {
+  width: number;
+  height: number;
+  profile: number;
+  level: number;
+}
+
+/**
+ * Reads the picture size from an Annex-B SPS unit. Returns undefined for anything it can't
+ * read (including the rare SPS with scaling matrices), since this is only used for logging.
+ */
+export function parseSps(unit: Buffer): SpsInfo | undefined {
+  if (nalType(unit) !== 7) {
+    return undefined;
+  }
+  // Remove emulation-prevention bytes (00 00 03 -> 00 00).
+  const raw: number[] = [];
+  for (let i = 5; i < unit.length; i++) {
+    if (i >= 7 && unit[i] === 3 && unit[i - 1] === 0 && unit[i - 2] === 0) {
+      continue;
+    }
+    raw.push(unit[i]);
+  }
+  let bit = 0;
+  const u = (n: number): number => {
+    let v = 0;
+    for (let k = 0; k < n; k++) {
+      const byte = raw[bit >> 3];
+      if (byte === undefined) {
+        throw new Error('short SPS');
+      }
+      v = v * 2 + ((byte >> (7 - (bit & 7))) & 1);
+      bit++;
+    }
+    return v;
+  };
+  const ue = (): number => {
+    let zeros = 0;
+    while (u(1) === 0) {
+      if (++zeros > 31) {
+        throw new Error('bad SPS');
+      }
+    }
+    return 2 ** zeros - 1 + u(zeros);
+  };
+  const se = (): number => {
+    const k = ue();
+    return k % 2 ? (k + 1) / 2 : -k / 2;
+  };
+  try {
+    const profile = u(8);
+    u(8); // constraint flags
+    const level = u(8);
+    ue(); // sps id
+    let chroma = 1;
+    if ([100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135].includes(profile)) {
+      chroma = ue();
+      if (chroma === 3) {
+        u(1);
+      }
+      ue();
+      ue();
+      u(1);
+      if (u(1)) {
+        return undefined; // scaling matrices: not worth parsing for a log line
+      }
+    }
+    ue(); // log2_max_frame_num_minus4
+    const pocType = ue();
+    if (pocType === 0) {
+      ue();
+    } else if (pocType === 1) {
+      u(1);
+      se();
+      se();
+      const n = ue();
+      for (let i = 0; i < n; i++) {
+        se();
+      }
+    }
+    ue(); // max_num_ref_frames
+    u(1);
+    const wMbs = ue() + 1;
+    const hUnits = ue() + 1;
+    const frameMbsOnly = u(1);
+    if (!frameMbsOnly) {
+      u(1);
+    }
+    u(1);
+    let [l, r, t, b] = [0, 0, 0, 0];
+    if (u(1)) {
+      [l, r, t, b] = [ue(), ue(), ue(), ue()];
+    }
+    const cropX = chroma === 0 || chroma === 3 ? 1 : 2;
+    const cropY = (chroma === 1 ? 2 : 1) * (2 - frameMbsOnly);
+    return { width: wMbs * 16 - (l + r) * cropX, height: (2 - frameMbsOnly) * hUnits * 16 - (t + b) * cropY, profile, level };
+  } catch {
+    return undefined;
+  }
+}

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0-beta.16 (2026-11-08)
+
+From the second real test: in two of three calls the live view stayed blank for the few seconds it was open, although video was arriving, the picture with `hd` looked about the same as with `sd`, and it was unclear whether talk-back sent anything. This version logs enough to answer these from the log alone, and tries one fix.
+
+### Changed
+
+- If the video has no keyframe 1.5 s after it starts, the plugin asks the intercom for video again, which may bring a keyframe sooner. Until a keyframe arrives, nothing can be shown.
+
+### Added
+
+- Log lines for the video: its real size and profile (`call: video 800x480, …`), how long the first keyframe took, and the keyframe interval. Also when the first picture went to HomeKit.
+- Log lines for talk-back: when sound from the Home app's microphone arrives, and how many talk-back packets went to the intercom (`talk-back sent=…`).
+- **A summary line for every live view** (`Doorbell camera: live view summary: …`): how long it lasted, whether it was live or the picture, the size the Home app asked for, when the first picture went out, frames ffmpeg sent to the Home app (from ffmpeg's progress), how many reports the Home app sent back while receiving, microphone data, why it ended, and what the intercom sent (real size, first video, first keyframe, keyframe interval, packets, talk-back sent).
+- `mediaCaptureDir` (experimental, empty by default): saves each live view's raw video and audio, and your talk-back, for troubleshooting. Keeps the last 10.
+- Tests for the size reader (five real SPS), the video re-request, the report counter and the capture clean-up (66 in all).
+- README: why the view can start blank, troubleshooting for blank views and talk-back, what to send when reporting a camera problem, the new setting.
+
+### Fixed
+
+- After a live view closed, the intercom's last packets were logged as `diag: frame … on unknown channel`. They are now dropped quietly.
+
 ## 2.1.0-beta.15 (2026-11-08)
 
 First test on a real intercom (6741W, firmware 2.1.0): answering from the live view, live video, the intercom's audio and unlocking during the call all worked.

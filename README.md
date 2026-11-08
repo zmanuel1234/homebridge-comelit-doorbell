@@ -155,7 +155,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
 | Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera picture shows the last video frame this long, then the idle picture. `0`: always the idle picture. |
 
-### Experimental: media timing
+### Experimental: media timing and troubleshooting
 
 For tuning the doorbell camera's live view after real tests. The defaults follow what comelit-vip measured on a 6741W.
 
@@ -165,6 +165,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | End the call after media stops for (`mediaSilenceSeconds`) | `5` | Treat the call as over when video and audio stop for this long |
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 | Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
+| Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each live view's raw media is saved: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 views are kept. About 3–5 MB per minute. |
 
 ## How ring and unlock work
 
@@ -198,7 +199,7 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 
 What a call looks like:
 
-- The live view starts about 5 s after you open it (answering, then setting up the media).
+- The live view takes a few seconds to show a picture: answering and setting up the media take about 2 s, then the video can only start at the intercom's next keyframe. Keep the view open; it may stay blank for a few seconds first.
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
 - Inside a call the intercom doesn't send a separate answer to the door open; the plugin takes "no refusal" as opened.
@@ -226,12 +227,41 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
+| The live view stays blank for several seconds | The video can only start at a keyframe. The log shows `call: video …; first keyframe … s after …` and `call: a keyframe every … s`; please share those lines in an issue if it takes long. |
+| Talk-back: the visitor doesn't hear you | Look for `talk-back: sound from the Home app microphone is arriving` (the Home app sends your voice) and `talk-back sent=…` above zero in `call: media received` (it goes to the intercom). |
 | The live view closes by itself shortly after unlocking | Expected: the intercom ends the call about 10–15 s after the door opens. |
 | Live view shows only the picture during a ring | Check `answerMode` is `answer-on-view`. Then look for `call: media received video=… audio=…` in the log: zeros mean the intercom accepted the call but sent no media. `took over … s; showing the picture` means it was slow; raise **Live view: wait**. |
 | No sound in the live view, or `Unknown encoder 'libfdk_aac'` | The ffmpeg in use lacks `libfdk_aac`. Check the `Doorbell camera: ffmpeg …` line at startup, and set **ffmpeg path** to one that has it (e.g. `/usr/local/bin/ffmpeg` on the Homebridge Pi image). |
 | The camera keeps showing a visitor from earlier | That's the last visitor, shown for **Show the last visitor for** minutes after a call. Set it to `0` to always show the idle picture. |
 
 Turn on **debug mode** for the child bridge to see every protocol message (`VIP msg:`).
+
+### What to send when reporting a doorbell camera problem
+
+Every live view ends with one summary line, which answers most questions on its own:
+
+```
+Doorbell camera: live view summary: 33.1 s, live, asked 1280x720 30 fps 299 kbps, first picture 2.4 s,
+frames sent to the Home app=480, video units to ffmpeg=1650, Home app reports=62, microphone data=210,
+ended: the intercom ended the call; intercom: 800x480, first video 0.9 s, first keyframe 2.3 s,
+keyframe every 2.0 s, packets video=3706 audio=1548 other=0, talk-back sent=840
+```
+
+| Part | Meaning |
+|---|---|
+| `first picture` | When the video could start (the intercom's first keyframe). Before that, the view is blank. |
+| `frames sent to the Home app` | Frames ffmpeg encoded and sent. 0 with video arriving: ffmpeg problem. |
+| `Home app reports` | Reports the Home app sent back while receiving. 0: the stream doesn't reach the phone. |
+| `microphone data` / `talk-back sent` | Your voice arriving from the Home app / sent on to the intercom. |
+| `intercom: …` | The real video size, when video and keyframes arrived, and packet counts. |
+
+To collect the plugin's lines for a test, replace the times with yours (here 18:13–18:29):
+
+```bash
+grep -E "\[Comelit Intercom\]" /var/lib/homebridge/homebridge.log | grep -E "(6|18):(1[3-9]|2[0-9]):" | grep -v "VIP msg:" > ~/comelit-test.txt
+```
+
+For picture or sound problems, set **Save each call's video and audio to**, test again, and attach the files from that folder.
 
 ## Known limits
 

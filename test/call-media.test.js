@@ -163,3 +163,24 @@ test('the intercom audio request that arrives before ours is used for talk-back,
   assert.strictEqual(client.media[0][0], 0xb567);
   await session.end('done');
 });
+
+test('video without a keyframe asks for video again; the SPS is logged with its size', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  const log = quietLog();
+  call.log = log;
+  await ring(call);
+  const session = await call.startMedia(false);
+  session.log = log;
+  const before = ops(sent).filter((o) => o === '11').length;
+  client.handlers.get(0x2004)(buildRtp({ marker: true, payloadType: 96, sequence: 1, timestamp: 0, ssrc: 2 }, Buffer.from([0x41, 9])));
+  await new Promise((r) => setTimeout(r, 1700));
+  assert.strictEqual(ops(sent).filter((o) => o === '11').length, before + 1, 'one extra video request');
+  const sps = Buffer.from('6742c00cd90141fb011000000300100000030200f142a480', 'hex');
+  client.handlers.get(0x2004)(buildRtp({ marker: true, payloadType: 96, sequence: 2, timestamp: 0, ssrc: 2 }, sps));
+  assert.ok(log.lines.some((l) => /call: video 320x240/.test(l)), log.lines.join('\n'));
+  await session.sendAudio(Buffer.alloc(160));
+  await session.end('done');
+  assert.ok(log.lines.some((l) => /talk-back sent=1/.test(l)));
+  // after the end, late packets on the media channels are dropped without a diagnostic
+  assert.strictEqual(client.handlers.size, 0);
+});
