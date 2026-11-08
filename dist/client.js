@@ -185,6 +185,8 @@ class IconaBridgeClient extends events_1.EventEmitter {
                 return;
             }
         }
+        if (!(0, protocol_1.isJsonBody)(body))
+            this.log?.info(`zman-diag: frame on unknown channel ${requestId} (${body.length} B): ${body.subarray(0, 64).toString('hex')}`);
         // Unsolicited JSON → push callback
         if ((0, protocol_1.isJsonBody)(body)) {
             try {
@@ -213,6 +215,7 @@ class IconaBridgeClient extends events_1.EventEmitter {
                 devReqId = body.readUInt16LE(body.length - 3);
             }
             this.socket?.write((0, protocol_1.encodeChannelOpenResponse)(devReqId));
+            this.log?.info(`zman-diag: device opened channel ${devReqId}: ${body.subarray(8).toString('latin1').replace(/[^\x20-\x7e]/g, '.')}`);
             // Assign to first placeholder channel
             for (const ch of this.channels.values()) {
                 if (!ch.isOpen && ch.serverChannelId === 0 && ch.requestId === 0) {
