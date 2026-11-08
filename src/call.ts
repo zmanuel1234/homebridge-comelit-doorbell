@@ -20,7 +20,7 @@ import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
-import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, parseRtp } from './media';
+import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
@@ -42,6 +42,8 @@ export interface MediaTiming {
 }
 export const DEFAULT_MEDIA_TIMING: MediaTiming = { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 15_000 };
 const STATS_INTERVAL_MS = 5_000;
+/** If the video has no SPS this long after it starts, ask for video again (it may bring a keyframe). */
+const NO_KEYFRAME_RETRY_MS = 1_500;
 export const SD_RESOLUTION: [number, number] = [320, 240];
 export const HD_RESOLUTION: [number, number] = [800, 480];
 
@@ -341,7 +343,15 @@ export class MediaSession extends EventEmitter {
   private timers: NodeJS.Timeout[] = [];
   private ended = false;
   private lastMedia = 0;
-  private stats = { video: 0, audio: 0, other: 0 };
+  private stats = { video: 0, audio: 0, other: 0, sent: 0 };
+  /** When media started, the first video packet, the first SPS and the keyframes (for the log). */
+  private startedAt = 0;
+  private firstVideoAt = 0;
+  private firstSpsAt = 0;
+  private keyframeAt: number[] = [];
+  private keyframeRetry?: NodeJS.Timeout;
+  /** A muted handler for channels being closed, so their last packets aren't logged as unknown. */
+  private readonly drop = (): void => undefined;
   private tx = { seq: Math.floor(Math.random() * 0xffff), ts: Math.floor(Math.random() * 0xffffffff), ssrc: Math.floor(Math.random() * 0xffffffff), first: true };
   private readonly onChannel = (name: string, handle: number) => {
     if (name === 'RTPC') {
@@ -363,6 +373,7 @@ export class MediaSession extends EventEmitter {
 
   async start(): Promise<void> {
     const started = Date.now();
+    this.startedAt = started;
     this.client.on('channel', this.onChannel);
     this.udpHandle = (await this.client.openChannel('UDPM', ChannelType.UAUT)).serverChannelId;
     this.audioHandle = (await this.client.openChannel('RTPC-audio', ChannelType.UAUT, undefined, 0, 'RTPC')).serverChannelId;
@@ -402,7 +413,7 @@ export class MediaSession extends EventEmitter {
     );
     this.timers.push(
       setInterval(() => {
-        this.log?.info(`call: media received video=${this.stats.video} audio=${this.stats.audio} other=${this.stats.other} packets`);
+        this.log?.info(`call: media received video=${this.stats.video} audio=${this.stats.audio} other=${this.stats.other} packets; talk-back sent=${this.stats.sent}`);
       }, STATS_INTERVAL_MS),
     );
   }
@@ -425,8 +436,42 @@ export class MediaSession extends EventEmitter {
       return;
     }
     this.stats.video++;
+    if (this.firstVideoAt === 0) {
+      this.firstVideoAt = Date.now();
+      // Joining a stream that is already running, the first keyframe can be seconds away;
+      // until then nothing can be shown. Asking for video again may bring one sooner.
+      this.keyframeRetry = setTimeout(() => {
+        if (this.firstSpsAt === 0 && !this.ended) {
+          this.log?.info('call: no keyframe yet; asking for video again');
+          void this.requestVideo().catch(() => undefined);
+        }
+      }, NO_KEYFRAME_RETRY_MS);
+    }
     for (const unit of this.depacketizer.push(rtp)) {
+      this.noteUnit(unit);
       this.emit('video', unit);
+    }
+  }
+
+  /** Logs the picture size, how long the first keyframe took, and the keyframe interval. */
+  private noteUnit(unit: Buffer): void {
+    const type = nalType(unit);
+    const now = Date.now();
+    if (type === 7 && this.firstSpsAt === 0) {
+      this.firstSpsAt = now;
+      clearTimeout(this.keyframeRetry);
+      const sps = parseSps(unit);
+      const size = sps ? `${sps.width}x${sps.height}, profile ${sps.profile}, level ${sps.level / 10}` : 'size unknown';
+      this.log?.info(
+        `call: video ${size}; first keyframe ${((now - this.startedAt) / 1000).toFixed(1)} s after the media request, ` +
+          `${((now - this.firstVideoAt) / 1000).toFixed(1)} s after the first video packet`,
+      );
+    } else if (type === 5 && (this.keyframeAt.length === 0 || now - this.keyframeAt[this.keyframeAt.length - 1] > 200)) {
+      this.keyframeAt.push(now);
+      if (this.keyframeAt.length === 3) {
+        const [a, , c] = this.keyframeAt;
+        this.log?.info(`call: a keyframe every ${((c - a) / 2000).toFixed(1)} s`);
+      }
     }
   }
 
@@ -453,6 +498,7 @@ export class MediaSession extends EventEmitter {
     this.tx.first = false;
     this.tx.seq = (this.tx.seq + 1) & 0xffff;
     this.tx.ts = (this.tx.ts + alaw.length) >>> 0;
+    this.stats.sent++;
     await this.client.sendOnHandle(handle, packet);
   }
 
@@ -466,8 +512,9 @@ export class MediaSession extends EventEmitter {
       clearInterval(t);
     }
     this.timers = [];
+    clearTimeout(this.keyframeRetry);
     this.client.off('channel', this.onChannel);
-    this.log?.info(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets`);
+    this.log?.info(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets; talk-back sent=${this.stats.sent}`);
     if (!this.call.ended) {
       await this.voiceStatus(0).catch(() => undefined);
       if (this.audioHandle !== undefined) {
@@ -477,13 +524,17 @@ export class MediaSession extends EventEmitter {
         await this.handler.hangUp(this.call);
       }
     }
+    // Packets keep coming until the channels are closed: drop them quietly, then let go.
     for (const h of this.mediaHandles) {
-      this.client.setBinaryHandler(h);
+      this.client.setBinaryHandler(h, this.drop);
     }
     for (const [name, h] of [['RTPC-audio', this.audioHandle], ['RTPC-video', this.videoHandle], ['UDPM', this.udpHandle]] as const) {
       if (h !== undefined) {
         await this.client.closeHandle(name, h);
       }
+    }
+    for (const h of this.mediaHandles) {
+      this.client.setBinaryHandler(h);
     }
     this.emit('end', reason);
   }

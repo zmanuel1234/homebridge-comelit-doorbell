@@ -395,9 +395,13 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       // Until the stream's parameters (SPS) arrive, ffmpeg can't decode anything and logs
       // "non-existing PPS": start at the first SPS instead.
       let decodable = Boolean(first);
+      const viewStart = Date.now();
       const onVideo = (unit: Buffer) => {
         this.keyframes.push(unit);
-        decodable ||= nalType(unit) === 7;
+        if (!decodable && nalType(unit) === 7) {
+          decodable = true;
+          this.log.info(`Doorbell camera: first picture to HomeKit ${((Date.now() - viewStart) / 1000).toFixed(1)} s after the live view started`);
+        }
         if (decodable) {
           active.video?.stdin.write(unit);
         }
@@ -458,7 +462,12 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     ]);
     talk.stdin.end(talkSdp(p.address, p.ipv6, p.audioReturnPort, p.audioSrtp));
     let pending = Buffer.alloc(0);
+    let frames = 0;
     talk.stdout.on('data', (d: Buffer) => {
+      if (frames === 0) {
+        this.log.info('Doorbell camera: talk-back: sound from the Home app microphone is arriving');
+      }
+      frames++;
       pending = Buffer.concat([pending, d]);
       while (pending.length >= ALAW_FRAME_BYTES) {
         const frame = pending.subarray(0, ALAW_FRAME_BYTES);

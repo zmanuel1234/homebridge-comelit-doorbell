@@ -89,3 +89,20 @@ test('a snapshotImage that does not exist falls back to the built-in picture, wi
   self.settings.snapshotImage = DEFAULT_STILL;
   assert.strictEqual(await pick.call(self), DEFAULT_STILL);
 });
+
+test('parseSps reads the picture size (SPS made by x264)', () => {
+  const { parseSps } = require('../dist/media');
+  const cases = {
+    '000000016742c00cd90141fb011000000300100000030200f142a480': [320, 240, 66],
+    '000000016742c01ed900c83db011000003000100000300200f162e48': [800, 480, 66],
+    '000000016742c016d900a02ff97011000003000100000300200f162e48': [640, 360, 66],
+    '000000016764001eacd940c83db011000003000100000300200f162d96': [800, 480, 100],
+    '00000001674d401feca02802dd80880000030008000003010078c18cb0': [1280, 720, 77],
+  };
+  for (const [hex, [w, h, p]] of Object.entries(cases)) {
+    const s = parseSps(Buffer.from(hex, 'hex'));
+    assert.deepStrictEqual([s.width, s.height, s.profile], [w, h, p], hex);
+  }
+  assert.strictEqual(parseSps(Buffer.from('0000000165888000', 'hex')), undefined, 'not an SPS');
+  assert.strictEqual(parseSps(Buffer.from('0000000167', 'hex')), undefined, 'too short');
+});
