@@ -13,6 +13,7 @@ export class LockAccessory {
   private readonly service: Service;
   private lockState: number;
   private lastRefusedLog = 0;
+  private opening = false;
 
   constructor(
     private readonly platform: ComelitIntercomPlatform,
@@ -49,6 +50,9 @@ export class LockAccessory {
       }
       throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE);
     }
+    if (this.opening) {
+      return; // an open is already on its way
+    }
     // Answer HomeKit right away; the door command can take several seconds.
     void this.triggerOpen();
   }
@@ -60,6 +64,7 @@ export class LockAccessory {
       this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.SECURED);
       this.service.updateCharacteristic(Characteristic.LockTargetState, Characteristic.LockTargetState.SECURED);
     };
+    this.opening = true;
     try {
       const result = await this.platform.openDoor(this.door);
       if (result.confirmed) {
@@ -71,6 +76,8 @@ export class LockAccessory {
       this.platform.log.error(`Door open failed: ${(e as Error).message}`);
       relock();
       return;
+    } finally {
+      this.opening = false;
     }
     this.lockState = Characteristic.LockCurrentState.UNSECURED;
     this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.UNSECURED);

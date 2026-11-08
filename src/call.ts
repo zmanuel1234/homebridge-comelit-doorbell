@@ -143,6 +143,7 @@ export class CallHandler {
     const key = (frame.conn1 << 8) | frame.conn0;
     let call = this.calls.get(key);
     if (!call && frame.flags === Flag.SYN && frame.opcode === Opcode.INVITE) {
+      this.activeCall(); // drops ended and stale calls, so they don't pile up
       call = {
         conn0: frame.conn0,
         conn1: frame.conn1,

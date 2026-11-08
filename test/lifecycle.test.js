@@ -113,4 +113,6 @@ test('reconnect back-off doubles from reconnectDelay up to maxReconnectDelay', (
   assert.deepStrictEqual([0, 1, 2, 3, 4, 50].map((n) => reconnectDelay(s, n) / 1000), [10, 20, 40, 60, 60, 60]);
   const t = resolveSettings({ platform: 'x', reconnectDelay: 120, maxReconnectDelay: 60 });
   assert.strictEqual(reconnectDelay(t, 3), 120_000, 'never shorter than reconnectDelay');
+  assert.strictEqual(reconnectDelay(s, -1), 2_000, 'a planned reconnect waits at most 2 s');
+  assert.strictEqual(reconnectDelay(resolveSettings({ platform: 'x', reconnectDelay: 1 }), -1), 1_000);
 });

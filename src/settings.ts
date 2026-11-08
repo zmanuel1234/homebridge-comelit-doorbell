@@ -13,3 +13,5 @@ export const READ_TIMEOUT_MS = 30_000;
 export const DEAD_CONNECTION_TIMEOUT_MS = 120_000;
 export const KEEPALIVE_INTERVAL_MS = 90_000;
 export const DEFAULT_RECONNECT_DELAY_S = 10;
+/** A planned reconnect (registration refresh) waits at most this long, so rings aren't missed in the gap. */
+export const PLANNED_RECONNECT_DELAY_MS = 2_000;

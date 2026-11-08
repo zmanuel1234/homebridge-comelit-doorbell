@@ -109,3 +109,37 @@ test('ringWindowSeconds 0 allows unlocking at any time', () => {
   const { p } = platform({ ringWindowSeconds: 0 });
   assert.strictEqual(p.isUnlockAllowed(), true);
 });
+
+test('reconnects with the same doors do not rebuild or re-save the accessories', () => {
+  const { api, p } = platform();
+  let updates = 0;
+  api.updatePlatformAccessories = () => { updates++; };
+  p.discoverAccessories(deviceConfig);
+  const lock = [...p.lockAccessories.values()][0];
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  assert.strictEqual(updates, 0);
+  assert.strictEqual([...p.lockAccessories.values()][0], lock);
+});
+
+test('a second tap while the door is opening sends one open', async () => {
+  const { p } = platform({ ringWindowSeconds: 0 });
+  const lock = lockOf(p);
+  let opens = 0;
+  let finish;
+  p.openDoor = () => { opens++; return new Promise((r) => (finish = r)); };
+  const target = lock.service.getCharacteristic(p.Characteristic.LockTargetState);
+  target.set(0);
+  target.set(0);
+  assert.strictEqual(opens, 1);
+  finish({ confirmed: true });
+  await new Promise((r) => setImmediate(r));
+  target.set(0);
+  assert.strictEqual(opens, 2);
+});
+
+test('after shutdown no reconnect is scheduled', () => {
+  const { p } = platform();
+  p.teardown();
+  p.scheduleReconnect(true);
+  assert.strictEqual(p.reconnectTimer, undefined);
+});
