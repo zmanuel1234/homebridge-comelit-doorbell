@@ -7,7 +7,7 @@ import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
-import { ComelitPlatformConfig, resolveSettings, Settings } from './config';
+import { ComelitPlatformConfig, resolveSettings, Settings, settingsWarnings } from './config';
 import { getDeviceConfig } from './configReader';
 import { ctppInitSequence } from './ctpp';
 import { openDoor } from './door';
@@ -45,6 +45,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
     this.settings = resolveSettings(config);
     this.displayName = config.name || 'Comelit Doorbell';
+    for (const w of settingsWarnings(this.settings)) {
+      this.log.warn(w);
+    }
+    if (this.settings.camera && this.settings.answerMode !== 'answer-on-view') {
+      this.log.info("Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.");
+    }
     api.on('didFinishLaunching', () => {
       this.setupDevice().catch((e) => this.log.error(`Initial setup failed: ${(e as Error).message}`));
     });

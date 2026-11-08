@@ -53,3 +53,26 @@ test('the built-in still picture ships with the package and ffmpeg is found in k
   fs.writeFileSync(nested, '');
   assert.strictEqual(resolveFfmpeg('', nm), nested);
 });
+
+test('an old keyframe is not used', async () => {
+  const k = new KeyframeCache();
+  const u = (b) => Buffer.from([0, 0, 0, 1, ...b]);
+  [u([0x67]), u([0x68]), u([0x65])].forEach((x) => k.push(x));
+  assert.ok(k.keyframe(1000));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.strictEqual(k.keyframe(10), undefined);
+  assert.ok(k.keyframe());
+});
+
+test('ffmpeg video arguments stream SRTP to HomeKit', () => {
+  const { videoArgs, audioArgs, talkSdp } = require('../dist/camera');
+  const srtp = Buffer.alloc(30, 1);
+  const v = videoArgs({ width: 1280, height: 720, fps: 15, bitrate: 299, pt: 99, ssrc: 5, srtp, address: '10.0.0.9', port: 5000, mtu: 1316, codec: 'libx264' });
+  assert.deepStrictEqual(v.slice(v.indexOf('-f'), v.indexOf('-f') + 2), ['-f', 'h264']);
+  assert.ok(v.includes('libx264') && v.includes('299k') && v.includes('yuv420p'));
+  assert.strictEqual(v.at(-1), 'srtp://10.0.0.9:5000?rtcpport=5000&pkt_size=1316');
+  assert.ok(videoArgs({ width: 1, height: 1, fps: 1, bitrate: 1, pt: 1, ssrc: 1, srtp, address: 'a', port: 1, mtu: 1, codec: 'copy' }).join(' ').includes('-c:v copy'));
+  const a = audioArgs({ sampleRate: 16, bitrate: 24, pt: 110, ssrc: 6, srtp, address: '10.0.0.9', port: 5002 });
+  assert.ok(a.join(' ').includes('-f alaw -ar 8000 -ac 1 -i pipe:0') && a.includes('libfdk_aac') && a.includes('16k'));
+  assert.ok(talkSdp('10.0.0.9', false, 5004, srtp).includes('m=audio 5004 RTP/AVP 110'));
+});

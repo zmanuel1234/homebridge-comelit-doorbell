@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.0-beta.5 (2026-11-07)
+
+### Fixed
+
+- Two viewers opening the live view at the same time each answered the call and set up media twice. They now share one answer and one media setup.
+- A media setup that failed halfway was left attached to the call, and the next viewer reused it. It is now cleaned up (the call stays answered, so unlocking still works) and the next viewer tries again.
+- A live view whose viewer vanished before sending anything kept streaming forever. The inactivity timer now starts with the stream.
+- After a call, the camera kept showing the last video frame until restart. It now goes back to the idle picture after `lastVisitorMinutes`.
+
+### Added
+
+- `liveViewWaitSeconds` (8): if the intercom's media takes longer when a live view opens, the picture is shown instead of the Home app giving up, and media that arrives later with no viewer is ended.
+- `lastVisitorMinutes` (5).
+- Startup warnings for settings that don't work together: `answer-on-view` or `talkBack` without the camera, and the camera together with a trigger URL (two notifications per ring).
+- README: both ways to get a doorbell notification, ffmpeg requirements, camera troubleshooting.
+- Tests for two viewers, a failed media setup, keyframe age, the ffmpeg arguments and the warnings (40 in all).
+
 ## 2.1.0-beta.4 (2026-11-07)
 
 - Doorbell camera: outside a call it shows a picture that comes with the plugin (a doorbell and "Live video starts when someone rings") instead of a dark frame. `snapshotImage` still overrides it.

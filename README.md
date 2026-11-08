@@ -38,7 +38,9 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 - Homebridge 2.0 (`2.0.0-beta.0` or later) and Node.js 18 or later
 - The intercom on your local network, ideally with a fixed IP address
 - **A Comelit user of its own for Homebridge.** If Homebridge shares a user with a phone, the intercom delivers each call to only one of them.
-- Optional: [homebridge-camera-ffmpeg](https://github.com/homebridge-plugins/homebridge-camera-ffmpeg), for a real HomeKit doorbell notification
+- For a HomeKit doorbell notification, one of:
+  - the plugin's own **doorbell camera** (experimental), which needs ffmpeg with the `libfdk_aac` encoder. The Homebridge Raspberry Pi image has it (`/usr/local/bin/ffmpeg`), and so does the ffmpeg-for-homebridge package.
+  - a still-image doorbell camera from [homebridge-camera-ffmpeg](https://github.com/homebridge-plugins/homebridge-camera-ffmpeg) (step 4 below)
 
 ## Setup
 
@@ -77,7 +79,11 @@ Everything else has working defaults. Running the plugin as a **child bridge** i
 
 ### 4. Doorbell notification (recommended)
 
-HomeKit only sends a proper doorbell notification for a doorbell camera. You can get one by adding a camera with [homebridge-camera-ffmpeg](https://github.com/homebridge-plugins/homebridge-camera-ffmpeg), using a still image as its picture:
+HomeKit only sends a proper doorbell notification for a doorbell camera. There are two ways to get one:
+
+- **The plugin's own doorbell camera** (experimental): turn on **Doorbell camera with live video**. It rings in HomeKit by itself and, with `answerMode: answer-on-view`, shows the intercom's video during a ring. See [the doorbell camera](#doorbell-camera-experimental). Leave the trigger URL below empty, or each ring gives two notifications.
+- **A still-image camera from homebridge-camera-ffmpeg**, triggered by this plugin:
+
 
 1. In camera-ffmpeg, turn on its local HTTP server (`porthttp`, for example 8089, with `localhttp: true`), and add a camera named `Doorbell` with **doorbell** enabled.
 2. Set this plugin's **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`.
@@ -144,6 +150,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). |
+| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera picture shows the last video frame this long, then the idle picture. `0`: always the idle picture. |
 
 ### Experimental: media timing
 
@@ -154,6 +161,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | Wait for the first video or audio (`mediaStartTimeoutSeconds`) | `10` | After answering, hang up if nothing arrives within this time |
 | End the call after media stops for (`mediaSilenceSeconds`) | `5` | Treat the call as over when video and audio stop for this long |
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
+| Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
 
 ## How ring and unlock work
 
@@ -201,12 +209,16 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
+| Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
+| Live view shows only the picture during a ring | Check `answerMode` is `answer-on-view`. Then look for `call: media received video=… audio=…` in the log: zeros mean the intercom accepted the call but sent no media. `took over … s; showing the picture` means it was slow; raise **Live view: wait**. |
+| No sound in the live view, or `Unknown encoder 'libfdk_aac'` | The ffmpeg in use lacks `libfdk_aac`. Check the `Doorbell camera: ffmpeg …` line at startup, and set **ffmpeg path** to one that has it (e.g. `/usr/local/bin/ffmpeg` on the Homebridge Pi image). |
+| The camera keeps showing a visitor from earlier | That's the last visitor, shown for **Show the last visitor for** minutes after a call. Set it to `0` to always show the idle picture. |
 
 Turn on **debug mode** for the child bridge to see every protocol message (`VIP msg:`).
 
 ## Known limits
 
-- Unlocking from HomeKit **during** a ring needs `answerMode: answer-on-open`, which is experimental.
+- Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, or `answer-on-view` from the camera's live view. Both are experimental.
 - Live video and talk-back (doorbell camera) are experimental and untested on a real intercom.
 - Only tested on one model and firmware (see above).
 

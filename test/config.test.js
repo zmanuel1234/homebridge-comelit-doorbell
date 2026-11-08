@@ -17,6 +17,8 @@ test('defaults', () => {
   assert.strictEqual(s.mediaStartTimeoutMs, 10_000);
   assert.strictEqual(s.mediaSilenceMs, 5_000);
   assert.strictEqual(s.videoRefreshMs, 15_000);
+  assert.strictEqual(s.liveViewWaitMs, 8_000);
+  assert.strictEqual(s.lastVisitorMs, 300_000);
   assert.strictEqual(s.camera, false);
   assert.strictEqual(s.talkBack, false);
 });
@@ -31,4 +33,18 @@ test('explicit values', () => {
   assert.strictEqual(s.reconnectDelayMs, 5000);
   assert.strictEqual(s.mediaSilenceMs, 8000);
   assert.strictEqual(s.videoRefreshMs, 20000);
+});
+
+test('warnings for settings that do not work together', () => {
+  const { settingsWarnings } = require('../dist/config');
+  const w = (c) => settingsWarnings(resolveSettings({ platform: 'x', ...c }));
+  assert.strictEqual(w({}).length, 1 - 1);
+  assert.match(w({ answerMode: 'answer-on-view' }).join(), /needs the doorbell camera/);
+  assert.match(w({ talkBack: true }).join(), /talkBack only works/);
+  assert.match(w({ camera: true, answerMode: 'answer-on-view' }).join(), /two notifications/);
+  assert.deepStrictEqual(w({ camera: true, answerMode: 'answer-on-view', doorbellTriggerUrl: '' }), []);
+});
+
+test('lastVisitorMinutes 0 turns the last-visitor picture off', () => {
+  assert.strictEqual(resolveSettings({ platform: 'x', lastVisitorMinutes: 0 }).lastVisitorMs, 0);
 });

@@ -61,6 +61,9 @@ interface Call {
   answered: boolean;
   ended: boolean;
   media?: MediaSession;
+  /** In flight, so a second viewer joins instead of answering again. */
+  answering?: Promise<void>;
+  mediaStarting?: Promise<MediaSession | null>;
 }
 
 interface Waiter {
@@ -185,10 +188,15 @@ export class CallHandler {
     if (call.answered) {
       return;
     }
-    const reply = this.wait(call, Opcode.SETUP_ACK, 1500);
-    await this.send(call, Flag.DATA, SETUP_ACK, 'answer 000c');
-    await reply;
-    call.answered = true;
+    call.answering ??= (async () => {
+      const reply = this.wait(call, Opcode.SETUP_ACK, 1500);
+      await this.send(call, Flag.DATA, SETUP_ACK, 'answer 000c');
+      await reply;
+      call.answered = true;
+    })().finally(() => {
+      call.answering = undefined;
+    });
+    await call.answering;
   }
 
   /**
@@ -236,14 +244,27 @@ export class CallHandler {
     if (call.media) {
       return call.media;
     }
-    await this.answer(call);
-    const session = new MediaSession(this, this.client, call, hd, this.log, this.timing);
-    call.media = session;
-    session.once('end', () => {
-      call.media = undefined;
+    const client = this.client;
+    // A second viewer arriving while the first is still setting up joins that setup.
+    call.mediaStarting ??= (async () => {
+      await this.answer(call);
+      const session = new MediaSession(this, client, call, hd, this.log, this.timing);
+      try {
+        await session.start();
+      } catch (e) {
+        // Leave nothing half-set-up behind; keep the call, so unlocking still works in it.
+        await session.end(`media setup failed: ${(e as Error).message}`, false);
+        throw e;
+      }
+      call.media = session;
+      session.once('end', () => {
+        call.media = undefined;
+      });
+      return session;
+    })().finally(() => {
+      call.mediaStarting = undefined;
     });
-    await session.start();
-    return session;
+    return call.mediaStarting;
   }
 
   /** Hangs up `call` (RELEASE, cause 0). */
@@ -414,8 +435,8 @@ export class MediaSession extends EventEmitter {
     await this.client.sendOnHandle(handle, packet);
   }
 
-  /** Stops the media and hangs up (unless the intercom already ended the call). */
-  async end(reason: string): Promise<void> {
+  /** Stops the media and, with `hangUp`, hangs up (unless the intercom already ended the call). */
+  async end(reason: string, hangUp = true): Promise<void> {
     if (this.ended) {
       return;
     }
@@ -431,7 +452,9 @@ export class MediaSession extends EventEmitter {
       if (this.audioHandle !== undefined) {
         await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_STOP, le16(this.audioHandle), Buffer.alloc(2)]), 'audio stop').catch(() => undefined);
       }
-      await this.handler.hangUp(this.call);
+      if (hangUp) {
+        await this.handler.hangUp(this.call);
+      }
     }
     for (const h of this.mediaHandles) {
       this.client.setBinaryHandler(h);

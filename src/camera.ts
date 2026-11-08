@@ -32,6 +32,9 @@ import type { CallHandler, MediaSession } from './call';
 import type { Settings } from './config';
 import { ALAW_FRAME_BYTES, KeyframeCache } from './media';
 
+/** A new viewer of an ongoing call starts from the latest keyframe if it is this recent. */
+const FRESH_KEYFRAME_MS = 10_000;
+
 interface PendingSession {
   address: string;
   ipv6: boolean;
@@ -218,7 +221,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private async snapshot(request: SnapshotRequest): Promise<Buffer> {
-    const keyframe = this.keyframes.keyframe();
+    const keyframe = this.settings.lastVisitorMs > 0 ? this.keyframes.keyframe(this.settings.lastVisitorMs) : undefined;
     if (keyframe) {
       return this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `scale=${request.width}:-2`, '-f', 'image2', '-'], keyframe);
     }
@@ -322,12 +325,34 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     const active: ActiveSession = { cleanup: [] };
     this.active.set(sessionID, active);
 
-    // Answer the ring and start the intercom's media, if a call is ringing.
+    // Answer the ring and start the intercom's media, if a call is ringing. HomeKit gives up
+    // on a slow start, so after liveViewWaitSeconds show the picture instead.
     let media: MediaSession | null = null;
-    try {
-      media = (await this.getCall()?.startMedia(this.settings.videoQuality === 'hd')) ?? null;
-    } catch (e) {
-      this.log.warn(`Doorbell camera: could not start the intercom's media: ${(e as Error).message}`);
+    const starting = this.getCall()?.startMedia(this.settings.videoQuality === 'hd');
+    if (starting) {
+      let timedOut = false;
+      const cap = new Promise<null>((r) =>
+        setTimeout(() => {
+          timedOut = true;
+          r(null);
+        }, this.settings.liveViewWaitMs),
+      );
+      try {
+        media = await Promise.race([starting, cap]);
+      } catch (e) {
+        this.log.warn(`Doorbell camera: could not start the intercom's media: ${(e as Error).message}`);
+      }
+      if (timedOut) {
+        this.log.warn(`Doorbell camera: the intercom's media took over ${this.settings.liveViewWaitMs / 1000} s; showing the picture`);
+        // If it does arrive later and nobody is watching it, end it.
+        starting
+          .then((late) => {
+            if (late && ![...this.active.values()].some((s) => s.media === late)) {
+              void late.end('no viewer');
+            }
+          })
+          .catch(() => undefined);
+      }
     }
     active.media = media;
     const v = request.video;
@@ -345,7 +370,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       active.video = this.spawnProcess('video', vargs);
     } else {
       active.video = this.spawnProcess('video', vargs);
-      const first = this.keyframes.keyframe();
+      const first = this.keyframes.keyframe(FRESH_KEYFRAME_MS);
       if (first) {
         active.video.stdin.write(first);
       }
@@ -375,17 +400,19 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       }
     }
 
-    // HomeKit sends RTCP on the video return port; stop if it goes quiet.
+    // HomeKit sends RTCP on the video return port; stop if it goes quiet (or never starts).
     const socket = createSocket(p.ipv6 ? 'udp6' : 'udp4');
     socket.on('error', (e) => this.log.warn(`Doorbell camera: socket error ${e.message}`));
-    socket.on('message', () => {
+    const armInactivity = () => {
       clearTimeout(active.inactivity);
       active.inactivity = setTimeout(() => {
         this.log.info('Doorbell camera: viewer inactive, stopping');
         this.controller.forceStopStreamingSession(sessionID);
         void this.stopStream(sessionID, 'viewer inactive');
       }, Math.max(v.rtcp_interval, 0.5) * 5 * 1000 + 5000);
-    });
+    };
+    socket.on('message', armInactivity);
+    armInactivity();
     socket.bind(p.videoReturnPort);
     active.socket = socket;
   }
