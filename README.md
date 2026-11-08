@@ -23,6 +23,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 - [Migrating from homebridge-comelit-intercom](#migrating-from-homebridge-comelit-intercom)
 - [Troubleshooting](#troubleshooting)
 - [Known limits](#known-limits)
+- [Development](#development)
 
 ## Tested hardware
 
@@ -148,7 +149,7 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 | `handshake` | The plugin replies to the call without answering it, for testing. Phones keep ringing. |
 | `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices stop ringing. |
 
-Every message of the call is logged with the prefix `zman-call`. Please share those logs in an issue if you try it.
+Every message of the call is logged with the prefix `call:`. Please share those logs in an issue if you try it.
 
 ## Migrating from homebridge-comelit-intercom
 
@@ -174,6 +175,28 @@ Turn on **debug mode** for the child bridge to see every protocol message (`VIP 
 - Unlocking from HomeKit **during** a ring needs `answerMode: answer-on-open`, which is experimental.
 - No live video or two-way audio yet.
 - Only tested on one model and firmware (see above).
+
+## Development
+
+The plugin is written in TypeScript (`src/`) and compiled to `dist/`.
+
+```bash
+npm ci
+npm run build   # compile src/ to dist/
+npm test        # unit tests, using frames captured from a real intercom
+```
+
+| Module | What it does |
+|---|---|
+| `client.ts` | TCP connection, channels, and the registration lease |
+| `ctp.ts` | CTP frames on the CTPP channel: building, parsing, ACK/FIN words |
+| `vipListener.ts` | Rings and other intercom messages; acknowledgements; answers to door opens |
+| `call.ts` | Experimental: taking part in a ringing call (`answerMode`) |
+| `door.ts` | Door release, waiting for the intercom's answer |
+| `platform.ts` | Homebridge platform: connection lifecycle, accessories, ring window |
+| `config.ts` | Settings and their defaults |
+
+Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag.
 
 ## Credits
 
