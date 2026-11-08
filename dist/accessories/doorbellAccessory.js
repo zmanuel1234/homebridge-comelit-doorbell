@@ -18,14 +18,13 @@ class DoorbellAccessory {
             .setCharacteristic(Characteristic.Model, '6701W')
             .setCharacteristic(Characteristic.SerialNumber, 'doorbell');
         // Remove stale services from previous versions
-        for (const stale of [Service.Doorbell, Service.Speaker]) {
+        for (const stale of [Service.Doorbell, Service.Speaker, Service.Switch]) { // zman: ring sensor instead of switch
             const svc = accessory.getService(stale);
             if (svc)
                 accessory.removeService(svc);
         }
         this.switchService =
-            accessory.getService(Service.Switch) ||
-                accessory.addService(Service.Switch, accessory.displayName);
+            new Service.Switch(accessory.displayName); // zman: internal only, not published
         this.switchService
             .getCharacteristic(Characteristic.On)
             .onGet(() => this.active)
@@ -33,10 +32,17 @@ class DoorbellAccessory {
             if (!value)
                 this._setOff();
         });
+        this.sensorService =
+            accessory.getService(Service.MotionSensor) ||
+                accessory.addService(Service.MotionSensor, accessory.displayName);
+        this.sensorService
+            .getCharacteristic(Characteristic.MotionDetected)
+            .onGet(() => this.active);
     }
     /** Called by the platform when a doorbell_ring VIP event arrives. */
     triggerRing() {
         this.platform.log.info('Doorbell ring');
+        this.sensorService.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);
         this.active = true;
         this.switchService
             .getCharacteristic(this.platform.Characteristic.On)
@@ -46,6 +52,7 @@ class DoorbellAccessory {
     }
     _setOff() {
         this.active = false;
+        this.sensorService.updateCharacteristic(this.platform.Characteristic.MotionDetected, false);
         this.switchService
             .getCharacteristic(this.platform.Characteristic.On)
             .updateValue(false);
