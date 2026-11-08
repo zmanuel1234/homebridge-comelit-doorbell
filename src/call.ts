@@ -33,9 +33,14 @@ const AUDIO_STOP = Buffer.from('0011980200000000', 'hex');
 const VIDEO_OFFER = Buffer.from('0011143200000000', 'hex');
 const OP_VOICESTATUS = 0x0070;
 const CALL_MAX_AGE_MS = 120_000;
-const VIDEO_REFRESH_MS = 15_000;
-const MEDIA_START_TIMEOUT_MS = 10_000;
-const MEDIA_SILENCE_MS = 5_000;
+
+/** Media timing (settings mediaStartTimeoutSeconds, mediaSilenceSeconds, videoRefreshSeconds). */
+export interface MediaTiming {
+  startTimeoutMs: number;
+  silenceMs: number;
+  videoRefreshMs: number;
+}
+export const DEFAULT_MEDIA_TIMING: MediaTiming = { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 15_000 };
 const STATS_INTERVAL_MS = 5_000;
 export const SD_RESOLUTION: [number, number] = [320, 240];
 export const HD_RESOLUTION: [number, number] = [800, 480];
@@ -95,6 +100,7 @@ export class CallHandler {
     private readonly defaultPeer: string,
     private readonly sendFrame: (frame: Buffer) => Promise<void>,
     private readonly log?: Logging,
+    private readonly timing: MediaTiming = DEFAULT_MEDIA_TIMING,
   ) {}
 
   get enabled(): boolean {
@@ -231,7 +237,7 @@ export class CallHandler {
       return call.media;
     }
     await this.answer(call);
-    const session = new MediaSession(this, this.client, call, hd, this.log);
+    const session = new MediaSession(this, this.client, call, hd, this.log, this.timing);
     call.media = session;
     session.once('end', () => {
       call.media = undefined;
@@ -312,6 +318,7 @@ export class MediaSession extends EventEmitter {
     private readonly call: Call,
     private readonly hd: boolean,
     private readonly log?: Logging,
+    private readonly timing: MediaTiming = DEFAULT_MEDIA_TIMING,
   ) {
     super();
   }
@@ -340,13 +347,13 @@ export class MediaSession extends EventEmitter {
     await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(this.audioHandle), Buffer.alloc(2)]), 'audio request');
     await this.requestVideo();
 
-    this.timers.push(setInterval(() => void this.requestVideo().catch(() => undefined), VIDEO_REFRESH_MS));
+    this.timers.push(setInterval(() => void this.requestVideo().catch(() => undefined), this.timing.videoRefreshMs));
     this.timers.push(
       setInterval(() => {
         const now = Date.now();
-        if (this.lastMedia === 0 && now - started > MEDIA_START_TIMEOUT_MS) {
+        if (this.lastMedia === 0 && now - started > this.timing.startTimeoutMs) {
           void this.end('no media from the intercom');
-        } else if (this.lastMedia > 0 && now - this.lastMedia > MEDIA_SILENCE_MS) {
+        } else if (this.lastMedia > 0 && now - this.lastMedia > this.timing.silenceMs) {
           void this.end('media stopped');
         }
       }, 1000),

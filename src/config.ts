@@ -23,6 +23,9 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   videoCodec?: string;
   ffmpegPath?: string;
   snapshotImage?: string;
+  mediaStartTimeoutSeconds?: number;
+  mediaSilenceSeconds?: number;
+  videoRefreshSeconds?: number;
 }
 
 export const DEFAULT_DOORBELL_TRIGGER_URL = 'http://localhost:8089/doorbell?Doorbell';
@@ -54,6 +57,12 @@ export interface Settings {
   ffmpegPath: string;
   /** Image shown when there is no call; empty: a plain dark picture. */
   snapshotImage: string;
+  /** Hang up if no video or audio arrives this long after answering. */
+  mediaStartTimeoutMs: number;
+  /** Treat the call as over when media stops for this long. */
+  mediaSilenceMs: number;
+  /** Repeat the video request this often (the intercom stops sending after ~35 s otherwise). */
+  videoRefreshMs: number;
 }
 
 const positive = (v: unknown, fallback: number): number => (Number(v) > 0 ? Number(v) : fallback);
@@ -80,5 +89,8 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     videoCodec: (c.videoCodec ?? '').trim() || 'libx264',
     ffmpegPath: (c.ffmpegPath ?? '').trim(),
     snapshotImage: (c.snapshotImage ?? '').trim(),
+    mediaStartTimeoutMs: positive(c.mediaStartTimeoutSeconds, 10) * 1000,
+    mediaSilenceMs: positive(c.mediaSilenceSeconds, 5) * 1000,
+    videoRefreshMs: positive(c.videoRefreshSeconds, 15) * 1000,
   };
 }

@@ -191,6 +191,30 @@
         "type": "string",
         "placeholder": "/var/lib/homebridge/doorbell.jpg",
         "description": "A JPEG shown as the camera picture when no call is in progress. Empty: a plain dark picture."
+      },
+      "mediaStartTimeoutSeconds": {
+        "title": "Wait for the first video or audio (seconds)",
+        "type": "number",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 60,
+        "description": "After answering, hang up if no video or audio arrives within this time."
+      },
+      "mediaSilenceSeconds": {
+        "title": "End the call after media stops for (seconds)",
+        "type": "number",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 60,
+        "description": "If video and audio stop arriving for this long, the call is treated as over and hung up."
+      },
+      "videoRefreshSeconds": {
+        "title": "Repeat the video request every (seconds)",
+        "type": "number",
+        "default": 15,
+        "minimum": 5,
+        "maximum": 60,
+        "description": "The intercom stops sending video about 35 s after a request, so it is repeated."
       }
     },
     "required": [
@@ -254,6 +278,17 @@
         "videoCodec",
         "ffmpegPath",
         "snapshotImage"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Experimental: media timing",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "mediaStartTimeoutSeconds",
+        "mediaSilenceSeconds",
+        "videoRefreshSeconds"
       ]
     }
   ]

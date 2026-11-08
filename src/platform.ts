@@ -130,7 +130,11 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (s.enableNotifications && client.getChannel('CTPP')) {
       const ourAddress = `${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`;
       let listener: VipEventListener | undefined = undefined;
-      const call = new CallHandler(s.answerMode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log);
+      const call = new CallHandler(s.answerMode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log, {
+        startTimeoutMs: s.mediaStartTimeoutMs,
+        silenceMs: s.mediaSilenceMs,
+        videoRefreshMs: s.videoRefreshMs,
+      });
       listener = new VipEventListener(client, deviceConfig, (ev) => this.onEvent(ev), this.log, call);
       call.attach(client);
       this.callHandler = call;

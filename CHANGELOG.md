@@ -10,6 +10,7 @@ Experimental features, all off by default.
 - **Answer when viewing** (`answerMode: answer-on-view`): opening the camera's live view answers the ring, then requests video and audio as the Comelit app does: UDPM and two RTPC channels, audio and video media requests, VOICESTATUS. Closing the view hangs up. Unlocking during the view opens inside the call.
 - **Talk-back** (`talkBack`): the Home app's microphone is sent to the intercom's speaker as G.711 A-law.
 - `videoQuality`, `videoCodec`, `ffmpegPath` settings.
+- Media timing settings: `mediaStartTimeoutSeconds` (10), `mediaSilenceSeconds` (5), `videoRefreshSeconds` (15).
 - The connection now reports channels the intercom opens (name and handle, which were misparsed before) and can route media channels.
 - Unknown-channel diagnostics are rate-limited, so media can't flood the log.
 

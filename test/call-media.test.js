@@ -21,7 +21,7 @@ function fakeClient() {
   return c;
 }
 
-function setup(mode) {
+function setup(mode, timing) {
   const sent = [];
   let call;
   call = new CallHandler(mode, 'SB0000023', 'SB000002', async (f) => {
@@ -31,7 +31,7 @@ function setup(mode) {
     if (fr.opcode === 0x0011 && fr.body[2] === 0x18) {
       setImmediate(() => call.onFrame({ flags: 0x40, conn0: 0x36, conn1: 0x96, seq: 0xb6, ack: 0xd9, body: Buffer.from('00111802000000000130', 'hex'), opcode: 0x0011 }, ['SB000002']));
     }
-  }, quietLog());
+  }, quietLog(), timing);
   const client = fakeClient();
   call.attach(client);
   return { call, client, sent };
@@ -92,4 +92,13 @@ test('other modes never start media', async () => {
     await ring(call);
     assert.strictEqual(await call.startMedia(false), null, mode);
   }
+});
+
+test('media timing: no media within mediaStartTimeoutSeconds ends the call', async () => {
+  const { call, sent } = setup('answer-on-view', { startTimeoutMs: 100, silenceMs: 100, videoRefreshMs: 60_000 });
+  await ring(call);
+  const session = await call.startMedia(false);
+  const reason = await new Promise((r) => session.once('end', r));
+  assert.strictEqual(reason, 'no media from the intercom');
+  assert.strictEqual(ops(sent).at(-1), 'e'); // hung up
 });

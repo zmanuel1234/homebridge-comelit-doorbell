@@ -145,6 +145,16 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (installed with homebridge-camera-ffmpeg), else `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | dark picture | A JPEG shown when no call is in progress |
 
+### Experimental: media timing
+
+For tuning the doorbell camera's live view after real tests. The defaults follow what comelit-vip measured on a 6741W.
+
+| Setting | Default | Description |
+|---|---|---|
+| Wait for the first video or audio (`mediaStartTimeoutSeconds`) | `10` | After answering, hang up if nothing arrives within this time |
+| End the call after media stops for (`mediaSilenceSeconds`) | `5` | Treat the call as over when video and audio stop for this long |
+| Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
+
 ## How ring and unlock work
 
 1. Someone rings. The intercom calls every registered receiver at once: the wall monitor, the Comelit apps and Homebridge.
