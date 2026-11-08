@@ -30,7 +30,7 @@ import type {
 } from 'homebridge';
 import type { CallHandler, MediaSession } from './call';
 import type { Settings } from './config';
-import { ALAW_FRAME_BYTES, KeyframeCache } from './media';
+import { ALAW_FRAME_BYTES, KeyframeCache, nalType } from './media';
 
 /** A new viewer of an ongoing call starts from the latest keyframe if it is this recent. */
 const FRESH_KEYFRAME_MS = 10_000;
@@ -392,9 +392,15 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       if (first) {
         active.video.stdin.write(first);
       }
+      // Until the stream's parameters (SPS) arrive, ffmpeg can't decode anything and logs
+      // "non-existing PPS": start at the first SPS instead.
+      let decodable = Boolean(first);
       const onVideo = (unit: Buffer) => {
         this.keyframes.push(unit);
-        active.video?.stdin.write(unit);
+        decodable ||= nalType(unit) === 7;
+        if (decodable) {
+          active.video?.stdin.write(unit);
+        }
       };
       media.on('video', onVideo);
       active.cleanup.push(() => media?.off('video', onVideo));

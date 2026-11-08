@@ -140,3 +140,26 @@ test('a new ring drops calls that have ended', async () => {
   assert.strictEqual(call.calls.size, 1);
   assert.strictEqual(call.activeCall().conn0, next.conn0);
 });
+
+test('the intercom audio request that arrives before ours is used for talk-back, without waiting (6741W, 2026-11-08)', async () => {
+  const sent = [];
+  let call;
+  call = new CallHandler('answer-on-view', 'SB0000023', 'SB000002', async (f) => {
+    sent.push(f);
+    // As captured: right after our answer the intercom sends its own audio request, naming
+    // the RTPC channel it opened (0xb567 = 46439).
+    if (parseFrame(f).opcode === 0x000c) {
+      setImmediate(() => call.onFrame({ flags: 0x40, conn0: 0x36, conn1: 0x96, seq: 177, ack: 143, body: Buffer.from('001118020000000067b5', 'hex'), opcode: 0x0011 }, ['SB000002']));
+    }
+  }, quietLog());
+  const client = fakeClient();
+  call.attach(client);
+  await ring(call);
+  const t0 = Date.now();
+  const session = await call.startMedia(false);
+  // 1.5 s for the answer (the intercom sends no SETUP_ACK back), but not 3 s more for its audio request
+  assert.ok(Date.now() - t0 < 2500, `media started in ${Date.now() - t0} ms`);
+  await session.sendAudio(Buffer.alloc(160));
+  assert.strictEqual(client.media[0][0], 0xb567);
+  await session.end('done');
+});

@@ -30,7 +30,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 
 | Model | Model id | Firmware | Works |
 |---|---|---|---|
-| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release |
+| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera: answering from the live view, live video and intercom audio, unlocking during the call (2.1.0-beta.14, `sd`) |
 
 Other ViP devices may work. You'll find the model id and firmware on the intercom's web page, under **Device info**. Please open an issue with them, whether it works or not.
 
@@ -194,7 +194,14 @@ With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 - **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
 - **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it.
 
-The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). It is untested on a real intercom, so look for the `call:` lines in the log, which count the video and audio packets received.
+The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio and unlocking during the call work on a 6741W; talk-back and `hd` are not tested yet. The `call:` lines in the log count the video and audio packets received.
+
+What a call looks like:
+
+- The live view starts about 5 s after you open it (answering, then setting up the media).
+- The Home app starts live views muted: tap the speaker icon to hear the door.
+- After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
+- Inside a call the intercom doesn't send a separate answer to the door open; the plugin takes "no refusal" as opened.
 
 ## Migrating from homebridge-comelit-intercom
 
@@ -219,6 +226,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
+| The live view closes by itself shortly after unlocking | Expected: the intercom ends the call about 10–15 s after the door opens. |
 | Live view shows only the picture during a ring | Check `answerMode` is `answer-on-view`. Then look for `call: media received video=… audio=…` in the log: zeros mean the intercom accepted the call but sent no media. `took over … s; showing the picture` means it was slow; raise **Live view: wait**. |
 | No sound in the live view, or `Unknown encoder 'libfdk_aac'` | The ffmpeg in use lacks `libfdk_aac`. Check the `Doorbell camera: ffmpeg …` line at startup, and set **ffmpeg path** to one that has it (e.g. `/usr/local/bin/ffmpeg` on the Homebridge Pi image). |
 | The camera keeps showing a visitor from earlier | That's the last visitor, shown for **Show the last visitor for** minutes after a call. Set it to `0` to always show the idle picture. |
@@ -228,7 +236,7 @@ Turn on **debug mode** for the child bridge to see every protocol message (`VIP 
 ## Known limits
 
 - Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, or `answer-on-view` from the camera's live view. Both are experimental.
-- Live video and talk-back (doorbell camera) are experimental and untested on a real intercom.
+- The doorbell camera is experimental. Live video and unlocking during the call are tested on one 6741W; talk-back and `hd` video are not tested yet.
 - Only tested on one model and firmware (see above).
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 
