@@ -155,7 +155,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
 | Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera picture shows the last video frame this long, then the idle picture. `0`: always the idle picture. |
 
-### Experimental: media timing
+### Experimental: media timing and troubleshooting
 
 For tuning the doorbell camera's live view after real tests. The defaults follow what comelit-vip measured on a 6741W.
 

@@ -314,7 +314,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Experimental: media timing",
+      "title": "Experimental: media timing and troubleshooting",
       "expandable": true,
       "expanded": false,
       "items": [
