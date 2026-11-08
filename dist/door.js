@@ -22,7 +22,7 @@ async function openDoor(client, config, door) {
         ctpp = await openCtppChannel(client, config);
     }
     try {
-        await openDoorOnChannel(client, ctpp, config.aptAddress, door);
+        await openDoorOnChannel(client, ctpp, config.aptAddress, door, `${config.aptAddress}${config.aptSubaddress}`);
     }
     catch (e) {
         throw new DoorOpenError(`Failed to open door '${door.name}': ${e.message}`);
@@ -47,7 +47,12 @@ async function openCtppChannel(client, config) {
         throw new DoorOpenError(`Failed to open CTPP channel: ${e.message}`);
     }
 }
-async function openDoorOnChannel(client, channel, aptAddr, door) {
+async function openDoorOnChannel(client, channel, aptAddr, door, ourAddr) {
+    // zman: open like comelit-vip - OP_OPEN_DOOR on a fresh connection, sent from our own address
+    if (!door.isActuator) {
+        await zmanOpenDoor(client, channel, ourAddr, door);
+        return;
+    }
     // Phase B: Open + Confirm (regular doors only)
     if (!door.isActuator) {
         await sendOpenAndConfirm(client, channel, aptAddr, door);
@@ -72,4 +77,19 @@ async function openDoorOnChannel(client, channel, aptAddr, door) {
 async function sendOpenAndConfirm(client, channel, aptAddr, door) {
     await client.sendBinary(channel, (0, protocol_1.encodeOpenDoor)(6144 /* MessageType.OPEN_DOOR */, aptAddr, door.outputIndex, door.aptAddress));
     await client.sendBinary(channel, (0, protocol_1.encodeOpenDoor)(6176 /* MessageType.OPEN_DOOR_CONFIRM */, aptAddr, door.outputIndex, door.aptAddress));
+}
+
+// zman: open like comelit-vip - build the CTP packet properly instead of replaying a capture
+async function zmanOpenDoor(client, channel, ourAddr, door) {
+    const la = (a) => { const b = Buffer.alloc(10); Buffer.from(String(a), 'latin1').copy(b); return b; };
+    const conn = Buffer.alloc(2);
+    conn.writeUInt16BE(Math.floor(Math.random() * 0x7ffe) + 1);
+    const seq = Math.floor(Math.random() * 256), ack = Math.floor(Math.random() * 256);
+    const body = Buffer.concat([Buffer.from([0x00, 0x2d]), la(door.aptAddress), Buffer.from([door.outputIndex & 0xff])]);
+    const head = Buffer.alloc(8);
+    head[0] = 0xc0; head[1] = 0x18; conn.copy(head, 2); head[4] = seq; head[5] = ack;
+    head.writeUInt16BE(body.length, 6);
+    const pad = Buffer.alloc((4 - (body.length % 4)) % 4);
+    const pkt = Buffer.concat([head, body, pad, Buffer.from([0xff, 0xff, 0xff, 0xff]), la(ourAddr), la(door.aptAddress)]);
+    await client.sendBinary(channel, pkt);
 }
