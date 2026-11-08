@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0-beta.11 (2026-11-08)
+
+### Fixed
+
+- **Rings could stop silently.** When the intercom closed a channel, the plugin acknowledged it but kept treating the channel as open. If it was the ring channel (CTPP), nothing rang until the next full reconnect: up to 50 minutes in `inplace` mode, because renewals were still "sent" on the closed channel. The plugin now forgets closed channels and reconnects right away when the ring channel closes (log: `The intercom closed channel CTPP`).
+- A frame that made its handler fail (for example a malformed media packet) was thrown out of the connection's data event, which can stop Homebridge. It is now logged and skipped, and the following frames are handled as usual.
+
+### Changed
+
+- npm description and keywords mention the doorbell camera.
+
+### Added
+
+- Tests for the above (60 in all).
+- README: troubleshooting row for a closed ring channel.
+
 ## 2.1.0-beta.10 (2026-11-08)
 
 ### Fixed

@@ -125,6 +125,11 @@ export class IconaBridgeClient extends EventEmitter {
     this.log?.debug(`Disconnected from ${this.host}:${this.port}`);
   }
 
+  /** Drops the connection and reports it as lost (the disconnect callback runs). */
+  drop(reason: string): void {
+    this.onDisconnect(reason);
+  }
+
   /** `planned` is true for a reconnect the lease asked for, false for a dropped connection. */
   setDisconnectCallback(cb: (planned: boolean) => void): void {
     this.disconnectCallback = cb;
@@ -190,7 +195,12 @@ export class IconaBridgeClient extends EventEmitter {
       }
       const body = this.rxBuffer.subarray(HEADER_SIZE, totalLen);
       this.rxBuffer = this.rxBuffer.subarray(totalLen);
-      this.dispatch(requestId, body);
+      try {
+        this.dispatch(requestId, body);
+      } catch (e) {
+        // One bad frame must not take Homebridge down (this runs in the socket's data event).
+        this.log?.warn(`Ignored a frame on channel ${requestId} that could not be handled: ${(e as Error).message}`);
+      }
     }
   }
 
@@ -314,6 +324,16 @@ export class IconaBridgeClient extends EventEmitter {
     }
     if (isEnd(msgType) && body.length >= 8 && body.readUInt32LE(4) === 2) {
       this.socket?.write(encodeChannelCloseAck(serverChannelId));
+      // Forget the channel, so nothing keeps sending on (or waiting for) a closed handle.
+      for (const [name, ch] of this.channels) {
+        if (ch.isOpen && ch.serverChannelId === serverChannelId) {
+          ch.isOpen = false;
+          ch.responseQueue.clear();
+          this.channels.delete(name);
+          this.log?.info(`The intercom closed channel ${name}`);
+          this.emit('channelClosed', name);
+        }
+      }
     }
   }
 
