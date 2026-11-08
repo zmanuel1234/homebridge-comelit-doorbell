@@ -39,6 +39,11 @@ class LockAccessory {
             ? Characteristic.LockTargetState.UNSECURED
             : Characteristic.LockTargetState.SECURED)
             .onSet((value) => {
+                { const zw = global.__zmanRingWindowMs === undefined ? 90000 : global.__zmanRingWindowMs; // zman: ring window
+                  if (zw > 0 && Date.now() - (global.__zmanLastRing || 0) > zw) {
+                    if (Date.now() - (global.__zmanRefusedLog || 0) > 5000) { global.__zmanRefusedLog = Date.now(); this.platform.log.warn(`Open refused: no ring in the last ${zw / 1000} s`); }
+                    const zh = this.platform.api && this.platform.api.hap;
+                    throw (zh && zh.HapStatusError) ? new zh.HapStatusError(zh.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE) : new Error('no recent ring'); } }
             if (value === Characteristic.LockTargetState.UNSECURED) {
                 // zman: answer HomeKit right away; don't wait for the door command
                 void this.triggerOpen();

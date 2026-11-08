@@ -42,6 +42,7 @@ class DoorbellAccessory {
     /** Called by the platform when a doorbell_ring VIP event arrives. */
     triggerRing() {
         this.platform.log.info('Doorbell ring');
+        global.__zmanLastRing = Date.now(); // zman: ring window
         // zman: ring the HomeKit doorbell camera (homebridge-camera-ffmpeg, localhost-only)
         try {
             if (global.__zmanDoorbellUrl) require('http').get(global.__zmanDoorbellUrl, (res) => res.resume()) // zman: settings
