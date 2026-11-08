@@ -48,6 +48,7 @@ class ComelitIntercomPlatform {
     // ─── Device lifecycle ─────────────────────────────────────────────────────
     async setupDevice() {
         const { host, port, token, enableNotifications = true } = this.platformConfig;
+        global.__zmanLeaseMs = (Number(this.platformConfig.leaseRefreshMinutes) > 0 ? Number(this.platformConfig.leaseRefreshMinutes) : 2) * 60000; // zman: lease refresh setting
         if (!host || !token) {
             this.log.error('Missing required config: host and token are required');
             return;
