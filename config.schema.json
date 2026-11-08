@@ -184,13 +184,13 @@
         "title": "ffmpeg path",
         "type": "string",
         "placeholder": "auto",
-        "description": "Leave empty to use ffmpeg-for-homebridge (installed with homebridge-camera-ffmpeg), else ffmpeg from the system path."
+        "description": "Leave empty to find it automatically: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then /usr/local/bin/ffmpeg, then ffmpeg from the system path."
       },
       "snapshotImage": {
         "title": "Picture when there is no call",
         "type": "string",
         "placeholder": "/var/lib/homebridge/doorbell.jpg",
-        "description": "A JPEG shown as the camera picture when no call is in progress. Empty: a plain dark picture."
+        "description": "A JPEG shown as the camera picture when no call is in progress. Empty: the picture that comes with the plugin."
       },
       "mediaStartTimeoutSeconds": {
         "title": "Wait for the first video or audio (seconds)",

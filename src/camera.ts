@@ -12,7 +12,7 @@
  */
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
-import { promises as fs } from 'fs';
+import { existsSync, promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 import type {
@@ -67,21 +67,33 @@ function freePort(ipv6: boolean): Promise<number> {
   });
 }
 
-/** ffmpeg: the configured path, else the one bundled with homebridge-camera-ffmpeg, else from PATH. */
-export function resolveFfmpeg(configured: string): string {
+/** The picture shown when there is no call, shipped with the plugin. */
+export const DEFAULT_STILL = path.join(__dirname, '..', 'assets', 'doorbell-idle.jpg');
+
+/**
+ * ffmpeg: the configured path; else ffmpeg-for-homebridge (installed on its own, or inside
+ * homebridge-camera-ffmpeg); else /usr/local/bin/ffmpeg (the Homebridge Raspberry Pi image);
+ * else `ffmpeg` from PATH.
+ */
+export function resolveFfmpeg(configured: string, nodeModules = path.join(__dirname, '..', '..')): string {
   if (configured) {
     return configured;
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const bundled = require('ffmpeg-for-homebridge') as string | undefined;
-    if (bundled) {
+    if (bundled && existsSync(bundled)) {
       return bundled;
     }
   } catch {
-    // not installed
+    // not installed next to the plugin
   }
-  return 'ffmpeg';
+  const candidates = [
+    path.join(nodeModules, '@homebridge-plugins', 'homebridge-camera-ffmpeg', 'node_modules', 'ffmpeg-for-homebridge', 'ffmpeg'),
+    path.join(nodeModules, 'homebridge-camera-ffmpeg', 'node_modules', 'ffmpeg-for-homebridge', 'ffmpeg'),
+    '/usr/local/bin/ffmpeg',
+  ];
+  return candidates.find((c) => existsSync(c)) ?? 'ffmpeg';
 }
 
 export function videoArgs(o: { width: number; height: number; fps: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; mtu: number; codec: string }): string[] {
@@ -215,21 +227,27 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   private async placeholderImage(): Promise<Buffer> {
     if (!this.placeholder) {
-      this.placeholder = this.settings.snapshotImage
-        ? await fs.readFile(this.settings.snapshotImage)
-        : await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x202020:s=640x360', '-frames:v', '1', '-f', 'image2', '-']);
+      try {
+        this.placeholder = await fs.readFile(await this.placeholderPath());
+      } catch (e) {
+        this.log.warn(`Doorbell camera: can't read the picture (${(e as Error).message}); using a plain one`);
+        this.placeholder = await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x202020:s=1280x720', '-frames:v', '1', '-f', 'image2', '-']);
+      }
     }
     return this.placeholder;
   }
 
-  /** The still image as a file, for ffmpeg to loop. */
+  /** The still image as a file, for ffmpeg to loop: the configured one, else the one shipped with the plugin. */
   private async placeholderPath(): Promise<string> {
     if (this.settings.snapshotImage) {
       return this.settings.snapshotImage;
     }
+    if (existsSync(DEFAULT_STILL)) {
+      return DEFAULT_STILL;
+    }
     if (!this.placeholderFile) {
       const file = path.join(os.tmpdir(), 'comelit-doorbell-still.jpg');
-      await fs.writeFile(file, await this.placeholderImage());
+      await fs.writeFile(file, await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x202020:s=1280x720', '-frames:v', '1', '-f', 'image2', '-']));
       this.placeholderFile = file;
     }
     return this.placeholderFile;

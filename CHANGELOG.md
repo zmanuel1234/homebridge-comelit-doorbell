@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0-beta.4 (2026-11-07)
+
+- Doorbell camera: outside a call it shows a picture that comes with the plugin (a doorbell and "Live video starts when someone rings") instead of a dark frame. `snapshotImage` still overrides it.
+- ffmpeg is found automatically in more places: inside homebridge-camera-ffmpeg (scoped package `@homebridge-plugins/...`) and `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image).
+
 ## 2.1.0-beta.3 (2026-11-07)
 
 - No changes to the plugin. Published with setup-node v6, which removes the `always-auth` warnings from the publish run.
