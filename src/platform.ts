@@ -53,6 +53,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     for (const w of settingsWarnings(this.settings)) {
       this.log.warn(w);
     }
+    const s = this.settings;
+    this.log.info(
+      `Settings: ${s.host || '(no host)'}:${s.port}, user row ${s.subaddress ?? 'from the intercom'}, refresh ${s.leaseMode} every ${s.leaseRefreshMs / 60_000} min, ` +
+        `unlock ${s.ringWindowMs ? `within ${s.ringWindowMs / 1000} s of a ring` : 'at any time'}, answerMode ${s.answerMode}, camera ${s.camera ? 'on' : 'off'}` +
+        `${s.doorbellTriggerUrl ? ', trigger URL set' : ''}`,
+    );
     if (this.settings.camera && this.settings.answerMode !== 'answer-on-view') {
       this.log.info("Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.");
     }

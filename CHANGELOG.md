@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0-beta.10 (2026-11-08)
+
+### Fixed
+
+- **Unlock window failed open.** A `ringWindowSeconds` that wasn't a valid number (negative, or text such as `"ninety"`) turned the window off, so HomeKit could unlock at any time. Now only an explicit `0` does that; anything invalid keeps the 90 s window.
+- `reconnectDelay` of `0` or less made the plugin retry the connection in a tight loop. Invalid values now use the default of 10 s.
+- `subaddress` written as text in JSON (`"3"`) was silently ignored, so the plugin registered as the intercom's default user, which the phones also use. Numbers written as text are now accepted for all number settings.
+- A space or line break pasted around the host or token made the connection or login fail. They are now trimmed.
+
+### Added
+
+- Invalid setting values are named in a startup warning (`… is not valid, using …`).
+- A one-line summary of the settings in use at startup (`Settings: …`), without the token.
+- Tests for the above (58 in all).
+- README: how invalid values are handled, the settings summary, a troubleshooting row.
+
 ## 2.1.0-beta.9 (2026-11-08)
 
 ### Fixed

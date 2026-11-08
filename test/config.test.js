@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { resolveSettings } = require('../dist/config');
+const { resolveSettings, settingsWarnings } = require('../dist/config');
 
 test('defaults', () => {
   const s = resolveSettings({ platform: 'ComelitIntercom', host: 'h', token: 't' });
@@ -37,7 +37,7 @@ test('explicit values', () => {
 });
 
 test('warnings for settings that do not work together', () => {
-  const { settingsWarnings } = require('../dist/config');
+  // settingsWarnings is imported at the top
   const w = (c) => settingsWarnings(resolveSettings({ platform: 'x', ...c }));
   assert.strictEqual(w({}).length, 1 - 1);
   assert.match(w({ answerMode: 'answer-on-view' }).join(), /needs the doorbell camera/);
@@ -48,4 +48,37 @@ test('warnings for settings that do not work together', () => {
 
 test('lastVisitorMinutes 0 turns the last-visitor picture off', () => {
   assert.strictEqual(resolveSettings({ platform: 'x', lastVisitorMinutes: 0 }).lastVisitorMs, 0);
+});
+
+test('an invalid ring window keeps the 90 s window instead of allowing unlock at any time', () => {
+  for (const v of [-5, 'abc', 'ninety']) {
+    const s = resolveSettings({ platform: 'x', ringWindowSeconds: v });
+    assert.strictEqual(s.ringWindowMs, 90_000, String(v));
+    assert.match(s.invalid.join(), /ringWindowSeconds/);
+  }
+  assert.strictEqual(resolveSettings({ platform: 'x', ringWindowSeconds: '0' }).ringWindowMs, 0);
+  assert.strictEqual(resolveSettings({ platform: 'x', ringWindowSeconds: '120' }).ringWindowMs, 120_000);
+});
+
+test('numbers typed as text are accepted; host and token are trimmed', () => {
+  const s = resolveSettings({ platform: 'x', host: ' 192.168.1.50 ', token: 'abc\n', subaddress: '3', port: '64100', reconnectDelay: '5' });
+  assert.strictEqual(s.host, '192.168.1.50');
+  assert.strictEqual(s.token, 'abc');
+  assert.strictEqual(s.subaddress, 3);
+  assert.strictEqual(s.port, 64100);
+  assert.strictEqual(s.reconnectDelayMs, 5000);
+  assert.deepStrictEqual(s.invalid, []);
+});
+
+test('a reconnect delay of 0 or less would retry in a tight loop: the default is used', () => {
+  for (const v of [0, -1, 'x']) {
+    const s = resolveSettings({ platform: 'x', reconnectDelay: v });
+    assert.strictEqual(s.reconnectDelayMs, 10_000, String(v));
+  }
+});
+
+test('an invalid sub-address is reported, not used', () => {
+  const s = resolveSettings({ platform: 'x', subaddress: 'three' });
+  assert.strictEqual(s.subaddress, undefined);
+  assert.match(settingsWarnings(s).join(), /subaddress/);
 });

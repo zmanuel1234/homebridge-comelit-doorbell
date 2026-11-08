@@ -103,6 +103,8 @@ Without the doorbell camera, the plugin's own doorbell accessory doesn't produce
 
 In the config editor, settings are grouped as below. JSON keys are shown in brackets.
 
+In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that isn't valid is replaced by its default, and the log says so at startup (`… is not valid, using …`). For **Unlock allowed for** that means the 90 s window is kept: only an explicit `0` allows unlocking at any time. At startup the log also shows a one-line summary of the settings in use (`Settings: …`), without the token.
+
 ### Connection
 
 | Setting | Default | Description |
@@ -210,6 +212,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
 | Rings arrive, but camera-ffmpeg's doorbell no longer rings (after updating to 2.1.0-beta.7) | The trigger URL has no default any more. Set **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. |
 | Live view ends with `video ffmpeg stopped` | ffmpeg failed; the lines before it in the log say why (often a missing encoder: check **Video encoder** and **ffmpeg path**). The plugin ends the view instead of leaving a frozen picture. |
+| `… is not valid, using …` at startup | A setting has a value the plugin can't use (for example a negative number or a typo), so its default is used instead. Fix it in the config editor. |
 | `Reconnecting in … s` with growing waits | The intercom can't be reached (powered off, Wi-Fi, IP changed). The plugin keeps trying, at most every **Longest reconnect wait**. Check the IP address. |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |

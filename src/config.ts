@@ -5,11 +5,11 @@ import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_M
 /** The plugin's block in config.json (see config.schema.json). */
 export interface ComelitPlatformConfig extends PlatformConfig {
   host?: string;
-  port?: number;
+  port?: number | string;
   token?: string;
-  subaddress?: number;
+  subaddress?: number | string;
   enableNotifications?: boolean;
-  reconnectDelay?: number;
+  reconnectDelay?: number | string;
   leaseRefreshMode?: string;
   leaseRefreshMinutes?: number;
   leaseRecycleMinutes?: number;
@@ -70,24 +70,44 @@ export interface Settings {
   liveViewWaitMs: number;
   /** After a call, show the last visitor this long, then the idle picture (0 = never). */
   lastVisitorMs: number;
+  /** Values that were not valid and were replaced by their default, for the startup log. */
+  invalid: string[];
 }
 
 const positive = (v: unknown, fallback: number): number => (Number(v) > 0 ? Number(v) : fallback);
 
+const isSet = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
+
 export function resolveSettings(c: ComelitPlatformConfig): Settings {
-  const ringWindow = c.ringWindowSeconds === undefined || c.ringWindowSeconds === null || c.ringWindowSeconds === '' ? 90 : Number(c.ringWindowSeconds);
+  const invalid: string[] = [];
+  /** A number from the config (numbers typed as text are accepted), or the fallback if it isn't valid. */
+  const num = (key: keyof ComelitPlatformConfig, fallback: number, ok: (n: number) => boolean): number => {
+    const v = c[key];
+    if (!isSet(v)) {
+      return fallback;
+    }
+    const n = Number(v);
+    if (Number.isFinite(n) && ok(n)) {
+      return n;
+    }
+    invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
+    return fallback;
+  };
+  // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
+  const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0);
+  const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0) : NaN;
   return {
-    host: c.host ?? '',
-    port: c.port ?? ICONA_BRIDGE_PORT,
-    token: c.token ?? '',
-    subaddress: Number.isInteger(c.subaddress) ? c.subaddress : undefined,
+    host: String(c.host ?? '').trim(),
+    port: num('port', ICONA_BRIDGE_PORT, (n) => Number.isInteger(n) && n > 0 && n < 65536),
+    token: String(c.token ?? '').trim(),
+    subaddress: Number.isNaN(subaddress) ? undefined : subaddress,
     enableNotifications: c.enableNotifications ?? true,
-    reconnectDelayMs: (c.reconnectDelay ?? DEFAULT_RECONNECT_DELAY_S) * 1000,
+    reconnectDelayMs: num('reconnectDelay', DEFAULT_RECONNECT_DELAY_S, (n) => n >= 1) * 1000,
     maxReconnectDelayMs: positive(c.maxReconnectDelay, 300) * 1000,
     leaseMode: c.leaseRefreshMode === 'inplace' ? 'inplace' : 'reconnect',
     leaseRefreshMs: positive(c.leaseRefreshMinutes, 2) * 60_000,
     leaseRecycleMs: positive(c.leaseRecycleMinutes, 50) * 60_000,
-    ringWindowMs: Number.isFinite(ringWindow) && ringWindow > 0 ? ringWindow * 1000 : 0,
+    ringWindowMs: ringWindow * 1000,
     doorbellTriggerUrl: String(c.doorbellTriggerUrl ?? '').trim(),
     registerPush: c.registerPush === true,
     answerMode: (['handshake', 'answer-on-open', 'answer-on-view'] as const).find((m) => m === c.answerMode) ?? 'off',
@@ -102,6 +122,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     videoRefreshMs: positive(c.videoRefreshSeconds, 15) * 1000,
     liveViewWaitMs: positive(c.liveViewWaitSeconds, 8) * 1000,
     lastVisitorMs: (c.lastVisitorMinutes === undefined || c.lastVisitorMinutes === null ? 5 : Math.max(0, Number(c.lastVisitorMinutes) || 0)) * 60_000,
+    invalid,
   };
 }
 
@@ -119,7 +140,7 @@ export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconn
 
 /** Settings that don't work together, as log warnings. */
 export function settingsWarnings(s: Settings): string[] {
-  const w: string[] = [];
+  const w: string[] = [...s.invalid];
   if (s.answerMode === 'answer-on-view' && !s.camera) {
     w.push("answerMode 'answer-on-view' needs the doorbell camera (camera: true); without it nothing answers the ring.");
   }
