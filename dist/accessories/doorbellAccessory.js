@@ -42,6 +42,11 @@ class DoorbellAccessory {
     /** Called by the platform when a doorbell_ring VIP event arrives. */
     triggerRing() {
         this.platform.log.info('Doorbell ring');
+        // zman: ring the HomeKit doorbell camera (homebridge-camera-ffmpeg, localhost-only)
+        try {
+            require('http').get('http://localhost:8089/doorbell?Doorbell', (res) => res.resume())
+                .on('error', (e) => this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`));
+        } catch (e) { this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`); }
         this.sensorService.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);
         this.active = true;
         this.switchService
