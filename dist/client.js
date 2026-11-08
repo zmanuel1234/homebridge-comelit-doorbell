@@ -54,6 +54,8 @@ class IconaBridgeClient extends events_1.EventEmitter {
                 clearTimeout(timeout);
                 this.socket = socket;
                 this._connected = true;
+                clearTimeout(this.__zmanLease); // zman: lease refresh - reconnect before the 1 h registration lapses
+                this.__zmanLease = setTimeout(() => this._onDisconnect(`registration lease refresh (${(global.__zmanLeaseMs || 120000) / 60000} min)`), global.__zmanLeaseMs || 120000);
                 socket.setMaxListeners(0); // prevent accumulation across reconnect cycles
                 socket.setKeepAlive(true, 60_000);
                 socket.on('data', (chunk) => this._onData(chunk));
@@ -72,6 +74,7 @@ class IconaBridgeClient extends events_1.EventEmitter {
         });
     }
     async disconnect() {
+        clearTimeout(this.__zmanLease);
         this._connected = false;
         this._clearDeadTimer();
         for (const ch of this.channels.values()) {
@@ -128,6 +131,7 @@ class IconaBridgeClient extends events_1.EventEmitter {
         }
     }
     _onDisconnect(reason) {
+        clearTimeout(this.__zmanLease);
         if (!this._connected)
             return;
         this._connected = false;
