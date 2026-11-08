@@ -7,45 +7,51 @@
     "type": "object",
     "properties": {
       "name": {
-        "title": "Platform Name",
+        "title": "Name",
         "type": "string",
         "default": "Comelit Intercom",
-        "required": true
+        "required": true,
+        "description": "Name of the platform in the log, and of the Doorbell accessory when it is first created."
       },
       "host": {
-        "title": "Device Host / IP Address",
+        "title": "Intercom IP address",
         "type": "string",
         "required": true,
-        "placeholder": "192.168.1.100"
+        "placeholder": "192.168.1.100",
+        "description": "Local IP address of the Comelit monitor or Extender, e.g. 192.168.1.50. Give it a fixed address in your router."
       },
       "port": {
-        "title": "ICONA Bridge Port",
+        "title": "ViP port",
         "type": "integer",
-        "default": 64100
+        "default": 64100,
+        "description": "TCP port of the ViP protocol. Leave at 64100."
       },
       "token": {
-        "title": "Auth Token (32-char hex \u2014 from device admin page at http://<host>:8080)",
+        "title": "User token",
         "type": "string",
-        "required": true
+        "required": true,
+        "description": "32-character token of the Comelit user Homebridge signs in as. Find it in users.cfg inside a backup downloaded from the intercom's web page (http://<intercom-ip>:8080). See the README."
       },
       "enableNotifications": {
-        "title": "Enable Doorbell Notifications (opens persistent CTPP/VIP listener)",
+        "title": "Listen for rings",
         "type": "boolean",
-        "default": true
+        "default": true,
+        "description": "Keep a connection open to receive rings. Turn off only if you just want the door lock."
       },
       "reconnectDelay": {
-        "title": "Reconnect Delay (seconds)",
+        "title": "Reconnect delay (seconds)",
         "type": "integer",
         "default": 10,
         "minimum": 1,
-        "maximum": 300
+        "maximum": 300,
+        "description": "Wait before reconnecting after the connection drops."
       },
       "subaddress": {
-        "title": "ViP sub-address",
+        "title": "User row number (sub-address)",
         "type": "integer",
         "minimum": 0,
         "maximum": 15,
-        "description": "Row number (#) of the Comelit user whose token is used. Must not be used by another app."
+        "description": "Row number (#) of that user on the intercom's Users page, e.g. 3. Give Homebridge its own user: a user shared with a phone gets each call on only one of them."
       },
       "leaseRefreshMode": {
         "title": "Registration refresh mode",
@@ -53,52 +59,55 @@
         "default": "reconnect",
         "oneOf": [
           {
-            "title": "Reconnect (proven)",
+            "title": "Reconnect",
             "enum": [
               "reconnect"
             ]
           },
           {
-            "title": "Re-register in place (no gap)",
+            "title": "Re-register in place",
             "enum": [
               "inplace"
             ]
           }
-        ]
+        ],
+        "description": "The intercom stops sending rings to a registration after a few minutes, so it is refreshed regularly. Reconnect: drop and reopen the connection. Re-register in place: renew on the open connection, with no gap."
       },
       "leaseRefreshMinutes": {
         "title": "Registration refresh interval (minutes)",
         "type": "number",
         "default": 2,
         "minimum": 0.5,
-        "maximum": 55
+        "maximum": 55,
+        "description": "How often the registration is refreshed. 2 is proven; longer intervals may miss rings."
       },
       "leaseRecycleMinutes": {
-        "title": "In-place mode: full reconnect every (minutes)",
+        "title": "Full reconnect every (minutes, in-place mode)",
         "type": "number",
         "default": 50,
         "minimum": 5,
-        "maximum": 55
+        "maximum": 55,
+        "description": "In-place mode still reconnects fully this often, as a safety net."
       },
       "ringWindowSeconds": {
-        "title": "Allow opening only this long after a ring (seconds)",
+        "title": "Unlock allowed for (seconds after a ring)",
         "type": "integer",
         "default": 90,
         "minimum": 0,
         "maximum": 600,
-        "description": "0 allows opening at any time."
+        "description": "Unlock from HomeKit is refused unless a ring happened within this many seconds. 0 allows unlocking at any time."
       },
       "doorbellTriggerUrl": {
         "title": "Doorbell camera trigger URL",
         "type": "string",
         "default": "http://localhost:8089/doorbell?Doorbell",
-        "description": "Called on every ring (homebridge-camera-ffmpeg). Leave empty to disable."
+        "description": "Called on every ring, to make a homebridge-camera-ffmpeg doorbell send the HomeKit doorbell notification. Leave empty if you don't use one."
       },
       "registerPush": {
         "title": "Register as a push device (original behavior)",
         "type": "boolean",
         "default": false,
-        "description": "Leave off: push registration diverts calls away from Homebridge."
+        "description": "Leave off. Registering for push diverts calls away from Homebridge."
       },
       "answerMode": {
         "title": "Answer the ring (experimental)",
@@ -112,20 +121,69 @@
             ]
           },
           {
-            "title": "Handshake only (does not take the call)",
+            "title": "Handshake only (doesn't take the call)",
             "enum": [
               "handshake"
             ]
           },
           {
-            "title": "Answer when opening from Home",
+            "title": "Answer when unlocking from Home",
             "enum": [
               "answer-on-open"
             ]
           }
-        ]
+        ],
+        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up."
       }
-    }
+    },
+    "required": [
+      "host",
+      "token"
+    ]
   },
-  "headerDisplay": "Comelit ViP intercom, fully local. Give Homebridge its own Comelit user and use its token and row number (sub-address). See the [README](https://github.com/zmanuel1234/homebridge-comelit-doorbell#readme)."
+  "headerDisplay": "Comelit ViP intercom, fully local. Give Homebridge its own Comelit user and use its token and row number (sub-address). See the [README](https://github.com/zmanuel1234/homebridge-comelit-doorbell#readme).",
+  "layout": [
+    {
+      "type": "fieldset",
+      "title": "Connection",
+      "items": [
+        "name",
+        "host",
+        "port",
+        "token",
+        "subaddress"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Doorbell and door",
+      "items": [
+        "enableNotifications",
+        "doorbellTriggerUrl",
+        "ringWindowSeconds"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Registration",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "leaseRefreshMode",
+        "leaseRefreshMinutes",
+        "leaseRecycleMinutes",
+        "reconnectDelay"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced and experimental",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "answerMode",
+        "registerPush"
+      ]
+    }
+  ]
 }
