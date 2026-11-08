@@ -102,3 +102,30 @@ test('media timing: no media within mediaStartTimeoutSeconds ends the call', asy
   assert.strictEqual(reason, 'no media from the intercom');
   assert.strictEqual(ops(sent).at(-1), 'e'); // hung up
 });
+
+test('two viewers at once share one answer and one media setup', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  await ring(call);
+  const [a, b] = await Promise.all([call.startMedia(false), call.startMedia(false)]);
+  assert.strictEqual(a, b);
+  assert.strictEqual(ops(sent).filter((o) => o === 'c').length, 1);
+  assert.strictEqual(client.opened.length, 3);
+  await a.end('test');
+});
+
+test('a failed media setup leaves nothing behind and keeps the call', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  await ring(call);
+  const open = client.openChannel;
+  client.openChannel = async (name, ...rest) => {
+    if (name === 'RTPC-video') throw new Error('refused');
+    return open(name, ...rest);
+  };
+  await assert.rejects(call.startMedia(false), /refused/);
+  assert.ok(!ops(sent).includes('e'), 'not hung up');
+  assert.deepStrictEqual(client.closed.sort(), [0x2001, 0x2002]);
+  client.openChannel = open;
+  const retry = await call.startMedia(false); // the next viewer tries again
+  assert.ok(retry);
+  await retry.end('test');
+});

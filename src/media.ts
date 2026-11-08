@@ -127,6 +127,8 @@ export class KeyframeCache {
   private pps?: Buffer;
   private idr?: Buffer[];
   private lastType = -1;
+  /** When the latest keyframe arrived (ms since epoch). */
+  private at = 0;
 
   push(unit: Buffer): void {
     const type = nalType(unit);
@@ -137,13 +139,14 @@ export class KeyframeCache {
     } else if (type === 5) {
       // Slices of one keyframe arrive back to back; a new run starts a new keyframe.
       this.idr = this.lastType === 5 && this.idr ? [...this.idr, unit] : [unit];
+      this.at = Date.now();
     }
     this.lastType = type;
   }
 
-  /** SPS + PPS + the latest keyframe, or undefined if none has arrived yet. */
-  keyframe(): Buffer | undefined {
-    if (!this.sps || !this.pps || !this.idr || this.idr.length === 0) {
+  /** SPS + PPS + the latest keyframe, or undefined if none has arrived (within `maxAgeMs`). */
+  keyframe(maxAgeMs = Infinity): Buffer | undefined {
+    if (!this.sps || !this.pps || !this.idr || this.idr.length === 0 || Date.now() - this.at > maxAgeMs) {
       return undefined;
     }
     return Buffer.concat([this.sps, this.pps, ...this.idr]);

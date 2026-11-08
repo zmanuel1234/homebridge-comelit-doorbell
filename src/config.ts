@@ -26,6 +26,8 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   mediaStartTimeoutSeconds?: number;
   mediaSilenceSeconds?: number;
   videoRefreshSeconds?: number;
+  liveViewWaitSeconds?: number;
+  lastVisitorMinutes?: number;
 }
 
 export const DEFAULT_DOORBELL_TRIGGER_URL = 'http://localhost:8089/doorbell?Doorbell';
@@ -63,6 +65,10 @@ export interface Settings {
   mediaSilenceMs: number;
   /** Repeat the video request this often (the intercom stops sending after ~35 s otherwise). */
   videoRefreshMs: number;
+  /** Longest wait for the intercom's media when a live view opens, before showing the picture. */
+  liveViewWaitMs: number;
+  /** After a call, show the last visitor this long, then the idle picture (0 = never). */
+  lastVisitorMs: number;
 }
 
 const positive = (v: unknown, fallback: number): number => (Number(v) > 0 ? Number(v) : fallback);
@@ -92,5 +98,22 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     mediaStartTimeoutMs: positive(c.mediaStartTimeoutSeconds, 10) * 1000,
     mediaSilenceMs: positive(c.mediaSilenceSeconds, 5) * 1000,
     videoRefreshMs: positive(c.videoRefreshSeconds, 15) * 1000,
+    liveViewWaitMs: positive(c.liveViewWaitSeconds, 8) * 1000,
+    lastVisitorMs: (c.lastVisitorMinutes === undefined || c.lastVisitorMinutes === null ? 5 : Math.max(0, Number(c.lastVisitorMinutes) || 0)) * 60_000,
   };
+}
+
+/** Settings that don't work together, as log warnings. */
+export function settingsWarnings(s: Settings): string[] {
+  const w: string[] = [];
+  if (s.answerMode === 'answer-on-view' && !s.camera) {
+    w.push("answerMode 'answer-on-view' needs the doorbell camera (camera: true); without it nothing answers the ring.");
+  }
+  if (s.talkBack && !s.camera) {
+    w.push('talkBack only works with the doorbell camera (camera: true).');
+  }
+  if (s.camera && s.doorbellTriggerUrl) {
+    w.push('The doorbell camera rings in HomeKit by itself; with doorbellTriggerUrl set as well, each ring gives two notifications. Clear the trigger URL once the camera works.');
+  }
+  return w;
 }

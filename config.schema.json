@@ -215,6 +215,22 @@
         "minimum": 5,
         "maximum": 60,
         "description": "The intercom stops sending video about 35 s after a request, so it is repeated."
+      },
+      "liveViewWaitSeconds": {
+        "title": "Live view: wait for the intercom's video at most (seconds)",
+        "type": "number",
+        "default": 8,
+        "minimum": 2,
+        "maximum": 20,
+        "description": "When the live view opens, wait this long for the intercom's video and audio, then show the picture (the Home app gives up on slow streams)."
+      },
+      "lastVisitorMinutes": {
+        "title": "Show the last visitor for (minutes)",
+        "type": "number",
+        "default": 5,
+        "minimum": 0,
+        "maximum": 1440,
+        "description": "After a call, the camera picture shows the last video frame this long, then the idle picture again. 0: always the idle picture."
       }
     },
     "required": [
@@ -277,7 +293,8 @@
         "videoQuality",
         "videoCodec",
         "ffmpegPath",
-        "snapshotImage"
+        "snapshotImage",
+        "lastVisitorMinutes"
       ]
     },
     {
@@ -288,7 +305,8 @@
       "items": [
         "mediaStartTimeoutSeconds",
         "mediaSilenceSeconds",
-        "videoRefreshSeconds"
+        "videoRefreshSeconds",
+        "liveViewWaitSeconds"
       ]
     }
   ]
