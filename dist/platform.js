@@ -75,6 +75,10 @@ class ComelitIntercomPlatform {
         let deviceConfig;
         try {
             deviceConfig = await (0, configReader_1.getDeviceConfig)(client);
+            // zman: register with our own sub-address so we don't clash with the phone app
+            if (Number.isInteger(this.platformConfig.subaddress)) {
+                deviceConfig.aptSubaddress = this.platformConfig.subaddress;
+            }
             this.log.info(`Device config: ${deviceConfig.doors.length} door(s), apt=${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`);
         }
         catch (e) {
