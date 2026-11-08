@@ -55,7 +55,7 @@ class IconaBridgeClient extends events_1.EventEmitter {
                 this.socket = socket;
                 this._connected = true;
                 clearTimeout(this.__zmanLease); // zman: lease refresh - reconnect before the 1 h registration lapses
-                this.__zmanLease = setTimeout(() => this._onDisconnect(`registration lease refresh (${(global.__zmanLeaseMs || 120000) / 60000} min)`), global.__zmanLeaseMs || 120000);
+                this.__zmanBorn = Date.now(); this.__zmanTick(); // zman: lease tick
                 socket.setMaxListeners(0); // prevent accumulation across reconnect cycles
                 socket.setKeepAlive(true, 60_000);
                 socket.on('data', (chunk) => this._onData(chunk));
@@ -129,6 +129,17 @@ class IconaBridgeClient extends events_1.EventEmitter {
             this.rxBuffer = this.rxBuffer.subarray(totalLen);
             this._dispatch(requestId, body);
         }
+    }
+    __zmanTick() { // zman: lease tick - reconnect (default) or re-register in place
+        const ms = global.__zmanLeaseMs || 120000;
+        clearTimeout(this.__zmanLease);
+        this.__zmanLease = setTimeout(async () => {
+            if (global.__zmanLeaseMode === 'inplace' && global.__zmanReregister && Date.now() - (this.__zmanBorn || 0) < 50 * 60000) {
+                try { await global.__zmanReregister(); this.__zmanTick(); return; }
+                catch (e) { this.log?.warn(`In-place re-register failed (${e.message}); reconnecting`); }
+            }
+            this._onDisconnect(`registration lease refresh (${ms / 60000} min)`);
+        }, ms);
     }
     _onDisconnect(reason) {
         clearTimeout(this.__zmanLease);
