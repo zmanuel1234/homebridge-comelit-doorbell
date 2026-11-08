@@ -137,6 +137,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.client = client;
     this.deviceConfig = deviceConfig;
     client.setDisconnectCallback((planned) => this.onClientDisconnect(planned));
+    // Rings arrive on CTPP: if the intercom closes it, nothing would ring until the next
+    // reconnect (up to leaseRecycleMinutes in inplace mode), so reconnect now.
+    client.on('channelClosed', (name: string) => {
+      if (name === 'CTPP' && this.client === client) {
+        client.drop('the intercom closed the ring channel (CTPP)');
+      }
+    });
     if (s.enableNotifications) {
       try {
         await this.openCtppChannels(client, deviceConfig);
