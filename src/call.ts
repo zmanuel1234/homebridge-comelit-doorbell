@@ -119,6 +119,12 @@ export class CallHandler {
     this.client = client;
   }
 
+  /** True while a call is answered, or its media is starting or running. */
+  busy(): boolean {
+    this.activeCall(); // drops ended and stale calls
+    return [...this.calls.values()].some((c) => !c.ended && (c.answered || c.answering !== undefined || c.media !== undefined || c.mediaStarting !== undefined));
+  }
+
   /** The most recent call still in progress, if any. */
   activeCall(): Call | undefined {
     const now = Date.now();

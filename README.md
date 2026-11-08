@@ -35,7 +35,7 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 
 ## Requirements
 
-- Homebridge 2.0 (`2.0.0-beta.0` or later) and Node.js 18 or later
+- Homebridge 2.0 (`2.0.0-beta.0` or later) and Node.js 20, 22 or 24
 - The intercom on your local network, ideally with a fixed IP address
 - **A Comelit user of its own for Homebridge.** If Homebridge shares a user with a phone, the intercom delivers each call to only one of them.
 - For a HomeKit doorbell notification, one of:
@@ -84,9 +84,8 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 - **The plugin's own doorbell camera** (experimental): turn on **Doorbell camera with live video**. It rings in HomeKit by itself and, with `answerMode: answer-on-view`, shows the intercom's video during a ring. See [the doorbell camera](#doorbell-camera-experimental). Leave the trigger URL below empty, or each ring gives two notifications.
 - **A still-image camera from homebridge-camera-ffmpeg**, triggered by this plugin:
 
-
 1. In camera-ffmpeg, turn on its local HTTP server (`porthttp`, for example 8089, with `localhttp: true`), and add a camera named `Doorbell` with **doorbell** enabled.
-2. Set this plugin's **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`.
+2. Set this plugin's **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. It is empty by default, so nothing is called until you set it.
 3. In the Home app, put the **door lock** in the same room as the **Doorbell** camera. When you expand the doorbell notification, the lock then appears under the picture and you can unlock from there.
 
 ## What appears in HomeKit
@@ -119,12 +118,12 @@ In the config editor, settings are grouped as below. JSON keys are shown in brac
 | Setting | Default | Description |
 |---|---|---|
 | Listen for rings (`enableNotifications`) | `true` | Keeps a connection open to receive rings. Turn off to use only the lock. |
-| Doorbell camera trigger URL (`doorbellTriggerUrl`) | `http://localhost:8089/doorbell?Doorbell` | Called on every ring. Set it to an empty string if you don't use a camera doorbell. |
+| Doorbell camera trigger URL (`doorbellTriggerUrl`) | empty | Called on every ring, e.g. `http://localhost:8089/doorbell?Doorbell` for a homebridge-camera-ffmpeg doorbell. Leave empty if you don't use one, or if you use this plugin's doorbell camera. |
 | Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. `0` allows unlocking at any time. |
 
 ### Registration
 
-The intercom only routes rings to a registration for a few minutes, so the plugin refreshes it regularly.
+The intercom only routes rings to a registration for a few minutes, so the plugin refreshes it regularly. A refresh that needs a full reconnect waits while a call is answered (live view or `answer-on-open`), so it can't cut the call (for at most 10 minutes); in-place renewals carry on as usual.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -132,6 +131,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Registration refresh interval (`leaseRefreshMinutes`) | `2` | Minutes between refreshes. 2 is proven; longer intervals may miss rings. |
 | Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often |
 | Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops |
+| Longest reconnect wait (`maxReconnectDelay`) | `300` | If the intercom can't be reached, the wait doubles after each failed attempt (10, 20, 40 … s) up to this many seconds. It goes back to the reconnect delay once connected. |
 
 ### Advanced and experimental
 
@@ -197,6 +197,7 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 
 1. Uninstall `homebridge-comelit-intercom`, but **keep its configuration** when asked.
 2. Install `homebridge-comelit-doorbell` and restart Homebridge.
+3. If you used a homebridge-camera-ffmpeg doorbell, check that **Doorbell camera trigger URL** is filled in. The old plugin and versions up to 2.1.0-beta.6 called `http://localhost:8089/doorbell?Doorbell` when the setting was missing; 2.1.0-beta.7 and later call nothing.
 
 The platform name stays `ComelitIntercom`, so your config block works unchanged, including the child bridge. Accessory IDs are also unchanged, so rooms and automations should carry over. Any local patches you applied to the old plugin are not needed.
 
@@ -207,6 +208,8 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. Check the log for `Registration renewed in place` or reconnects. |
 | No rings at all, but the phones ring | Make sure `subaddress` is a user of its own, not shared with a phone, and that `registerPush` is off. On the intercom's Extender page, the Homebridge user should appear under **Registered slaves**. |
 | Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
+| Rings arrive, but camera-ffmpeg's doorbell no longer rings (after updating to 2.1.0-beta.7) | The trigger URL has no default any more. Set **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. |
+| `Reconnecting in … s` with growing waits | The intercom can't be reached (powered off, Wi-Fi, IP changed). The plugin keeps trying, at most every **Longest reconnect wait**. Check the IP address. |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
@@ -231,6 +234,8 @@ npm ci
 npm run build   # compile src/ to dist/
 npm test        # unit tests, using frames captured from a real intercom
 ```
+
+CI runs the checks on Node 24 (the required `check` job) and the build and tests on Node 20 and 22.
 
 | Module | What it does |
 |---|---|

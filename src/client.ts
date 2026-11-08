@@ -39,6 +39,12 @@ export interface LeaseOptions {
   recycleMs: number;
   /** Re-sends the registration on the open connection (used in `inplace` mode). */
   reregister?: () => Promise<void>;
+  /** While this returns true (a call is answered), planned reconnects wait. */
+  isBusy?: () => boolean;
+  /** How often to check again while busy (default 30 s). */
+  busyRecheckMs?: number;
+  /** Reconnect anyway once it has waited this long for a call (default 10 min). */
+  maxBusyWaitMs?: number;
 }
 
 export class IconaBridgeClient extends EventEmitter {
@@ -51,7 +57,7 @@ export class IconaBridgeClient extends EventEmitter {
   private readonly binaryHandlers = new Map<number, (body: Buffer) => void>();
   private readonly unknownFrames = new Map<number, number>();
   private pushCallback?: (msg: JsonMessage) => void;
-  private disconnectCallback?: () => void;
+  private disconnectCallback?: (planned: boolean) => void;
   private deadTimer?: NodeJS.Timeout;
   private leaseTimer?: NodeJS.Timeout;
   private connectedAt = 0;
@@ -119,7 +125,8 @@ export class IconaBridgeClient extends EventEmitter {
     this.log?.debug(`Disconnected from ${this.host}:${this.port}`);
   }
 
-  setDisconnectCallback(cb: () => void): void {
+  /** `planned` is true for a reconnect the lease asked for, false for a dropped connection. */
+  setDisconnectCallback(cb: (planned: boolean) => void): void {
     this.disconnectCallback = cb;
   }
 
@@ -145,8 +152,19 @@ export class IconaBridgeClient extends EventEmitter {
           this.log?.warn(`In-place re-register failed (${(e as Error).message}); reconnecting`);
         }
       }
-      this.onDisconnect(`registration lease refresh (${lease.intervalMs / 60000} min)`);
+      this.plannedReconnect(lease, Date.now());
     }, lease.intervalMs);
+  }
+
+  /** Reconnects for the lease, but not in the middle of a call: then it checks again later. */
+  private plannedReconnect(lease: LeaseOptions, since: number): void {
+    if (lease.isBusy?.() && Date.now() - since < (lease.maxBusyWaitMs ?? 600_000)) {
+      const wait = lease.busyRecheckMs ?? 30_000;
+      this.log?.info(`Registration refresh: a call is in progress, reconnecting after it (checking again in ${wait / 1000} s)`);
+      this.leaseTimer = setTimeout(() => this.plannedReconnect(lease, since), wait);
+      return;
+    }
+    this.onDisconnect(`registration lease refresh (${lease.intervalMs / 60000} min)`, true);
   }
 
   // ─── Send / receive ────────────────────────────────────────────────────────
@@ -187,20 +205,20 @@ export class IconaBridgeClient extends EventEmitter {
     this.pendingCallbacks.clear();
   }
 
-  private onDisconnect(reason: string): void {
+  private onDisconnect(reason: string, planned = false): void {
     clearTimeout(this.leaseTimer);
     if (!this._connected) {
       return;
     }
     this._connected = false;
     this.clearDeadTimer();
-    this.log?.info(`Connection lost (${reason})`);
+    this.log?.info(planned ? `Reconnecting (${reason})` : `Connection lost (${reason})`);
     this.failPending();
     if (this.socket) {
       this.socket.destroy();
       this.socket = null;
     }
-    this.disconnectCallback?.();
+    this.disconnectCallback?.(planned);
   }
 
   private resetDeadTimer(): void {

@@ -7,7 +7,7 @@ import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
-import { ComelitPlatformConfig, resolveSettings, Settings, settingsWarnings } from './config';
+import { ComelitPlatformConfig, reconnectDelay, resolveSettings, Settings, settingsWarnings } from './config';
 import { getDeviceConfig } from './configReader';
 import { ctppInitSequence } from './ctpp';
 import { openDoor } from './door';
@@ -31,6 +31,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private callHandler?: CallHandler;
   private keepaliveTimer?: NodeJS.Timeout;
   private reconnectTimer?: NodeJS.Timeout;
+  /** Failed connection attempts in a row, for the back-off. */
+  private failures = 0;
   private lastRingAt = 0;
   private camera?: DoorbellCamera;
   private cameraConfigured = false;
@@ -52,7 +54,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.info("Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.");
     }
     api.on('didFinishLaunching', () => {
-      this.setupDevice().catch((e) => this.log.error(`Initial setup failed: ${(e as Error).message}`));
+      this.setupDevice().catch((e) => this.onSetupError('Initial setup', e));
     });
     api.on('shutdown', () => this.teardown());
   }
@@ -81,12 +83,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       mode: s.leaseMode,
       recycleMs: s.leaseRecycleMs,
       reregister: (): Promise<void> => this.reregister(client),
+      isBusy: () => this.callHandler?.busy() ?? false,
     });
     try {
       await client.connect();
     } catch (e) {
       this.log.error(`Connection failed: ${(e as Error).message}`);
-      this.scheduleReconnect();
+      this.scheduleReconnect(true);
       return;
     }
     try {
@@ -95,7 +98,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     } catch (e) {
       this.log.error(`Authentication failed: ${(e as Error).message}`);
       await client.disconnect();
-      this.scheduleReconnect();
+      this.scheduleReconnect(true);
       return;
     }
     let deviceConfig: DeviceConfig;
@@ -109,7 +112,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     } catch (e) {
       this.log.error(`Config fetch failed: ${(e as Error).message}`);
       await client.disconnect();
-      this.scheduleReconnect();
+      this.scheduleReconnect(true);
       return;
     }
     try {
@@ -121,7 +124,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     // still triggers the reconnect.
     this.client = client;
     this.deviceConfig = deviceConfig;
-    client.setDisconnectCallback(() => this.onClientDisconnect());
+    client.setDisconnectCallback((planned) => this.onClientDisconnect(planned));
     if (s.enableNotifications) {
       try {
         await this.openCtppChannels(client, deviceConfig);
@@ -149,6 +152,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     this.startKeepalive(deviceConfig);
     this.discoverAccessories(deviceConfig);
+    this.failures = 0;
     this.log.info('Comelit Intercom ready');
   }
 
@@ -182,22 +186,39 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.client = undefined;
   }
 
-  private onClientDisconnect(): void {
-    this.log.warn('Device disconnected — scheduling reconnect');
+  private onClientDisconnect(planned: boolean): void {
+    if (planned) {
+      this.log.debug('Reconnecting to refresh the registration');
+    } else {
+      this.log.warn('Device disconnected — scheduling reconnect');
+    }
     this.stopKeepalive();
     this.vipListener?.stop().catch(() => undefined);
     this.vipListener = undefined;
     this.callHandler = undefined;
     this.client = undefined;
-    this.scheduleReconnect();
+    this.scheduleReconnect(false);
   }
 
-  private scheduleReconnect(): void {
+  /** After a failed attempt the wait doubles each time, up to maxReconnectDelay. */
+  private scheduleReconnect(failed: boolean): void {
     clearTimeout(this.reconnectTimer);
-    this.log.info(`Reconnecting in ${this.settings.reconnectDelayMs / 1000} s …`);
+    const delay = reconnectDelay(this.settings, failed ? this.failures : 0);
+    if (failed) {
+      this.failures++;
+    }
+    this.log.info(`Reconnecting in ${delay / 1000} s …`);
     this.reconnectTimer = setTimeout(() => {
-      this.setupDevice().catch((e) => this.log.error(`Reconnect failed: ${(e as Error).message}`));
-    }, this.settings.reconnectDelayMs);
+      this.setupDevice().catch((e) => this.onSetupError('Reconnect', e));
+    }, delay);
+  }
+
+  /** An unexpected error while setting up: retry, unless the connection is up anyway. */
+  private onSetupError(what: string, e: unknown): void {
+    this.log.error(`${what} failed: ${(e as Error).message}`);
+    if (!this.client?.connected) {
+      this.scheduleReconnect(true);
+    }
   }
 
   private startKeepalive(config: DeviceConfig): void {

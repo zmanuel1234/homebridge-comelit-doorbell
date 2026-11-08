@@ -8,7 +8,8 @@ test('defaults', () => {
   assert.strictEqual(s.leaseRefreshMs, 120_000);
   assert.strictEqual(s.leaseRecycleMs, 3_000_000);
   assert.strictEqual(s.ringWindowMs, 90_000);
-  assert.strictEqual(s.doorbellTriggerUrl, 'http://localhost:8089/doorbell?Doorbell');
+  assert.strictEqual(s.doorbellTriggerUrl, '');
+  assert.strictEqual(s.maxReconnectDelayMs, 300_000);
   assert.strictEqual(s.registerPush, false);
   assert.strictEqual(s.answerMode, 'off');
   assert.strictEqual(s.reconnectDelayMs, 10_000);
@@ -41,8 +42,8 @@ test('warnings for settings that do not work together', () => {
   assert.strictEqual(w({}).length, 1 - 1);
   assert.match(w({ answerMode: 'answer-on-view' }).join(), /needs the doorbell camera/);
   assert.match(w({ talkBack: true }).join(), /talkBack only works/);
-  assert.match(w({ camera: true, answerMode: 'answer-on-view' }).join(), /two notifications/);
-  assert.deepStrictEqual(w({ camera: true, answerMode: 'answer-on-view', doorbellTriggerUrl: '' }), []);
+  assert.match(w({ camera: true, answerMode: 'answer-on-view', doorbellTriggerUrl: 'http://localhost:8089/doorbell?Doorbell' }).join(), /two notifications/);
+  assert.deepStrictEqual(w({ camera: true, answerMode: 'answer-on-view' }), []);
 });
 
 test('lastVisitorMinutes 0 turns the last-visitor picture off', () => {
