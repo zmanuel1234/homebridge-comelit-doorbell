@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0-beta.9 (2026-11-08)
+
+### Fixed
+
+- A ring that arrived in the few seconds after connecting, while the plugin was registering for rings, was taken as the intercom's answer to the registration and lost. It is now passed on, so it rings in HomeKit. This happens on every reconnect, so every 2 minutes in `reconnect` mode.
+- A channel whose open failed or timed out stayed half-open, and the intercom's answer to the next channel the plugin opened was given to it. After one failed open, that connection's later opens (media, keepalive) could fail or mix up channels.
+- A JSON request whose send failed left a 30 s timer that then rejected with nothing listening for it, which Node reports as an unhandled rejection and can stop Homebridge.
+
+### Added
+
+- Tests for the above (54 in all).
+- README: the full list of source modules, and a note on rings during re-registration.
+
 ## 2.1.0-beta.8 (2026-11-08)
 
 ### Fixed
