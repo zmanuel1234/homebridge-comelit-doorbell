@@ -127,7 +127,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 
 | Setting | Default | Description |
 |---|---|---|
-| Registration refresh mode (`leaseRefreshMode`) | `reconnect` | `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed). `inplace`: renew on the open connection, with no gap (recommended). |
+| Registration refresh mode (`leaseRefreshMode`) | `reconnect` | `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed; a ring during the few seconds of re-registration is kept). `inplace`: renew on the open connection, with no gap (recommended). |
 | Registration refresh interval (`leaseRefreshMinutes`) | `2` | Minutes between refreshes. 2 is proven; longer intervals may miss rings. |
 | Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often |
 | Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops. Planned reconnects for the registration wait at most 2 s. |
@@ -248,7 +248,13 @@ CI runs the checks on Node 24 (the required `check` job) and the build and tests
 | `camera.ts` | Experimental doorbell camera: HomeKit streaming through ffmpeg, talk-back |
 | `door.ts` | Door release, waiting for the intercom's answer |
 | `platform.ts` | Homebridge platform: connection lifecycle, accessories, ring window |
-| `config.ts` | Settings and their defaults |
+| `config.ts` | Settings and their defaults, the reconnect back-off |
+| `protocol.ts` | ICONA frame headers, channel open/close commands, JSON messages, the CTPP registration |
+| `channels.ts` | Channel state and the message queue each channel reads from |
+| `ctpp.ts` | Registering on the CTPP channel after connecting |
+| `auth.ts`, `configReader.ts`, `push.ts` | Login with the token, reading doors and cameras from the intercom, keepalive |
+| `accessories/` | The HomeKit lock, ring sensor and (unused) RTSP camera placeholders |
+| `settings.ts` | Names and fixed timings |
 
 Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag. The release tag must be `v` followed by the version in `package.json` (e.g. `v2.1.0-beta.8`), or the publish stops.
 

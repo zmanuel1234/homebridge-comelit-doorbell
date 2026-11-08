@@ -329,16 +329,21 @@ export class IconaBridgeClient extends EventEmitter {
     this.channels.set(name, channel);
     const packet = encodeChannelOpen(wireName, channelType, 1, requestId, extraData, trailingByte);
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new ProtocolError(`Timeout waiting for channel ${name} to open`)), READ_TIMEOUT_MS);
+      const fail = (err: Error) => {
+        clearTimeout(timer);
+        // Forget the channel, or the intercom's answer to the next open would be given to it.
+        if (this.channels.get(name) === channel && !channel.isOpen) {
+          this.channels.delete(name);
+        }
+        reject(err);
+      };
+      const timer = setTimeout(() => fail(new ProtocolError(`Timeout waiting for channel ${name} to open`)), READ_TIMEOUT_MS);
       channel.openResolve = () => {
         clearTimeout(timer);
         resolve(channel);
       };
-      channel.openReject = (err) => {
-        clearTimeout(timer);
-        reject(err);
-      };
-      this.send(packet).catch(channel.openReject);
+      channel.openReject = fail;
+      this.send(packet).catch(fail);
     });
   }
 
@@ -399,7 +404,15 @@ export class IconaBridgeClient extends EventEmitter {
           resolve(body);
         });
       });
-      await this.send(encodeJsonMessage(msg, channel.serverChannelId));
+      try {
+        await this.send(encodeJsonMessage(msg, channel.serverChannelId));
+      } catch (e) {
+        // Nothing will answer: stop waiting, so the timeout can't reject with no one listening.
+        this.pendingCallbacks.get(channel.serverChannelId)?.(Buffer.alloc(0));
+        this.pendingCallbacks.delete(channel.serverChannelId);
+        response.catch(() => undefined);
+        throw e;
+      }
       const body = await response;
       if (!isJsonBody(body)) {
         throw new ProtocolError(`Expected JSON on ${channel.name}`);

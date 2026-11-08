@@ -5,6 +5,10 @@ import { ackWord } from './ctp';
 import { encodeCallResponseAck, encodeCtppInit } from './protocol';
 
 const PREFIX_VIP_EVENT = 0x1860;
+/** A new call from the intercom (a ring's INVITE starts with this). */
+const PREFIX_CALL_INIT = 0x18c0;
+/** Reads at most this many messages while waiting for the two answers. */
+const MAX_INIT_READS = 4;
 
 /**
  * Registers on the CTPP channel and reads the intercom's first two answers.
@@ -12,6 +16,9 @@ const PREFIX_VIP_EVENT = 0x1860;
  * No ACK pair is sent right after the registration: on this device it is taken as a
  * hang-up on an idle channel and the connection is closed. The listener acknowledges
  * later messages instead.
+ *
+ * A ring that arrives while waiting is not one of the answers: it is put back on the channel's
+ * queue, so the listener sees it.
  */
 export async function ctppInitSequence(
   client: IconaBridgeClient,
@@ -28,13 +35,20 @@ export async function ctppInitSequence(
   // The device usually answers with an ACK and a first renewal (0x1860). Acknowledging
   // that renewal right away keeps the connection from being dropped before the listener
   // starts.
-  for (let i = 0; i < 2; i++) {
+  const calls: Buffer[] = [];
+  for (let i = 0, reads = 0; i < 2 && reads < MAX_INIT_READS; i++, reads++) {
     const resp = await client.readResponse(channel, responseTimeoutMs);
     if (!resp || resp.length < 8) {
       log?.debug(`CTPP init response ${i + 1}: timeout (no data)`);
       continue;
     }
     const prefix = resp.readUInt16LE(0);
+    if (prefix === PREFIX_CALL_INIT) {
+      log?.debug('CTPP init: a call arrived during the registration; keeping it for the listener');
+      calls.push(resp);
+      i--;
+      continue;
+    }
     log?.debug(`CTPP init response ${i + 1}: ${resp.length} bytes prefix=0x${prefix.toString(16).padStart(4, '0')}`);
     if (prefix === PREFIX_VIP_EVENT) {
       const ack = ackWord(resp.readUInt32LE(2));
@@ -46,5 +60,8 @@ export async function ctppInitSequence(
         log?.warn('CTPP init: fast renewal ACK failed (connection closing)');
       }
     }
+  }
+  for (const c of calls) {
+    channel.responseQueue.enqueue(c);
   }
 }
