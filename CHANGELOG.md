@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.0-beta.13 (2026-11-08)
+
+### Fixed
+
+- With no `name` in the config, the doorbell accessory was created as "Comelit Doorbell", while the config editor and README say the default is "Comelit Intercom". It now uses "Comelit Intercom". Existing accessories keep their names.
+
+### Documentation
+
+- README: the feature list mentions the doorbell camera; `videoQuality: hd` asks for up to 800x480 (it said 640x240); the ring flow says where the doorbell notification comes from; known limits mention the gap in `reconnect` mode.
+
 ## 2.1.0-beta.12 (2026-11-08)
 
 ### Fixed

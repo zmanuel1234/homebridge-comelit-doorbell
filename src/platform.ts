@@ -49,7 +49,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
     this.settings = resolveSettings(config);
-    this.displayName = config.name || 'Comelit Doorbell';
+    this.displayName = String(config.name ?? '').trim() || 'Comelit Intercom';
     for (const w of settingsWarnings(this.settings)) {
       this.log.warn(w);
     }
