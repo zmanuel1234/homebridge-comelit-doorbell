@@ -20,6 +20,7 @@ const ACTION_REGISTRATION_RENEWAL = 0x0010;
 // Event ACK: only ONE counter increments (matches Python vip_listener.py)
 const ACK_TS_INCREMENT = 0x01000000;
 function zmanAckTs(t) { const c0 = (t & 0xff) ^ 0x80, c1 = (t >>> 8) & 0xff, s = (t >>> 16) & 0xff, a = (t >>> 24) & 0xff; return (c0 | (c1 << 8) | (a << 16) | (((s + 1) & 0xff) << 24)) >>> 0; } // zman: proper CTP ack
+function zmanFinTs(t) { const c0 = (t & 0xff) ^ 0x80, c1 = (t >>> 8) & 0xff, s = (t >>> 16) & 0xff, a = (t >>> 24) & 0xff; return (c0 | (c1 << 8) | (a << 16) | (s << 24)) >>> 0; } // zman: close back
 const MIN_MSG_SIZE = 8;
 const DEDUP_WINDOW_MS = 10_000;
 function parseCtppMessage(data) {
@@ -121,6 +122,10 @@ class VipEventListener {
         if (prefix === PREFIX_VIDEO_EVENT || prefix === PREFIX_VIP_EVENT) {
             await this._sendEventAck(msg);
         }
+        // zman: close back when the panel closes (empty 0x1860), like comelit-vip
+        if (prefix === PREFIX_VIP_EVENT && action === 0) {
+            await this._sendEventAck(msg, true);
+        }
         if (isRetransmit && prefix === PREFIX_VIDEO_EVENT)
             return;
         if (prefix === PREFIX_CALL_INIT) {
@@ -136,7 +141,7 @@ class VipEventListener {
             }
         }
     }
-    async _sendEventAck(msg) {
+    async _sendEventAck(msg, zFin) {
         if (!this.running)
             return;
         const channel = this.channel;
@@ -146,7 +151,7 @@ class VipEventListener {
         const entranceAddr = msg.addresses[0] ?? this.config.aptAddress;
         const ackTs = zmanAckTs(msg.timestamp);
         try {
-            await this.client.sendBinary(channel, (0, protocol_1.encodeCallResponseAck)(vipAddress, entranceAddr, ackTs));
+            await this.client.sendBinary(channel, (0, protocol_1.encodeCallResponseAck)(vipAddress, entranceAddr, zFin ? zmanFinTs(msg.timestamp) : ackTs, zFin ? 0x1820 : 0x1800));
         }
         catch (e) {
             this.log?.warn(`VIP: failed to send event ACK: ${e.message}`);

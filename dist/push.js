@@ -20,8 +20,9 @@ function buildPushMsg(config) {
     };
 }
 async function registerPush(client, config, callback) {
-    const channel = await client.openChannel('PUSH', channels_1.ChannelType.PUSH);
-    await client.sendJson(channel, buildPushMsg(config));
+    // zman: no push - comelit-vip never registers for push; keep the link alive with server-info instead
+    const channel = await client.openChannel('INFO', channels_1.ChannelType.INFO);
+    await client.sendJson(channel, zmanInfoMsg());
     client.setPushCallback((raw) => {
         const event = parsePushEvent(raw);
         if (event)
@@ -29,10 +30,12 @@ async function registerPush(client, config, callback) {
     });
 }
 async function sendPushKeepalive(client, config) {
-    const channel = client.getChannel('PUSH');
-    if (!channel)
-        throw new Error('PUSH channel not open');
-    await client.sendJson(channel, buildPushMsg(config));
+    let channel = client.getChannel('INFO');
+    if (!channel) {
+        client.removeChannel('INFO');
+        channel = await client.openChannel('INFO', channels_1.ChannelType.INFO);
+    }
+    await client.sendJson(channel, zmanInfoMsg());
 }
 function parsePushEvent(raw) {
     const msgType = raw['message'];
@@ -54,3 +57,5 @@ function parsePushEvent(raw) {
     }
     return null;
 }
+
+function zmanInfoMsg() { return { message: 'server-info', 'message-type': 'request', 'message-id': channels_1.ViperMessageId.SERVER_INFO }; } // zman: no push
