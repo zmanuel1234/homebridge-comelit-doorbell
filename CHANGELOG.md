@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2 (2026-11-07)
+
+- Documentation: the README covers every setting, the accessories the plugin creates, migration, the ring-to-open flow and troubleshooting.
+- Config editor: every setting has a description, settings are grouped into sections, and host and token are required.
+- No changes to how the plugin behaves.
+
 ## 2.0.1 (2026-11-07)
 
 - No functional changes. First release published through npm trusted publishing from GitHub Actions, to test the release pipeline and the update in the Homebridge UI.
