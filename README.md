@@ -151,7 +151,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for the intercom's largest picture (640x240 on a 6741W) |
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
-| Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). |
+| Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
 | Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera picture shows the last video frame this long, then the idle picture. `0`: always the idle picture. |
 
 ### Experimental: media timing

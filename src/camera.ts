@@ -170,6 +170,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   private readonly keyframes = new KeyframeCache();
   private placeholder?: Buffer;
   private placeholderFile?: string;
+  private warnedMissingImage = false;
 
   constructor(
     private readonly api: API,
@@ -223,7 +224,11 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   private async snapshot(request: SnapshotRequest): Promise<Buffer> {
     const keyframe = this.settings.lastVisitorMs > 0 ? this.keyframes.keyframe(this.settings.lastVisitorMs) : undefined;
     if (keyframe) {
-      return this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `scale=${request.width}:-2`, '-f', 'image2', '-'], keyframe);
+      try {
+        return await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `scale=${request.width}:-2`, '-f', 'image2', '-'], keyframe);
+      } catch (e) {
+        this.log.warn(`Doorbell camera: could not make a picture from the video (${(e as Error).message}); showing the idle picture`);
+      }
     }
     return this.placeholderImage();
   }
@@ -242,8 +247,14 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   /** The still image as a file, for ffmpeg to loop: the configured one, else the one shipped with the plugin. */
   private async placeholderPath(): Promise<string> {
-    if (this.settings.snapshotImage) {
-      return this.settings.snapshotImage;
+    const configured = this.settings.snapshotImage;
+    if (configured && existsSync(configured)) {
+      return configured;
+    }
+    if (configured && !this.warnedMissingImage) {
+      // A missing file would make every live view without a call fail: use the built-in picture.
+      this.warnedMissingImage = true;
+      this.log.warn(`Doorbell camera: snapshotImage ${configured} not found; using the built-in picture`);
     }
     if (existsSync(DEFAULT_STILL)) {
       return DEFAULT_STILL;

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0-beta.12 (2026-11-08)
+
+### Fixed
+
+- If `snapshotImage` pointed to a file that doesn't exist (for example an old picture that was deleted), every live view without a call failed, because ffmpeg couldn't open it. The plugin now uses the built-in picture instead and names the missing file in the log once.
+- If making a picture from the last video frame failed, the Home app got no picture at all. It now gets the idle picture.
+
+### Added
+
+- Test for the missing-picture fallback (61 in all).
+- README and config editor: what happens when the picture file is missing.
+
 ## 2.1.0-beta.11 (2026-11-08)
 
 ### Fixed
