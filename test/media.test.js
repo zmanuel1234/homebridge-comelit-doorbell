@@ -76,3 +76,16 @@ test('ffmpeg video arguments stream SRTP to HomeKit', () => {
   assert.ok(a.join(' ').includes('-f alaw -ar 8000 -ac 1 -i pipe:0') && a.includes('libfdk_aac') && a.includes('16k'));
   assert.ok(talkSdp('10.0.0.9', false, 5004, srtp).includes('m=audio 5004 RTP/AVP 110'));
 });
+
+test('a snapshotImage that does not exist falls back to the built-in picture, with one warning', async () => {
+  const { DoorbellCamera, DEFAULT_STILL } = require('../dist/camera');
+  const { quietLog } = require('./helpers');
+  const log = quietLog();
+  const self = { settings: { snapshotImage: '/nonexistent/doorbell.jpg' }, log, warnedMissingImage: false };
+  const pick = DoorbellCamera.prototype.placeholderPath;
+  assert.strictEqual(await pick.call(self), DEFAULT_STILL);
+  assert.strictEqual(await pick.call(self), DEFAULT_STILL);
+  assert.strictEqual(log.lines.filter((l) => /not found/.test(l)).length, 1);
+  self.settings.snapshotImage = DEFAULT_STILL;
+  assert.strictEqual(await pick.call(self), DEFAULT_STILL);
+});

@@ -198,7 +198,7 @@
         "title": "Picture when there is no call",
         "type": "string",
         "placeholder": "/var/lib/homebridge/doorbell.jpg",
-        "description": "A JPEG shown as the camera picture when no call is in progress. Empty: the picture that comes with the plugin."
+        "description": "A JPEG shown as the camera picture when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin."
       },
       "mediaStartTimeoutSeconds": {
         "title": "Wait for the first video or audio (seconds)",
