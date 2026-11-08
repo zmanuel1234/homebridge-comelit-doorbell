@@ -38,9 +38,10 @@ class LockAccessory {
             .onGet(() => this.lockState === UNSECURED
             ? Characteristic.LockTargetState.UNSECURED
             : Characteristic.LockTargetState.SECURED)
-            .onSet(async (value) => {
+            .onSet((value) => {
             if (value === Characteristic.LockTargetState.UNSECURED) {
-                await this.triggerOpen();
+                // zman: answer HomeKit right away; don't wait for the door command
+                void this.triggerOpen();
             }
         });
     }
