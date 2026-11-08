@@ -12,7 +12,7 @@
  */
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
-import { existsSync, promises as fs } from 'fs';
+import { createWriteStream, existsSync, promises as fs, WriteStream } from 'fs';
 import os from 'os';
 import path from 'path';
 import type {
@@ -54,8 +54,82 @@ interface ActiveSession {
   talk?: ChildProcessWithoutNullStreams;
   socket?: Socket;
   inactivity?: NodeJS.Timeout;
+  capture?: MediaCapture;
   media?: MediaSession | null;
   cleanup: Array<() => void>;
+  /** For the summary line when the view ends. */
+  stats: ViewStats;
+}
+
+/** What happened in one live view, logged as one line when it ends. */
+interface ViewStats {
+  startedAt: number;
+  live: boolean;
+  request: string;
+  firstPictureAt: number;
+  unitsToFfmpeg: number;
+  /** From ffmpeg's progress: frames encoded and sent to the Home app. */
+  framesOut: number;
+  /** RTCP packets from the Home app (it sends them while it receives and shows the stream). */
+  homekitReports: number;
+  micFrames: number;
+}
+
+/** Counts RTCP receiver/sender reports in a (S)RTCP datagram. The headers are not encrypted. */
+export function countRtcpReports(msg: Buffer): number {
+  let n = 0;
+  for (let off = 0; off + 4 <= msg.length; ) {
+    const pt = msg[off + 1];
+    if ((msg[off] & 0xc0) !== 0x80) {
+      break;
+    }
+    if (pt === 200 || pt === 201) {
+      n++;
+    }
+    const len = (msg.readUInt16BE(off + 2) + 1) * 4;
+    off += len;
+  }
+  return n;
+}
+
+/** Saves a call's raw media for troubleshooting (mediaCaptureDir); keeps the last 10. */
+export class MediaCapture {
+  private readonly files: WriteStream[] = [];
+  readonly video: WriteStream;
+  readonly audio: WriteStream;
+  readonly talk: WriteStream;
+  readonly base: string;
+
+  constructor(dir: string) {
+    // Local time, like the Homebridge log: call-20261108-181624
+    const d = new Date();
+    const n = (v: number) => String(v).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${n(d.getMonth() + 1)}${n(d.getDate())}-${n(d.getHours())}${n(d.getMinutes())}${n(d.getSeconds())}`;
+    this.base = path.join(dir, `call-${stamp}`);
+    this.video = this.open('.h264');
+    this.audio = this.open('.alaw');
+    this.talk = this.open('-talkback.alaw');
+  }
+
+  private open(ext: string): WriteStream {
+    const f = createWriteStream(this.base + ext);
+    f.on('error', () => undefined);
+    this.files.push(f);
+    return f;
+  }
+
+  close(): void {
+    for (const f of this.files) {
+      f.end();
+    }
+  }
+
+  static async prepare(dir: string): Promise<void> {
+    await fs.mkdir(dir, { recursive: true });
+    const old = (await fs.readdir(dir)).filter((f) => f.startsWith('call-')).sort();
+    const keep = new Set(old.map((f) => f.slice(0, 20)).filter((v, i, a) => a.indexOf(v) === i).slice(-9));
+    await Promise.all(old.filter((f) => !keep.has(f.slice(0, 20))).map((f) => fs.unlink(path.join(dir, f)).catch(() => undefined)));
+  }
 }
 
 /** Finds a free UDP port. */
@@ -333,7 +407,11 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       throw new Error('unknown stream session');
     }
     this.pending.delete(sessionID);
-    const active: ActiveSession = { cleanup: [] };
+    const v0 = request.video;
+    const active: ActiveSession = {
+      cleanup: [],
+      stats: { startedAt: Date.now(), live: false, request: `${v0.width}x${v0.height} ${v0.fps} fps ${v0.max_bit_rate} kbps`, firstPictureAt: 0, unitsToFfmpeg: 0, framesOut: 0, homekitReports: 0, micFrames: 0 },
+    };
     this.active.set(sessionID, active);
 
     // Answer the ring and start the intercom's media, if a call is ringing. HomeKit gives up
@@ -380,14 +458,32 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       width: v.width, height: v.height, fps: Math.min(v.fps, 16), bitrate: v.max_bit_rate, pt: v.pt, ssrc: p.videoSsrc, srtp: p.videoSrtp,
       address: p.address, port: p.videoPort, mtu: v.mtu, codec: media ? this.settings.videoCodec : 'libx264',
     });
+    // ffmpeg reports its progress on stdout: frames encoded and sent to the Home app.
+    vargs.unshift('-progress', 'pipe:1');
+    active.stats.live = Boolean(media);
     if (!media) {
       // No call: loop the still image instead of the intercom's video.
       const still = await this.placeholderPath();
       const idx = vargs.indexOf('-f');
       vargs.splice(idx, 6, '-re', '-loop', '1', '-framerate', '1', '-i', still);
       active.video = this.spawnProcess('video', vargs);
+      this.watchProgress(active);
     } else {
       active.video = this.spawnProcess('video', vargs);
+      this.watchProgress(active);
+      const capture = this.settings.mediaCaptureDir ? await this.startCapture() : undefined;
+      if (capture) {
+        const onRawVideo = (unit: Buffer) => capture.video.write(unit);
+        const onRawAudio = (alaw: Buffer) => capture.audio.write(alaw);
+        media.on('video', onRawVideo);
+        media.on('audio', onRawAudio);
+        active.cleanup.push(() => {
+          media?.off('video', onRawVideo);
+          media?.off('audio', onRawAudio);
+          capture.close();
+        });
+        active.capture = capture;
+      }
       const first = this.keyframes.keyframe(FRESH_KEYFRAME_MS);
       if (first) {
         active.video.stdin.write(first);
@@ -395,14 +491,19 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       // Until the stream's parameters (SPS) arrive, ffmpeg can't decode anything and logs
       // "non-existing PPS": start at the first SPS instead.
       let decodable = Boolean(first);
-      const viewStart = Date.now();
+      const viewStart = active.stats.startedAt;
+      if (first) {
+        active.stats.firstPictureAt = viewStart;
+      }
       const onVideo = (unit: Buffer) => {
         this.keyframes.push(unit);
         if (!decodable && nalType(unit) === 7) {
           decodable = true;
+          active.stats.firstPictureAt = Date.now();
           this.log.info(`Doorbell camera: first picture to HomeKit ${((Date.now() - viewStart) / 1000).toFixed(1)} s after the live view started`);
         }
         if (decodable) {
+          active.stats.unitsToFfmpeg++;
           active.video?.stdin.write(unit);
         }
       };
@@ -447,10 +548,58 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         void this.stopStream(sessionID, 'ffmpeg stopped');
       }
     });
-    socket.on('message', armInactivity);
+    socket.on('message', (msg: Buffer) => {
+      active.stats.homekitReports += countRtcpReports(msg);
+      armInactivity();
+    });
     armInactivity();
     socket.bind(p.videoReturnPort);
     active.socket = socket;
+  }
+
+  /** Reads ffmpeg's progress (key=value lines) for the number of frames sent to the Home app. */
+  private watchProgress(active: ActiveSession): void {
+    let rest = '';
+    active.video?.stdout.on('data', (d: Buffer) => {
+      const lines = (rest + d.toString()).split('\n');
+      rest = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.startsWith('frame=')) {
+          active.stats.framesOut = Number(line.slice(6)) || active.stats.framesOut;
+        }
+      }
+    });
+  }
+
+  private async startCapture(): Promise<MediaCapture | undefined> {
+    try {
+      await MediaCapture.prepare(this.settings.mediaCaptureDir);
+      const c = new MediaCapture(this.settings.mediaCaptureDir);
+      this.log.info(`Doorbell camera: saving this call's media to ${c.base}.*`);
+      return c;
+    } catch (e) {
+      this.log.warn(`Doorbell camera: can't save media to ${this.settings.mediaCaptureDir}: ${(e as Error).message}`);
+      return undefined;
+    }
+  }
+
+  /** The one-line summary of a live view, for the log. */
+  private summary(active: ActiveSession, reason: string): string {
+    const s = active.stats;
+    const secs = (at: number) => `${((at - s.startedAt) / 1000).toFixed(1)} s`;
+    const parts = [
+      `${secs(Date.now())}`,
+      s.live ? 'live' : 'still picture',
+      `asked ${s.request}`,
+      s.live ? `first picture ${s.firstPictureAt ? secs(s.firstPictureAt) : 'never'}` : '',
+      `frames sent to the Home app=${s.framesOut}`,
+      s.live ? `video units to ffmpeg=${s.unitsToFfmpeg}` : '',
+      `Home app reports=${s.homekitReports}`,
+      this.settings.talkBack && s.live ? `microphone data=${s.micFrames}` : '',
+      `ended: ${reason}`,
+    ].filter(Boolean);
+    const media = s.live && active.media ? `; ${active.media.describe()}` : '';
+    return `Doorbell camera: live view summary: ${parts.join(', ')}${media}`;
   }
 
   private startTalkBack(active: ActiveSession, p: PendingSession, media: MediaSession): void {
@@ -468,6 +617,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         this.log.info('Doorbell camera: talk-back: sound from the Home app microphone is arriving');
       }
       frames++;
+      active.stats.micFrames++;
+      active.capture?.talk.write(d);
       pending = Buffer.concat([pending, d]);
       while (pending.length >= ALAW_FRAME_BYTES) {
         const frame = pending.subarray(0, ALAW_FRAME_BYTES);
@@ -494,6 +645,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     }
     this.active.delete(sessionID);
     clearTimeout(active.inactivity);
+    this.log.info(this.summary(active, reason));
     for (const c of active.cleanup) {
       c();
     }

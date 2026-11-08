@@ -106,3 +106,32 @@ test('parseSps reads the picture size (SPS made by x264)', () => {
   assert.strictEqual(parseSps(Buffer.from('0000000165888000', 'hex')), undefined, 'not an SPS');
   assert.strictEqual(parseSps(Buffer.from('0000000167', 'hex')), undefined, 'too short');
 });
+
+test('countRtcpReports counts receiver and sender reports in a compound packet', () => {
+  const { countRtcpReports } = require('../dist/camera');
+  const rr = Buffer.from('81c90007' + '00'.repeat(28), 'hex'); // RR with one report block (8 words)
+  const sdes = Buffer.from('81ca0002' + '00'.repeat(8), 'hex');
+  assert.strictEqual(countRtcpReports(Buffer.concat([rr, sdes])), 1);
+  assert.strictEqual(countRtcpReports(Buffer.concat([rr, rr, Buffer.alloc(10)])), 2, 'SRTCP trailer ignored');
+  assert.strictEqual(countRtcpReports(Buffer.from('deadbeef', 'hex')), 0);
+});
+
+test('media capture keeps the last 10 calls', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { MediaCapture } = require('../dist/camera');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-'));
+  for (let i = 0; i < 12; i++) {
+    for (const ext of ['.h264', '.alaw', '-talkback.alaw']) {
+      fs.writeFileSync(path.join(dir, `call-20261108-1800${String(i).padStart(2, '0')}${ext}`), 'x');
+    }
+  }
+  await MediaCapture.prepare(dir);
+  const left = fs.readdirSync(dir).sort();
+  assert.strictEqual(left.length, 27, '9 old calls x 3 files, room for the new one');
+  assert.ok(left[0].startsWith('call-20261108-180003'));
+  const c = new MediaCapture(dir);
+  c.close();
+  fs.rmSync(dir, { recursive: true });
+});

@@ -23,6 +23,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   videoCodec?: string;
   ffmpegPath?: string;
   snapshotImage?: string;
+  mediaCaptureDir?: string;
   mediaStartTimeoutSeconds?: number;
   mediaSilenceSeconds?: number;
   videoRefreshSeconds?: number;
@@ -60,6 +61,8 @@ export interface Settings {
   ffmpegPath: string;
   /** Image shown when there is no call; empty: a plain dark picture. */
   snapshotImage: string;
+  /** If set, each call's raw video and audio are saved here, for troubleshooting. */
+  mediaCaptureDir: string;
   /** Hang up if no video or audio arrives this long after answering. */
   mediaStartTimeoutMs: number;
   /** Treat the call as over when media stops for this long. */
@@ -117,6 +120,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     videoCodec: (c.videoCodec ?? '').trim() || 'libx264',
     ffmpegPath: (c.ffmpegPath ?? '').trim(),
     snapshotImage: (c.snapshotImage ?? '').trim(),
+    mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),
     mediaStartTimeoutMs: positive(c.mediaStartTimeoutSeconds, 10) * 1000,
     mediaSilenceMs: positive(c.mediaSilenceSeconds, 5) * 1000,
     videoRefreshMs: positive(c.videoRefreshSeconds, 15) * 1000,

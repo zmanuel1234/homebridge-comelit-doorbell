@@ -165,6 +165,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | End the call after media stops for (`mediaSilenceSeconds`) | `5` | Treat the call as over when video and audio stop for this long |
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 | Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
+| Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each live view's raw media is saved: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 views are kept. About 3–5 MB per minute. |
 
 ## How ring and unlock work
 
@@ -234,6 +235,33 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | The camera keeps showing a visitor from earlier | That's the last visitor, shown for **Show the last visitor for** minutes after a call. Set it to `0` to always show the idle picture. |
 
 Turn on **debug mode** for the child bridge to see every protocol message (`VIP msg:`).
+
+### What to send when reporting a doorbell camera problem
+
+Every live view ends with one summary line, which answers most questions on its own:
+
+```
+Doorbell camera: live view summary: 33.1 s, live, asked 1280x720 30 fps 299 kbps, first picture 2.4 s,
+frames sent to the Home app=480, video units to ffmpeg=1650, Home app reports=62, microphone data=210,
+ended: the intercom ended the call; intercom: 800x480, first video 0.9 s, first keyframe 2.3 s,
+keyframe every 2.0 s, packets video=3706 audio=1548 other=0, talk-back sent=840
+```
+
+| Part | Meaning |
+|---|---|
+| `first picture` | When the video could start (the intercom's first keyframe). Before that, the view is blank. |
+| `frames sent to the Home app` | Frames ffmpeg encoded and sent. 0 with video arriving: ffmpeg problem. |
+| `Home app reports` | Reports the Home app sent back while receiving. 0: the stream doesn't reach the phone. |
+| `microphone data` / `talk-back sent` | Your voice arriving from the Home app / sent on to the intercom. |
+| `intercom: …` | The real video size, when video and keyframes arrived, and packet counts. |
+
+To collect the plugin's lines for a test, replace the times with yours (here 18:13–18:29):
+
+```bash
+grep -E "\[Comelit Intercom\]" /var/lib/homebridge/homebridge.log | grep -E "(6|18):(1[3-9]|2[0-9]):" | grep -v "VIP msg:" > ~/comelit-test.txt
+```
+
+For picture or sound problems, set **Save each call's video and audio to**, test again, and attach the files from that folder.
 
 ## Known limits
 

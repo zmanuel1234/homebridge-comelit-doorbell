@@ -239,6 +239,12 @@
         "minimum": 0,
         "maximum": 1440,
         "description": "After a call, the camera picture shows the last video frame this long, then the idle picture again. 0: always the idle picture."
+      },
+      "mediaCaptureDir": {
+        "title": "Save each call's video and audio to (folder)",
+        "type": "string",
+        "placeholder": "/var/lib/homebridge/comelit-capture",
+        "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 live views. Empty: nothing is saved."
       }
     },
     "required": [
@@ -315,7 +321,8 @@
         "mediaStartTimeoutSeconds",
         "mediaSilenceSeconds",
         "videoRefreshSeconds",
-        "liveViewWaitSeconds"
+        "liveViewWaitSeconds",
+        "mediaCaptureDir"
       ]
     }
   ]

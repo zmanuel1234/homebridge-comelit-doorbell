@@ -350,6 +350,7 @@ export class MediaSession extends EventEmitter {
   private firstSpsAt = 0;
   private keyframeAt: number[] = [];
   private keyframeRetry?: NodeJS.Timeout;
+  private videoSize?: string;
   /** A muted handler for channels being closed, so their last packets aren't logged as unknown. */
   private readonly drop = (): void => undefined;
   private tx = { seq: Math.floor(Math.random() * 0xffff), ts: Math.floor(Math.random() * 0xffffffff), ssrc: Math.floor(Math.random() * 0xffffffff), first: true };
@@ -453,6 +454,16 @@ export class MediaSession extends EventEmitter {
     }
   }
 
+  /** One line for the live view summary: what the intercom sent and when. */
+  describe(): string {
+    const t = (at: number) => (at ? `${((at - this.startedAt) / 1000).toFixed(1)} s` : 'never');
+    const every = this.keyframeAt.length >= 2 ? `${((this.keyframeAt[this.keyframeAt.length - 1] - this.keyframeAt[0]) / (this.keyframeAt.length - 1) / 1000).toFixed(1)} s` : 'n/a';
+    return (
+      `intercom: ${this.videoSize ?? 'size unknown'}, first video ${t(this.firstVideoAt)}, first keyframe ${t(this.firstSpsAt)}, keyframe every ${every}, ` +
+      `packets video=${this.stats.video} audio=${this.stats.audio} other=${this.stats.other}, talk-back sent=${this.stats.sent}`
+    );
+  }
+
   /** Logs the picture size, how long the first keyframe took, and the keyframe interval. */
   private noteUnit(unit: Buffer): void {
     const type = nalType(unit);
@@ -462,6 +473,7 @@ export class MediaSession extends EventEmitter {
       clearTimeout(this.keyframeRetry);
       const sps = parseSps(unit);
       const size = sps ? `${sps.width}x${sps.height}, profile ${sps.profile}, level ${sps.level / 10}` : 'size unknown';
+      this.videoSize = sps ? `${sps.width}x${sps.height}` : undefined;
       this.log?.info(
         `call: video ${size}; first keyframe ${((now - this.startedAt) / 1000).toFixed(1)} s after the media request, ` +
           `${((now - this.firstVideoAt) / 1000).toFixed(1)} s after the first video packet`,
