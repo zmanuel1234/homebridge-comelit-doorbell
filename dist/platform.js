@@ -55,6 +55,7 @@ class ComelitIntercomPlatform {
           global.__zmanRingWindowMs = (zc.ringWindowSeconds === undefined || zc.ringWindowSeconds === null || zc.ringWindowSeconds === '' ? 90 : Number(zc.ringWindowSeconds)) * 1000;
           global.__zmanDoorbellUrl = (zc.doorbellTriggerUrl === undefined ? 'http://localhost:8089/doorbell?Doorbell' : String(zc.doorbellTriggerUrl)).trim();
           global.__zmanRegisterPush = zc.registerPush === true; }
+        global.__zmanAnswerMode = ['handshake', 'answer-on-open'].includes(this.platformConfig.answerMode) ? this.platformConfig.answerMode : 'off'; // zman: answer
         global.__zmanReregister = async () => {
             const ch = this.client && this.client.getChannel('CTPP');
             const cfg = this.config_;

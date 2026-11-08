@@ -99,6 +99,31 @@
         "type": "boolean",
         "default": false,
         "description": "Leave off: push registration diverts calls away from Homebridge."
+      },
+      "answerMode": {
+        "title": "Answer the ring (experimental)",
+        "type": "string",
+        "default": "off",
+        "oneOf": [
+          {
+            "title": "Off",
+            "enum": [
+              "off"
+            ]
+          },
+          {
+            "title": "Handshake only (does not take the call)",
+            "enum": [
+              "handshake"
+            ]
+          },
+          {
+            "title": "Answer when opening from Home",
+            "enum": [
+              "answer-on-open"
+            ]
+          }
+        ]
       }
     }
   }

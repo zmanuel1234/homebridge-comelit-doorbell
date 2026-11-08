@@ -48,6 +48,7 @@ async function openCtppChannel(client, config) {
     }
 }
 async function openDoorOnChannel(client, channel, aptAddr, door, ourAddr) {
+    if (global.__zmanCallOpen && await global.__zmanCallOpen(door)) return; // zman: answer
     // zman: open like comelit-vip - OP_OPEN_DOOR on a fresh connection, sent from our own address
     if (!door.isActuator) {
         await zmanOpenDoor(client, channel, ourAddr, door);
