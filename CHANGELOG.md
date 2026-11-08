@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-07)
 
 First release as `homebridge-comelit-doorbell`, based on `homebridge-comelit-intercom` 1.1.1.
 
