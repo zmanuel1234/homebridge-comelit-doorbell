@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.1.0-beta.2 (2026-11-07)
+
+Experimental features, all off by default.
+
+### Added
+
+- **Doorbell camera** (`camera`): a HomeKit video doorbell that rings by itself and shows the intercom's video and audio during a call, through ffmpeg. Outside a call it shows a still picture (`snapshotImage`).
+- **Answer when viewing** (`answerMode: answer-on-view`): opening the camera's live view answers the ring, then requests video and audio as the Comelit app does: UDPM and two RTPC channels, audio and video media requests, VOICESTATUS. Closing the view hangs up. Unlocking during the view opens inside the call.
+- **Talk-back** (`talkBack`): the Home app's microphone is sent to the intercom's speaker as G.711 A-law.
+- `videoQuality`, `videoCodec`, `ffmpegPath` settings.
+- The connection now reports channels the intercom opens (name and handle, which were misparsed before) and can route media channels.
+- Unknown-channel diagnostics are rate-limited, so media can't flood the log.
+
+### Tested
+
+- Unit tests for RTP, H.264 depacketizing, the keyframe cache, the call's media requests, and media routing.
+- The camera streaming against ffmpeg-for-homebridge: synthetic H.264 and A-law in, SRTP video and AAC-ELD audio out, a snapshot from the live keyframe, the still picture without a call, and talk-back from a simulated Home app microphone.
+- Not yet on a real intercom.
+
+## 2.0.4 (2026-11-07, 2.0.x line)
+
+- The fix for lost intercom messages from 2.1.0-beta.1, backported to 2.0.3.
+
 ## 2.1.0-beta.1 (2026-11-07)
 
 Rewritten in TypeScript, with the same behavior as 2.0.3: the CTP frames the plugin sends were checked byte for byte against 2.0.3 for a ring, the handshake, renewals, closes, door opens and registration.

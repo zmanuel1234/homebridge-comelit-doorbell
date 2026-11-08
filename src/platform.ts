@@ -4,6 +4,7 @@ import { DoorbellAccessory } from './accessories/doorbellAccessory';
 import { LockAccessory } from './accessories/lockAccessory';
 import { authenticate } from './auth';
 import { CallHandler } from './call';
+import { DoorbellCamera } from './camera';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
 import { ComelitPlatformConfig, resolveSettings, Settings } from './config';
@@ -31,6 +32,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private keepaliveTimer?: NodeJS.Timeout;
   private reconnectTimer?: NodeJS.Timeout;
   private lastRingAt = 0;
+  private camera?: DoorbellCamera;
+  private cameraConfigured = false;
   private readonly displayName: string;
 
   constructor(
@@ -129,6 +132,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       let listener: VipEventListener | undefined = undefined;
       const call = new CallHandler(s.answerMode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log);
       listener = new VipEventListener(client, deviceConfig, (ev) => this.onEvent(ev), this.log, call);
+      call.attach(client);
       this.callHandler = call;
       this.vipListener = listener;
       await listener.start().catch((e) => this.log.warn(`VIP listener start failed: ${(e as Error).message}`));
@@ -212,6 +216,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (event.eventType === 'doorbell_ring') {
       this.lastRingAt = Date.now();
       this.doorbellAccessory?.triggerRing();
+      this.camera?.ring();
     }
   }
 
@@ -251,6 +256,22 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     const bell = this.accessoryFor('doorbell', this.displayName, keep);
     this.doorbellAccessory = new DoorbellAccessory(this, bell);
+    if (this.settings.camera) {
+      // Experimental doorbell camera, as an accessory of its own so turning it off removes it cleanly.
+      if (!this.camera) {
+        this.camera = new DoorbellCamera(this.api, this.log, this.settings, () => this.callHandler);
+      }
+      const controller = this.camera.controller;
+      // A new accessory gets the controller before it is registered; a cached one, once.
+      const cam = this.accessoryFor('doorbell-camera', `${this.displayName} Camera`, keep, (a) => {
+        a.configureController(controller);
+        this.cameraConfigured = true;
+      });
+      if (!this.cameraConfigured) {
+        cam.configureController(controller);
+        this.cameraConfigured = true;
+      }
+    }
     for (const camera of config.cameras) {
       const accessory = this.accessoryFor(`camera-${camera.id}`, camera.name || `Camera ${camera.id}`, keep, (a) => {
         a.context.camera = camera;

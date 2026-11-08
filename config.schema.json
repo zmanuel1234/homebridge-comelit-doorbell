@@ -131,9 +131,66 @@
             "enum": [
               "answer-on-open"
             ]
+          },
+          {
+            "title": "Answer when viewing the camera",
+            "enum": [
+              "answer-on-view"
+            ]
           }
         ],
-        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up."
+        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up. Answer when viewing the camera: opening the doorbell camera's live view answers the ring (needs the doorbell camera); unlocking then opens inside that call."
+      },
+      "camera": {
+        "title": "Doorbell camera with live video (experimental)",
+        "type": "boolean",
+        "default": false,
+        "description": "Adds a HomeKit doorbell camera that shows the intercom's video and audio during a ring, and rings in HomeKit itself (the camera-ffmpeg doorbell is then not needed). Video needs 'Answer when viewing the camera'. Requires ffmpeg with libfdk_aac (ffmpeg-for-homebridge)."
+      },
+      "talkBack": {
+        "title": "Talk back from the Home app (experimental)",
+        "type": "boolean",
+        "default": false,
+        "description": "Sends the Home app's microphone to the intercom's speaker during a live view."
+      },
+      "videoQuality": {
+        "title": "Video quality",
+        "type": "string",
+        "default": "sd",
+        "oneOf": [
+          {
+            "title": "Standard (320x240)",
+            "enum": [
+              "sd"
+            ]
+          },
+          {
+            "title": "High (640x240)",
+            "enum": [
+              "hd"
+            ]
+          }
+        ],
+        "description": "What to ask the intercom for. A 6741W offers 320x240 and 640x240."
+      },
+      "videoCodec": {
+        "title": "Video encoder",
+        "type": "string",
+        "default": "libx264",
+        "placeholder": "libx264",
+        "description": "ffmpeg encoder for HomeKit. 'copy' passes the intercom's H.264 through without re-encoding (less CPU, may not play on every device)."
+      },
+      "ffmpegPath": {
+        "title": "ffmpeg path",
+        "type": "string",
+        "placeholder": "auto",
+        "description": "Leave empty to use ffmpeg-for-homebridge (installed with homebridge-camera-ffmpeg), else ffmpeg from the system path."
+      },
+      "snapshotImage": {
+        "title": "Picture when there is no call",
+        "type": "string",
+        "placeholder": "/var/lib/homebridge/doorbell.jpg",
+        "description": "A JPEG shown as the camera picture when no call is in progress. Empty: a plain dark picture."
       }
     },
     "required": [
@@ -183,6 +240,20 @@
       "items": [
         "answerMode",
         "registerPush"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Experimental: doorbell camera",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "camera",
+        "talkBack",
+        "videoQuality",
+        "videoCodec",
+        "ffmpegPath",
+        "snapshotImage"
       ]
     }
   ]
