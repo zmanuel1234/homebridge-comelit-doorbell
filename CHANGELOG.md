@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.0-beta.15 (2026-11-08)
+
+First test on a real intercom (6741W, firmware 2.1.0): answering from the live view, live video, the intercom's audio and unlocking during the call all worked.
+
+### Fixed
+
+- **Talk-back channel.** The intercom sends its own audio request right after the answer, before the plugin's. The plugin only listened for it after sending its own, so it missed it, waited 3 s for nothing, and would have sent talk-back audio to the wrong channel. It now keeps the intercom's request whenever it arrives. The live view also starts about 3 s sooner.
+- The start of the video no longer goes to ffmpeg before the stream's parameters (SPS) arrive. Before, ffmpeg logged `non-existing PPS 0 referenced` and could show a grey or smeared first picture.
+- A door open inside a call was logged as "the intercom did not confirm it" although the door opened. Inside a call the intercom only acknowledges the open, so no refusal now counts as opened.
+
+### Added
+
+- Test replaying the intercom's audio request from the real call (62 in all).
+- README: tested features, what a call looks like (start time, muted start, the intercom ending the call after an open), a troubleshooting row.
+
 ## 2.1.0-beta.14 (2026-11-08)
 
 - No changes to the plugin. CI runs with read-only repository access, and the connection tests wait for events instead of fixed delays, so a slow CI machine can't make them fail.

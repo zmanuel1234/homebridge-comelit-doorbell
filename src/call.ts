@@ -64,6 +64,11 @@ interface Call {
   /** In flight, so a second viewer joins instead of answering again. */
   answering?: Promise<void>;
   mediaStarting?: Promise<MediaSession | null>;
+  /**
+   * The channel the intercom wants our talk-back audio on, from its own audio media request.
+   * The intercom sends that request right after the answer, often before ours.
+   */
+  panelAudioHandle?: number;
 }
 
 interface Waiter {
@@ -167,6 +172,9 @@ export class CallHandler {
     if (frame.body.length > 0) {
       call.ack = (frame.seq + 1) & 0xff;
     }
+    if (frame.opcode === Opcode.MEDIA_REQUEST && frame.body.length >= 10 && call.panelAudioHandle === undefined) {
+      call.panelAudioHandle = frame.body.readUInt16LE(8);
+    }
     for (const w of this.waiters.slice()) {
       if (w.call === call && (w.opcode === frame.opcode || frame.opcode === Opcode.RELEASE)) {
         this.waiters.splice(this.waiters.indexOf(w), 1);
@@ -223,7 +231,9 @@ export class CallHandler {
     const replyWait = this.wait(call, Opcode.OPEN_DOOR, 4000);
     await this.send(call, Flag.DATA, openBody, 'open in call');
     const reply = await replyWait;
-    this.log?.info(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s'}`);
+    // Inside a call the intercom only acknowledges the open (seen on a 6741W, 2026-11-08: the
+    // door opened, no reply). A refusal ends the call with a cause, so no reply means accepted.
+    this.log?.info(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
     if (!call.ended && !call.media) {
       // Nobody is watching: hang up, as the app does after opening.
       await new Promise((r) => setTimeout(r, 1500));
@@ -233,7 +243,7 @@ export class CallHandler {
     if (released && reply.body[2] !== 0) {
       throw new Error(`intercom refused the open in the call (cause ${reply.body[2]})`);
     }
-    return { confirmed: Boolean(released && reply.body[2] === 0) };
+    return { confirmed: !reply || Boolean(released && reply.body[2] === 0) };
   }
 
   /**
@@ -363,12 +373,16 @@ export class MediaSession extends EventEmitter {
     }
     this.log?.info(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
 
-    const panelAudio = this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 3000);
+    // The intercom usually sends its own audio request right after the answer, before ours:
+    // only wait for it if it hasn't come yet.
+    const panelAudio = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 3000) : undefined;
     await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(this.audioHandle), Buffer.alloc(2)]), 'audio request');
-    const reply = await panelAudio;
-    if (reply && reply.body.length >= 10) {
-      this.txHandle = reply.body.readUInt16LE(8);
+    await panelAudio;
+    this.txHandle = this.call.panelAudioHandle;
+    if (this.txHandle !== undefined) {
       this.log?.info(`call: intercom takes our audio on channel ${this.txHandle}`);
+    } else {
+      this.log?.warn('call: the intercom sent no audio request; talk-back goes to our audio channel');
     }
     // Without VOICESTATUS the intercom accepts the audio request but sends no audio.
     await this.voiceStatus(1);
