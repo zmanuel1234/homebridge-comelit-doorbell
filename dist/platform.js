@@ -227,7 +227,7 @@ class ComelitIntercomPlatform {
         const staleUuids = new Set(this.cachedAccessories.map((a) => a.UUID));
         // Door locks
         for (const door of config.doors) {
-            const uuid = this.api.hap.uuid.generate(`${settings_1.PLUGIN_NAME}-lock-${door.index}`);
+            const uuid = this.api.hap.uuid.generate(`${settings_1.UUID_SEED}-lock-${door.index}`);
             staleUuids.delete(uuid);
             let accessory = this.cachedAccessories.find((a) => a.UUID === uuid);
             const isNew = !accessory;
@@ -247,7 +247,7 @@ class ComelitIntercomPlatform {
         }
         // Doorbell (one per platform instance)
         {
-            const uuid = this.api.hap.uuid.generate(`${settings_1.PLUGIN_NAME}-doorbell`);
+            const uuid = this.api.hap.uuid.generate(`${settings_1.UUID_SEED}-doorbell`);
             staleUuids.delete(uuid);
             let accessory = this.cachedAccessories.find((a) => a.UUID === uuid);
             const isNew = !accessory;
@@ -265,7 +265,7 @@ class ComelitIntercomPlatform {
         }
         // RTSP cameras from device config (if any)
         for (const camera of config.cameras) {
-            const uuid = this.api.hap.uuid.generate(`${settings_1.PLUGIN_NAME}-camera-${camera.id}`);
+            const uuid = this.api.hap.uuid.generate(`${settings_1.UUID_SEED}-camera-${camera.id}`);
             staleUuids.delete(uuid);
             let accessory = this.cachedAccessories.find((a) => a.UUID === uuid);
             const isNew = !accessory;

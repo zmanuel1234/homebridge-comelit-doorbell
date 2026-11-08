@@ -1,5 +1,6 @@
 export declare const PLATFORM_NAME = "ComelitIntercom";
-export declare const PLUGIN_NAME = "homebridge-comelit-intercom";
+export declare const PLUGIN_NAME = "homebridge-comelit-doorbell";
+export declare const UUID_SEED = "homebridge-comelit-intercom";
 export declare const ICONA_BRIDGE_PORT = 64100;
 export declare const DEFAULT_HTTP_PORT = 8080;
 export declare const VIDEO_WIDTH = 800;

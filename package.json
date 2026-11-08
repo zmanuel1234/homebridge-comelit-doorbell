@@ -1,42 +1,43 @@
 {
-  "name": "homebridge-comelit-intercom",
-  "version": "1.1.1",
-  "description": "Homebridge plugin for Comelit 6701W WiFi video intercom — fully local, no cloud",
+  "name": "homebridge-comelit-doorbell",
+  "version": "2.0.0",
+  "description": "Homebridge plugin for Comelit ViP intercoms (6701W/6741W Mini): doorbell notifications, door release and an experimental answer, fully local",
   "main": "dist/index.js",
   "files": [
     "dist",
-    "config.schema.json"
+    "config.schema.json",
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Danimal4326/homebridge-comelit-intercom.git"
+    "url": "git+https://github.com/zmanuel1234/homebridge-comelit-doorbell.git"
   },
-  "homepage": "https://github.com/Danimal4326/homebridge-comelit-intercom#readme",
+  "homepage": "https://github.com/zmanuel1234/homebridge-comelit-doorbell#readme",
   "bugs": {
-    "url": "https://github.com/Danimal4326/homebridge-comelit-intercom/issues"
+    "url": "https://github.com/zmanuel1234/homebridge-comelit-doorbell/issues"
   },
-  "scripts": {
-    "build": "tsc",
-    "watch": "tsc --watch",
-    "prepublishOnly": "npm run build",
-    "lint": "eslint src/ --ext .ts"
-  },
+  "author": "zmanuel1234",
+  "contributors": [
+    "danimal4326 (original homebridge-comelit-intercom)"
+  ],
+  "license": "Apache-2.0",
   "keywords": [
     "homebridge-plugin",
     "comelit",
+    "vip",
     "intercom",
     "doorbell",
-    "smart-lock"
+    "smart-lock",
+    "6701W",
+    "6741W"
   ],
-  "license": "MIT",
+  "scripts": {
+    "check": "for f in dist/*.js dist/accessories/*.js; do node --check \"$f\" || exit 1; done"
+  },
   "engines": {
     "homebridge": ">=2.0.0-beta.0",
     "node": ">=18.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "homebridge": "2.0.0-beta.104"
   },
   "peerDependencies": {
     "homebridge": ">=2.0.0-beta.0"

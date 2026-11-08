@@ -1,8 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_RECONNECT_DELAY_MS = exports.KEEPALIVE_INTERVAL_MS = exports.DEAD_CONNECTION_TIMEOUT_MS = exports.READ_TIMEOUT_MS = exports.CONNECT_TIMEOUT_MS = exports.VIDEO_FPS = exports.VIDEO_HEIGHT = exports.VIDEO_WIDTH = exports.DEFAULT_HTTP_PORT = exports.ICONA_BRIDGE_PORT = exports.PLUGIN_NAME = exports.PLATFORM_NAME = void 0;
+exports.DEFAULT_RECONNECT_DELAY_MS = exports.KEEPALIVE_INTERVAL_MS = exports.DEAD_CONNECTION_TIMEOUT_MS = exports.READ_TIMEOUT_MS = exports.CONNECT_TIMEOUT_MS = exports.VIDEO_FPS = exports.VIDEO_HEIGHT = exports.VIDEO_WIDTH = exports.DEFAULT_HTTP_PORT = exports.ICONA_BRIDGE_PORT = exports.UUID_SEED = exports.PLUGIN_NAME = exports.PLATFORM_NAME = void 0;
 exports.PLATFORM_NAME = 'ComelitIntercom';
-exports.PLUGIN_NAME = 'homebridge-comelit-intercom';
+exports.PLUGIN_NAME = 'homebridge-comelit-doorbell';
+// Accessory UUIDs keep the original plugin name as their seed, so HomeKit keeps the same
+// accessories (rooms, automations) when moving from homebridge-comelit-intercom.
+exports.UUID_SEED = 'homebridge-comelit-intercom';
 exports.ICONA_BRIDGE_PORT = 64100;
 exports.DEFAULT_HTTP_PORT = 8080;
 exports.VIDEO_WIDTH = 800;

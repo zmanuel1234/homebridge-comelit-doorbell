@@ -1,142 +1,84 @@
-# homebridge-comelit-intercom
+# homebridge-comelit-doorbell
 
-Homebridge 2.0 plugin for the **Comelit 6701W** WiFi video intercom. Communicates entirely via the ICONA Bridge TCP protocol on port 64100 — no cloud required.
+Homebridge plugin for **Comelit ViP** Wi-Fi intercoms (6701W / 6741W Mini). It talks the ViP protocol directly on your LAN (TCP 64100), with no Comelit cloud involved.
 
-## Features
+- **Doorbell notifications** in the Home app, through a ring sensor and an optional camera doorbell
+- **Door release** as a HomeKit lock, allowed only shortly after a ring
+- **Experimental: answer the ring** from HomeKit, so anyone in your Home can open the door without the Comelit app
+- Every setting is in the Homebridge config editor
 
-- **Door locks** — one `LockMechanism` accessory per door/gate relay; tap to open in the Home app
-- **Doorbell** — fires a native HomeKit doorbell event on ring, triggering iOS/macOS notifications
-- **RTSP cameras** — exposes any RTSP cameras reported in the device config
-- **Auto-reconnect** — transparent reconnection with configurable delay
-- **100% local** — all TCP traffic stays on your LAN
+This is a continuation of [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homebridge-comelit-intercom) 1.1.1 by danimal4326, whose repository is no longer available. See [NOTICE](NOTICE) and [CHANGELOG](CHANGELOG.md).
 
-## Prerequisites
+## Tested hardware
 
-- Node.js 18 or newer
-- Homebridge 2.0 (`2.0.0-beta.0` or later)
-- Comelit 6701W accessible on your local network
-- Your device's 32-character hex token (see [Finding your token](#finding-your-token))
+| Model | Firmware | Status |
+|---|---|---|
+| 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`) | 2.1.0 | Rings, ring sensor, doorbell notifications, door release |
 
-## Finding Your Token
+Other ViP devices may work. Please open an issue with your model id and firmware (from the device's web page, *Device info*).
 
-1. Browse to `http://<device-ip>:8080` (default credentials: `admin` / `comelit`)
-2. Go to **Device Info** — copy the **ID32** value (32-character hex string)
+## Requirements
 
-## Installation
+- Homebridge 2.0 (`2.0.0-beta.0` or later), Node.js 18+
+- The intercom reachable on your LAN
+- **A Comelit user of its own for Homebridge.** If the plugin shares a user with a phone, the intercom delivers each call to only one of them.
 
-### From npm (once published)
+## Setup
 
-```bash
-npm install -g homebridge-comelit-intercom
-```
+### 1. Give Homebridge its own Comelit user
 
-Restart Homebridge and configure via the UI.
+1. Open the intercom's web page, `http://<intercom-ip>:8080`, and sign in as installer.
+2. Under **Users**, add a user for Homebridge and note its row number (`#3`, for example). That number is the **sub-address**.
+3. Download a **backup** from the web page and open `users.cfg` inside it. The 32-character token next to your new user is the plugin's **token**.
 
-### From source
+### 2. Configure the plugin
 
-```bash
-git clone https://github.com/Danimal4326/homebridge-comelit-intercom.git
-cd homebridge-comelit-intercom
-npm install
-npm run build
-npm link
-```
-
-Restart Homebridge after linking.
-
-## Configuration
-
-Add a platform block to your Homebridge `config.json`:
+Configure it in the Homebridge UI, or by hand:
 
 ```json
 {
-  "platforms": [
-    {
-      "platform": "ComelitIntercom",
-      "name": "Comelit Intercom",
-      "host": "192.168.1.100",
-      "token": "your32charhextokenhere",
-      "port": 64100,
-      "enableNotifications": true,
-      "reconnectDelay": 10
-    }
-  ]
+  "platform": "ComelitIntercom",
+  "name": "Comelit Intercom",
+  "host": "192.168.1.50",
+  "token": "0123456789abcdef0123456789abcdef",
+  "subaddress": 3
 }
 ```
 
-| Field | Required | Default | Description |
-|-------|:--------:|---------|-------------|
-| `platform` | ✅ | — | Must be `ComelitIntercom` |
-| `name` | ✅ | — | Display name in the Homebridge UI |
-| `host` | ✅ | — | Device IP address or hostname |
-| `token` | ✅ | — | 32-char hex token from the device admin page |
-| `port` | | `64100` | ICONA Bridge TCP port |
-| `enableNotifications` | | `true` | Open a persistent CTPP/VIP channel for doorbell events. Disable only to troubleshoot. |
-| `reconnectDelay` | | `10` | Seconds to wait before reconnecting after a connection drop |
+The platform name stays `ComelitIntercom`, so a config from `homebridge-comelit-intercom` works as is.
 
-When using **Config UI X** (Homebridge UI), all fields appear as a form automatically via `config.schema.json`.
+### 3. Doorbell notifications (recommended)
 
-## Build
+The plugin publishes a **ring sensor** (a motion sensor that is active while the bell rings). For a real HomeKit doorbell notification, add a doorbell camera with [homebridge-camera-ffmpeg](https://github.com/homebridge-plugins/homebridge-camera-ffmpeg). It can use a still image as its picture. Enable its local HTTP server, then point `doorbellTriggerUrl` at it, for example `http://localhost:8089/doorbell?Doorbell`.
 
-```bash
-npm install          # install dependencies
-npm run build        # compile TypeScript → dist/
-npm run watch        # watch mode for development
-```
+Put the **Entrance lock** in the same Home room as the doorbell camera. Then the doorbell notification shows the lock, and you can unlock from there.
 
-Output lands in `dist/`. The plugin entry point is `dist/index.js`.
+## Settings
 
-## Accessories
+| Setting | Default | What it does |
+|---|---|---|
+| `host`, `port`, `token` | — , 64100, — | The intercom and the token of the Homebridge user |
+| `subaddress` | device default | Row number (#) of the Homebridge user |
+| `leaseRefreshMode` | `reconnect` | How the registration is kept fresh: `reconnect` or `inplace` (re-register without dropping the connection) |
+| `leaseRefreshMinutes` | 2 | How often. The intercom stops routing calls to a registration after a few minutes. |
+| `leaseRecycleMinutes` | 50 | In `inplace` mode, still reconnect fully this often |
+| `ringWindowSeconds` | 90 | Unlock is allowed only this long after a ring. `0` allows it at any time. |
+| `doorbellTriggerUrl` | `http://localhost:8089/doorbell?Doorbell` | URL called on every ring. Leave empty to turn it off. |
+| `registerPush` | `false` | Register as a push device (original behavior). Leave off, because it diverts calls away from the plugin. |
+| `answerMode` | `off` | **Experimental.** `handshake` replies to the call without taking it. `answer-on-open` answers when you unlock from Home, opens the door inside the call, then hangs up. |
+| `reconnectDelay` | 10 | Seconds before reconnecting after a dropped connection |
 
-| Accessory | HAP Service | Notes |
-|-----------|-------------|-------|
-| One per door/gate | `LockMechanism` | Tap **Open** in the Home app to trigger the relay. Shows as "Unlocked" briefly, then auto-returns to "Locked" after 3 s. |
-| Doorbell | `Doorbell` + `Speaker` | Fires a ring event on doorbell press. Triggers native HomeKit notifications automatically. |
-| RTSP cameras *(if any)* | `MotionSensor` stub | Cameras found in device config are registered. Full HomeKit streaming is a planned future addition. |
+## Known limits
 
-## Usage
+- During an unanswered ring, the intercom refuses a door release from a device that didn't answer the call (cause 8, *busy*). Opening from HomeKit during a ring therefore needs `answerMode: answer-on-open`, which is still experimental.
+- No live video or two-way audio yet.
+- Logs prefixed `zman-call` and `zman-diag` are protocol diagnostics.
 
-### Opening a door
+## Credits
 
-Tap the lock accessory in the Home app and press **Open**. You can also use Siri:
-
-```
-"Hey Siri, unlock Front Door"
-```
-
-### Doorbell notifications
-
-Rings trigger a native HomeKit notification on all registered iOS/macOS devices — no automation required.
-
-To act on a ring (e.g. turn on a light), create a **HomeKit automation**:
-- **Trigger:** *Doorbell detects doorbell*
-- **Action:** any scene or accessory action
-
-### Reconnection
-
-The plugin reconnects automatically when the device wakes from sleep or the network recovers. The `reconnectDelay` setting controls how long it waits. A 90-second keepalive probe prevents false disconnects while the device is idle.
-
-## Protocol
-
-The ICONA Bridge protocol runs over raw TCP on port 64100. Every message has an 8-byte header:
-
-```
-[0x00 0x06] [body_length LE16] [request_id LE16] [0x00 0x00]
-```
-
-Key channel flows:
-- **UAUT** — authentication: send token → expect code 200
-- **UCFG** — device config: parse doors, cameras, apartment address
-- **PUSH** — FCM token registration; re-sent every 90 s as a keepalive probe
-- **CTPP** — persistent binary channel: doorbell ring, door opened, registration renewal ACK
-
-## Acknowledgments
-
-Protocol knowledge derived from community reverse-engineering:
-- [ha-component-comelit-intercom](https://github.com/nicolas-fricke/ha-component-comelit-intercom) — Nicolas Fricke
-- [comelit-client](https://github.com/madchicken/comelit-client) — Pierpaolo Follia
-- [Protocol analysis](https://grdw.nl/2023/01/28/my-intercom-part-1.html) — grdw
+- danimal4326, for the original `homebridge-comelit-intercom`
+- [jfmlima/comelit-vip](https://github.com/jfmlima/comelit-vip) and [ttmx/comelit-vip](https://github.com/ttmx/comelit-vip), for the protocol references
 
 ## License
 
-Apache 2.0
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

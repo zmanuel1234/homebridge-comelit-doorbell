@@ -126,5 +126,6 @@
         ]
       }
     }
-  }
+  },
+  "headerDisplay": "Comelit ViP intercom, fully local. Give Homebridge its own Comelit user and use its token and row number (sub-address). See the [README](https://github.com/zmanuel1234/homebridge-comelit-doorbell#readme)."
 }

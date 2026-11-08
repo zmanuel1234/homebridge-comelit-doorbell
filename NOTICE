@@ -1,0 +1,12 @@
+homebridge-comelit-doorbell
+
+This product is a modified version of homebridge-comelit-intercom 1.1.1,
+published to npm by danimal4326 (https://www.npmjs.com/package/homebridge-comelit-intercom).
+The original repository, github.com/Danimal4326/homebridge-comelit-intercom,
+is no longer available; this project starts from the published package.
+
+The original package ships an Apache License 2.0 LICENSE file (its package.json
+declares MIT). Both permit this redistribution; this project is distributed
+under the Apache License 2.0 (see LICENSE).
+
+Modifications since 1.1.1 are listed in CHANGELOG.md and in the git history.
