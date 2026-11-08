@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.1.0-beta.7 (2026-11-08)
+
+### Fixed
+
+- A registration refresh that needs a full reconnect (`leaseRefreshMode: reconnect`, or the `leaseRecycleMinutes` reconnect in `inplace` mode) could drop the connection in the middle of an answered call, cutting the live view. It now waits until the call is over, checking every 30 s, for at most 10 minutes. In-place renewals are unaffected.
+
+### Changed
+
+- **`doorbellTriggerUrl` is empty by default.** Before, a missing setting meant `http://localhost:8089/doorbell?Doorbell`. If you use a homebridge-camera-ffmpeg doorbell and never set the URL, set it now, or the camera-ffmpeg doorbell stops ringing.
+- When the intercom can't be reached, the wait between reconnect attempts doubles after each failure, up to `maxReconnectDelay`, instead of retrying every `reconnectDelay` seconds forever. A failed reconnect is now always retried (before, an error thrown while setting up could stop the retries).
+- Planned reconnects for the registration are logged as `Reconnecting (registration lease refresh …)` instead of a `Device disconnected` warning.
+- Requires Node.js 20, 22 or 24 (as Homebridge 2 does). CI also builds and tests on Node 20 and 22.
+
+### Added
+
+- `maxReconnectDelay` (300 s), in the Registration section.
+- Tests for the connection lifecycle: reconnect and in-place leases, waiting during a call, the reconnect back-off (47 in all).
+- README: the new setting, the trigger URL change, supported Node versions, troubleshooting for an unreachable intercom.
+
 ## 2.1.0-beta.6 (2026-11-08)
 
 - No changes to the plugin. The publish workflow checks the release tag with a script, so the log reads "Release tag … matches package.json" instead of printing the failure text.

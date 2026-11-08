@@ -44,7 +44,15 @@
         "default": 10,
         "minimum": 1,
         "maximum": 300,
-        "description": "Wait before reconnecting after the connection drops."
+        "description": "Wait before reconnecting after the connection drops. If the intercom can't be reached, the wait doubles after each failed attempt."
+      },
+      "maxReconnectDelay": {
+        "title": "Longest reconnect wait (seconds)",
+        "type": "integer",
+        "default": 300,
+        "minimum": 1,
+        "maximum": 3600,
+        "description": "Upper limit for the doubling wait while the intercom can't be reached. The wait goes back to the reconnect delay once connected."
       },
       "subaddress": {
         "title": "User row number (sub-address)",
@@ -100,8 +108,8 @@
       "doorbellTriggerUrl": {
         "title": "Doorbell camera trigger URL",
         "type": "string",
-        "default": "http://localhost:8089/doorbell?Doorbell",
-        "description": "Called on every ring, to make a homebridge-camera-ffmpeg doorbell send the HomeKit doorbell notification. Leave empty if you don't use one."
+        "placeholder": "http://localhost:8089/doorbell?Doorbell",
+        "description": "Called on every ring, to make a homebridge-camera-ffmpeg doorbell send the HomeKit doorbell notification. Leave empty if you don't use one, or if you use this plugin's doorbell camera."
       },
       "registerPush": {
         "title": "Register as a push device (original behavior)",
@@ -269,7 +277,8 @@
         "leaseRefreshMode",
         "leaseRefreshMinutes",
         "leaseRecycleMinutes",
-        "reconnectDelay"
+        "reconnectDelay",
+        "maxReconnectDelay"
       ]
     },
     {

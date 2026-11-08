@@ -27,10 +27,9 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   mediaSilenceSeconds?: number;
   videoRefreshSeconds?: number;
   liveViewWaitSeconds?: number;
+  maxReconnectDelay?: number;
   lastVisitorMinutes?: number;
 }
-
-export const DEFAULT_DOORBELL_TRIGGER_URL = 'http://localhost:8089/doorbell?Doorbell';
 
 /** Settings with defaults applied. */
 export interface Settings {
@@ -40,6 +39,8 @@ export interface Settings {
   subaddress?: number;
   enableNotifications: boolean;
   reconnectDelayMs: number;
+  /** Longest wait between reconnect attempts while the intercom can't be reached. */
+  maxReconnectDelayMs: number;
   leaseMode: 'reconnect' | 'inplace';
   leaseRefreshMs: number;
   leaseRecycleMs: number;
@@ -82,11 +83,12 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     subaddress: Number.isInteger(c.subaddress) ? c.subaddress : undefined,
     enableNotifications: c.enableNotifications ?? true,
     reconnectDelayMs: (c.reconnectDelay ?? DEFAULT_RECONNECT_DELAY_S) * 1000,
+    maxReconnectDelayMs: positive(c.maxReconnectDelay, 300) * 1000,
     leaseMode: c.leaseRefreshMode === 'inplace' ? 'inplace' : 'reconnect',
     leaseRefreshMs: positive(c.leaseRefreshMinutes, 2) * 60_000,
     leaseRecycleMs: positive(c.leaseRecycleMinutes, 50) * 60_000,
     ringWindowMs: Number.isFinite(ringWindow) && ringWindow > 0 ? ringWindow * 1000 : 0,
-    doorbellTriggerUrl: (c.doorbellTriggerUrl === undefined ? DEFAULT_DOORBELL_TRIGGER_URL : String(c.doorbellTriggerUrl)).trim(),
+    doorbellTriggerUrl: String(c.doorbellTriggerUrl ?? '').trim(),
     registerPush: c.registerPush === true,
     answerMode: (['handshake', 'answer-on-open', 'answer-on-view'] as const).find((m) => m === c.answerMode) ?? 'off',
     camera: c.camera === true,
@@ -101,6 +103,14 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     liveViewWaitMs: positive(c.liveViewWaitSeconds, 8) * 1000,
     lastVisitorMs: (c.lastVisitorMinutes === undefined || c.lastVisitorMinutes === null ? 5 : Math.max(0, Number(c.lastVisitorMinutes) || 0)) * 60_000,
   };
+}
+
+/**
+ * Wait before reconnect attempt number `failures` (0 = first): the reconnect delay, doubled after
+ * each failed attempt, up to the maximum.
+ */
+export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconnectDelayMs'>, failures: number): number {
+  return Math.min(s.reconnectDelayMs * 2 ** Math.min(failures, 20), Math.max(s.maxReconnectDelayMs, s.reconnectDelayMs));
 }
 
 /** Settings that don't work together, as log warnings. */
