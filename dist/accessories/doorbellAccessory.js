@@ -45,8 +45,12 @@ class DoorbellAccessory {
         global.__zmanLastRing = Date.now(); // zman: ring window
         // zman: ring the HomeKit doorbell camera (homebridge-camera-ffmpeg, localhost-only)
         try {
-            if (global.__zmanDoorbellUrl) require('http').get(global.__zmanDoorbellUrl, (res) => res.resume()) // zman: settings
-                .on('error', (e) => this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`));
+            if (global.__zmanDoorbellUrl) { // zman: settings - http or https, 5 s timeout
+                const u = new URL(global.__zmanDoorbellUrl);
+                const req = require(u.protocol === 'https:' ? 'https' : 'http').get(u, { timeout: 5000 }, (res) => res.resume());
+                req.on('timeout', () => req.destroy(new Error('timed out after 5 s')));
+                req.on('error', (e) => this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`));
+            }
         } catch (e) { this.platform.log.warn(`Doorbell camera trigger failed: ${e.message}`); }
         this.sensorService.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);
         this.active = true;

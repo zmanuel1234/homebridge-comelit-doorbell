@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.3 (2026-11-07)
+
+### Fixed
+
+- Accessories were registered again on every reconnect after a fresh install. Homebridge rejected the duplicate, and the ring sensor stopped updating until the next restart. Each accessory is now registered once.
+- Unlock reported success even when the intercom refused. The plugin now waits up to 10 s for the intercom's answer: the lock shows Unlocked only once the door actually opens, snaps back to Locked if refused, and the log gives the cause (for example `cause 8, busy`).
+- Only an INVITE from the intercom counts as a ring. Other new connections no longer fire a ring or open the unlock window.
+- Releases are no longer logged as `door_opened` events.
+- The ring window now applies to Unlock only, not Lock.
+- The doorbell trigger URL also works with `https`, with a 5 s timeout.
+
+### Added
+
+- Tests built from frames captured from a real intercom, run by CI and before each publish.
+
 ## 2.0.2 (2026-11-07)
 
 - Documentation: the README covers every setting, the accessories the plugin creates, migration, the ring-to-open flow and troubleshooting.

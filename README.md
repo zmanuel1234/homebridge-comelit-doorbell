@@ -86,7 +86,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. You can
 
 | Accessory | HomeKit type | Notes |
 |---|---|---|
-| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds, then Locked again. |
+| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds once the intercom confirms, then Locked again. If the intercom refuses, it goes straight back to Locked and the log says why. |
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
 
@@ -163,7 +163,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 |---|---|
 | Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. Check the log for `Registration renewed in place` or reconnects. |
 | No rings at all, but the phones ring | Make sure `subaddress` is a user of its own, not shared with a phone, and that `registerPush` is off. On the intercom's Extender page, the Homebridge user should appear under **Registered slaves**. |
-| Unlock shows as failed | Outside the ring window, this is expected (`Open refused` in the log). During a ring, it's the busy refusal: see [answering the ring](#answering-the-ring-experimental). |
+| Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 
