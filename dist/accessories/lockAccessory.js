@@ -39,7 +39,7 @@ class LockAccessory {
             ? Characteristic.LockTargetState.UNSECURED
             : Characteristic.LockTargetState.SECURED)
             .onSet((value) => {
-                { const zw = global.__zmanRingWindowMs === undefined ? 90000 : global.__zmanRingWindowMs; // zman: ring window
+                if (value === Characteristic.LockTargetState.UNSECURED) { const zw = global.__zmanRingWindowMs === undefined ? 90000 : global.__zmanRingWindowMs; // zman: ring window
                   if (zw > 0 && Date.now() - (global.__zmanLastRing || 0) > zw) {
                     if (Date.now() - (global.__zmanRefusedLog || 0) > 5000) { global.__zmanRefusedLog = Date.now(); this.platform.log.warn(`Open refused: no ring in the last ${zw / 1000} s`); }
                     const zh = this.platform.api && this.platform.api.hap;
@@ -54,16 +54,29 @@ class LockAccessory {
         const { Characteristic } = this.platform;
         const SECURED = Characteristic.LockCurrentState.SECURED;
         const UNSECURED = Characteristic.LockCurrentState.UNSECURED;
-        this.lockState = UNSECURED;
-        this.service.updateCharacteristic(Characteristic.LockCurrentState, UNSECURED);
+        const relock = () => {
+            this.lockState = SECURED;
+            this.service.updateCharacteristic(Characteristic.LockCurrentState, SECURED);
+            this.service.updateCharacteristic(Characteristic.LockTargetState, Characteristic.LockTargetState.SECURED);
+        };
+        // Show Unlocked only once the intercom confirms; otherwise snap back to Locked.
         try {
-            await this.platform.openDoor(this.door);
-            this.platform.log.info(`Door '${this.door.name}' opened`);
+            const result = await this.platform.openDoor(this.door);
+            if (result && result.confirmed === false) {
+                this.platform.log.warn(`Door '${this.door.name}': open sent, but the intercom did not confirm it`);
+            }
+            else {
+                this.platform.log.info(`Door '${this.door.name}' opened`);
+            }
         }
         catch (e) {
             this.platform.log.error(`Door open failed: ${e.message}`);
+            relock();
+            return;
         }
-        // Auto-secure after 3 s regardless of success
+        this.lockState = UNSECURED;
+        this.service.updateCharacteristic(Characteristic.LockCurrentState, UNSECURED);
+        // Back to Locked after 3 s
         setTimeout(() => {
             this.lockState = SECURED;
             this.service.updateCharacteristic(Characteristic.LockCurrentState, SECURED);

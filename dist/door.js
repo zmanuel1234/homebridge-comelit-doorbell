@@ -8,6 +8,7 @@ const ctpp_1 = require("./ctpp");
 const protocol_1 = require("./protocol");
 const DOOR_CTPP_INIT_TIMEOUT_MS = 5_000;
 const DOOR_RESPONSE_TIMEOUT_MS = 2_000;
+const ZMAN_OPEN_REPLY_TIMEOUT_MS = 10_000;
 class DoorOpenError extends Error {
 }
 exports.DoorOpenError = DoorOpenError;
@@ -22,7 +23,7 @@ async function openDoor(client, config, door) {
         ctpp = await openCtppChannel(client, config);
     }
     try {
-        await openDoorOnChannel(client, ctpp, config.aptAddress, door, `${config.aptAddress}${config.aptSubaddress}`);
+        return await openDoorOnChannel(client, ctpp, config.aptAddress, door, `${config.aptAddress}${config.aptSubaddress}`);
     }
     catch (e) {
         throw new DoorOpenError(`Failed to open door '${door.name}': ${e.message}`);
@@ -48,11 +49,11 @@ async function openCtppChannel(client, config) {
     }
 }
 async function openDoorOnChannel(client, channel, aptAddr, door, ourAddr) {
-    if (global.__zmanCallOpen && await global.__zmanCallOpen(door)) return; // zman: answer
+    const zr = global.__zmanCallOpen && await global.__zmanCallOpen(door); // zman: answer
+    if (zr) return zr;
     // zman: open like comelit-vip - OP_OPEN_DOOR on a fresh connection, sent from our own address
     if (!door.isActuator) {
-        await zmanOpenDoor(client, channel, ourAddr, door);
-        return;
+        return await zmanOpenDoor(client, channel, ourAddr, door);
     }
     // Phase B: Open + Confirm (regular doors only)
     if (!door.isActuator) {
@@ -92,5 +93,25 @@ async function zmanOpenDoor(client, channel, ourAddr, door) {
     head.writeUInt16BE(body.length, 6);
     const pad = Buffer.alloc((4 - (body.length % 4)) % 4);
     const pkt = Buffer.concat([head, body, pad, Buffer.from([0xff, 0xff, 0xff, 0xff]), la(ourAddr), la(door.aptAddress)]);
-    await client.sendBinary(channel, pkt);
+    // Wait for the intercom's answer: RELEASE (0x000E) on the peer of our connection, cause 0 = opened.
+    // It can take several seconds (the intercom delays it while busy).
+    const key = `${head[2] ^ 0x80}:${head[3]}`;
+    const waiters = (global.__zmanOpenWaiters = global.__zmanOpenWaiters || new Map());
+    const reply = new Promise((resolve) => {
+        const t = setTimeout(() => { waiters.delete(key); resolve(null); }, ZMAN_OPEN_REPLY_TIMEOUT_MS);
+        waiters.set(key, (cause) => { clearTimeout(t); waiters.delete(key); resolve(cause); });
+    });
+    try {
+        await client.sendBinary(channel, pkt);
+    }
+    catch (e) {
+        waiters.get(key)?.(null);
+        throw e;
+    }
+    const cause = await reply;
+    if (cause === null)
+        return { confirmed: false };
+    if (cause !== 0)
+        throw new DoorOpenError(`intercom refused (cause ${cause}${cause === 8 ? ', busy: a call is ringing and was not answered' : ''})`);
+    return { confirmed: true };
 }

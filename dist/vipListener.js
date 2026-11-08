@@ -73,7 +73,9 @@ global.__zmanCallOpen = async (door) => {
     const r = await zmanCall.wait(c, 0x002d, 4000);
     vip.log?.info(`zman-call: open reply ${r ? `op=0x${r.op.toString(16)} body=${zmanCall.hex(r.body)}` : 'none within 4 s'}`);
     if (!c.ended) { await new Promise((z) => setTimeout(z, 1500)); await zmanCall.send(vip, c, 0x60, Buffer.from([0x00, 0x0e, 0x00]), 'hang up 000e'); c.ended = true; }
-    return true;
+    if (r && r.op === 0x000e && r.body.length >= 3 && r.body[2] !== 0)
+        throw new Error(`intercom refused the open in the call (cause ${r.body[2]})`);
+    return { confirmed: !!(r && r.op === 0x000e && r.body[2] === 0) };
 };
 const MIN_MSG_SIZE = 8;
 const DEDUP_WINDOW_MS = 10_000;
@@ -184,13 +186,29 @@ class VipEventListener {
         if (global.__zmanAnswerMode && global.__zmanAnswerMode !== 'off') await zmanCall.onMsg(this, msg).catch((e) => this.log?.warn(`zman-call: ${e.message}`)); // zman: answer
         if (isRetransmit && prefix === PREFIX_VIDEO_EVENT)
             return;
+        // Answer to one of our door-open requests: RELEASE (0x000E) carrying the cause
+        if (msg.flags === 0x000e && msg.raw.length >= 11) {
+            const waiter = global.__zmanOpenWaiters?.get(`${msg.raw[2]}:${msg.raw[3]}`);
+            if (waiter) {
+                waiter(msg.raw[10]);
+                return;
+            }
+        }
+        // A new call towards us: only an INVITE (opcode 0x0001) is a ring
         if (prefix === PREFIX_CALL_INIT) {
-            this._fireEvent('doorbell_ring', msg.addresses);
+            if (msg.flags === 0x0001)
+                this._fireEvent('doorbell_ring', msg.addresses);
+            else
+                this.log?.debug(`VIP: new connection from the intercom, opcode 0x${(msg.flags ?? 0).toString(16)} (not a ring)`);
             return;
         }
         if (prefix === PREFIX_VIP_EVENT && action !== 0) {
             if (action === ACTION_IN_ALERTING) {
                 this._fireEvent('doorbell_ring', msg.addresses);
+            }
+            else if (action === ACTION_DOOR_OPENED && msg.flags === 0x000e) {
+                // 3-byte body 0x000E + cause: a call or request being released, not a door opening
+                this.log?.debug(`VIP: release, cause ${msg.raw[10]}`);
             }
             else if (action === ACTION_DOOR_OPENED) {
                 this._fireEvent('door_opened', msg.addresses);

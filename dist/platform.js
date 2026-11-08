@@ -220,7 +220,7 @@ class ComelitIntercomPlatform {
         if (!this.client || !this.config_) {
             throw new Error('Not connected');
         }
-        await (0, door_1.openDoor)(this.client, this.config_, door);
+        return await (0, door_1.openDoor)(this.client, this.config_, door);
     }
     // ─── Accessory discovery ──────────────────────────────────────────────────
     discoverAccessories(config) {
@@ -239,6 +239,7 @@ class ComelitIntercomPlatform {
             this.lockAccessories.set(uuid, lockAcc);
             if (isNew) {
                 this.api.registerPlatformAccessories(settings_1.PLUGIN_NAME, settings_1.PLATFORM_NAME, [accessory]);
+                this.cachedAccessories.push(accessory); // register once: later reconnects find it here
                 this.log.info(`Registered door: ${door.name}`);
             }
             else {
@@ -257,6 +258,7 @@ class ComelitIntercomPlatform {
             this.doorbellAccessory = new doorbellAccessory_1.DoorbellAccessory(this, accessory);
             if (isNew) {
                 this.api.registerPlatformAccessories(settings_1.PLUGIN_NAME, settings_1.PLATFORM_NAME, [accessory]);
+                this.cachedAccessories.push(accessory); // register once: later reconnects find it here
                 this.log.info('Registered doorbell');
             }
             else {
@@ -277,6 +279,7 @@ class ComelitIntercomPlatform {
             this.cameraAccessories.set(uuid, camAcc);
             if (isNew) {
                 this.api.registerPlatformAccessories(settings_1.PLUGIN_NAME, settings_1.PLATFORM_NAME, [accessory]);
+                this.cachedAccessories.push(accessory); // register once: later reconnects find it here
                 this.log.info(`Registered camera: ${camera.name}`);
             }
             else {
@@ -287,6 +290,7 @@ class ComelitIntercomPlatform {
         const toRemove = this.cachedAccessories.filter((a) => staleUuids.has(a.UUID));
         if (toRemove.length > 0) {
             this.api.unregisterPlatformAccessories(settings_1.PLUGIN_NAME, settings_1.PLATFORM_NAME, toRemove);
+            this.cachedAccessories = this.cachedAccessories.filter((a) => !staleUuids.has(a.UUID));
             this.log.info(`Removed ${toRemove.length} stale accessory/accessories`);
         }
     }
