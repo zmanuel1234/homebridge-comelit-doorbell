@@ -1,0 +1,45 @@
+{
+  "pluginAlias": "ComelitIntercom",
+  "pluginVersion": ">=2.0.0-beta.0",
+  "pluginType": "platform",
+  "singular": false,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "Comelit Intercom",
+        "required": true
+      },
+      "host": {
+        "title": "Device Host / IP Address",
+        "type": "string",
+        "required": true,
+        "placeholder": "192.168.1.100"
+      },
+      "port": {
+        "title": "ICONA Bridge Port",
+        "type": "integer",
+        "default": 64100
+      },
+      "token": {
+        "title": "Auth Token (32-char hex — from device admin page at http://<host>:8080)",
+        "type": "string",
+        "required": true
+      },
+      "enableNotifications": {
+        "title": "Enable Doorbell Notifications (opens persistent CTPP/VIP listener)",
+        "type": "boolean",
+        "default": true
+      },
+      "reconnectDelay": {
+        "title": "Reconnect Delay (seconds)",
+        "type": "integer",
+        "default": 10,
+        "minimum": 5,
+        "maximum": 300
+      }
+    }
+  }
+}
