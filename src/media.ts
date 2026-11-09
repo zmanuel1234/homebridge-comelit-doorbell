@@ -129,9 +129,38 @@ export class KeyframeCache {
   private lastType = -1;
   /** When the latest keyframe arrived (ms since epoch). */
   private at = 0;
+  /**
+   * The call's first keyframe, kept as the last visitor's picture: at the start of a call the
+   * visitor stands at the panel; at its end they have often gone in already.
+   */
+  private visitorFrame?: { frame: Buffer; at: number };
+  private call?: unknown;
+  private wantVisitor = false;
+
+  /** A call's video starts (the same call can be viewed more than once). */
+  newCall(call: unknown): void {
+    if (call !== this.call) {
+      this.call = call;
+      this.wantVisitor = true;
+    }
+  }
+
+  /** The last call's first keyframe, if younger than maxAgeMs. */
+  visitor(maxAgeMs = Infinity): Buffer | undefined {
+    const v = this.visitorFrame;
+    return v && Date.now() - v.at <= maxAgeMs ? v.frame : undefined;
+  }
 
   push(unit: Buffer): void {
     const type = nalType(unit);
+    if (this.wantVisitor && this.lastType === 5 && type !== 5) {
+      // The first keyframe of the call is complete (its slices came back to back).
+      const frame = this.keyframe();
+      if (frame) {
+        this.visitorFrame = { frame, at: this.at };
+        this.wantVisitor = false;
+      }
+    }
     if (type === 7) {
       this.sps = unit;
     } else if (type === 8) {

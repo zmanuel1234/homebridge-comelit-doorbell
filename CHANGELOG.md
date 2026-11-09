@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0-beta.19 (2026-11-08)
+
+### Fixed
+
+- **The live video was still frozen and grey on the Raspberry Pi.** beta.17's fix (`-use_wallclock_as_timestamps`) works with ffmpeg 8, which it was tested with, but not with the ffmpeg 7.0.2 on the Homebridge Raspberry Pi image, so the Pi still sent 2 frames per call. Each frame now gets its arrival time in the video filter (`setpts` with the wall clock), which works with both: replaying both recorded calls through ffmpeg 7.0.2 and 8.0 gives about 15 frames per second, from 0.7 s.
+- **The last visitor's picture often showed an empty doorway.** It was the call's last keyframe, taken after the visitor had gone in. It is now the call's first keyframe, while the visitor waits at the panel. A second live view of the same call keeps that picture.
+
+### Added
+
+- Tests for the new video filter and the last-visitor picture (68 in all).
+- README: troubleshooting row updated; when the last visitor's picture is taken.
+
 ## 2.1.0-beta.18 (2026-11-08)
 
 ### Fixed

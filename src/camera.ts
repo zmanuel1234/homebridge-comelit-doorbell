@@ -173,18 +173,24 @@ export function resolveFfmpeg(configured: string, nodeModules = path.join(__dirn
   return candidates.find((c) => existsSync(c)) ?? 'ffmpeg';
 }
 
-/**
- * The intercom's video, read from stdin. Measured on a 6741W recording (2026-11-08):
- * - its SPS declares 1,200,000 fps, so frames got timestamps microseconds apart and ffmpeg
- *   output only 2 frames per call (a frozen picture): use the arrival time instead;
- * - ffmpeg showed nothing until the second keyframe, 3-4 s later: `showall` starts at the first.
- */
 /** Pictures wider than 2:1 (the 6741W's 640x240) are 4:3 at half height: restore the height. */
 export const RESTORE_ASPECT = "scale=w=iw:h='if(gt(iw/ih,2),2*ih,ih)',setsar=1";
 
-export const LIVE_INPUT = ['-use_wallclock_as_timestamps', '1', '-flags2', '+showall', '-f', 'h264', '-framerate', '16', '-i', 'pipe:0'];
+/**
+ * The intercom's video, read from stdin. Measured on 6741W recordings (2026-11-08):
+ * ffmpeg showed nothing until the second keyframe, 3-4 s later: `showall` starts at the first.
+ */
+export const LIVE_INPUT = ['-flags2', '+showall', '-f', 'h264', '-framerate', '16', '-i', 'pipe:0'];
 
-export function videoArgs(o: { width: number; height: number; fps: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; mtu: number; codec: string }): string[] {
+/**
+ * The 6741W's SPS declares 1,200,000 fps, so ffmpeg gave frames timestamps microseconds apart
+ * and sent 2 frames per call (a frozen picture). Each frame gets its arrival time instead.
+ * Done in the filter, because `-use_wallclock_as_timestamps` works with ffmpeg 8 but not with
+ * the 7.0 on the Homebridge Raspberry Pi image.
+ */
+export const ARRIVAL_TIME = 'setpts=(RTCTIME-RTCSTART)/(TB*1000000)';
+
+export function videoArgs(o: { width: number; height: number; fps: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; mtu: number; codec: string; live?: boolean }): string[] {
   const encode =
     o.codec === 'copy'
       ? ['-c:v', 'copy']
@@ -197,7 +203,7 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
           // The 6741W sends 640x240: a 4:3 picture squeezed to half height. Restore the height for
           // pictures wider than 2:1, then fit the Home app's size.
           '-vf',
-          `${RESTORE_ASPECT},` +
+          `${o.live === false ? '' : `${ARRIVAL_TIME},`}${RESTORE_ASPECT},` +
             `scale=${o.width}:${o.height}:force_original_aspect_ratio=decrease,pad=${o.width}:${o.height}:(ow-iw)/2:(oh-ih)/2`,
           '-b:v', `${o.bitrate}k`,
         ];
@@ -316,7 +322,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   /** The last visitor's picture from the last call, if it is recent enough (lastVisitorMinutes). */
   private async lastVisitor(width: number): Promise<Buffer | undefined> {
-    const keyframe = this.settings.lastVisitorMs > 0 ? this.keyframes.keyframe(this.settings.lastVisitorMs) : undefined;
+    const keyframe = this.settings.lastVisitorMs > 0 ? this.keyframes.visitor(this.settings.lastVisitorMs) : undefined;
     if (!keyframe) {
       return undefined;
     }
@@ -477,7 +483,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
     const vargs = videoArgs({
       width: v.width, height: v.height, fps: Math.min(v.fps, 16), bitrate: v.max_bit_rate, pt: v.pt, ssrc: p.videoSsrc, srtp: p.videoSrtp,
-      address: p.address, port: p.videoPort, mtu: v.mtu, codec: media ? this.settings.videoCodec : 'libx264',
+      address: p.address, port: p.videoPort, mtu: v.mtu, codec: media ? this.settings.videoCodec : 'libx264', live: Boolean(media),
     });
     // ffmpeg reports its progress on stdout: frames encoded and sent to the Home app.
     vargs.unshift('-progress', 'pipe:1');
@@ -512,6 +518,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         });
         active.capture = capture;
       }
+      this.keyframes.newCall(media);
       const first = this.keyframes.keyframe(FRESH_KEYFRAME_MS);
       if (first) {
         active.video.stdin.write(first);

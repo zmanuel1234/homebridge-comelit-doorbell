@@ -153,7 +153,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
-| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. `0`: always the idle picture. |
+| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the start of the call, while the visitor waits at the panel. `0`: always the idle picture. |
 
 ### Experimental: media timing and troubleshooting
 
@@ -228,7 +228,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
-| The live view shows a frozen or almost still picture | Fixed in 2.1.0-beta.17. The summary line's `frames sent to the Home app` should grow by about 16 per second. |
+| The live view shows a frozen, almost still or grey picture | Fixed in 2.1.0-beta.19 (beta.17 fixed it only for ffmpeg 8, not the ffmpeg 7.0 on the Homebridge Raspberry Pi image). The summary line's `frames sent to the Home app` should grow by about 16 per second. |
 | The live view stays blank for several seconds | The video can only start at a keyframe. The log shows `call: video …; first keyframe … s after …` and `call: a keyframe every … s`; please share those lines in an issue if it takes long. |
 | Talk-back: the visitor doesn't hear you | Look for `talk-back: sound from the Home app microphone is arriving` (the Home app sends your voice) and `talk-back sent=…` above zero in `call: media received` (it goes to the intercom). |
 | The live view closes by itself shortly after unlocking | Expected: the intercom ends the call about 10–15 s after the door opens. |
