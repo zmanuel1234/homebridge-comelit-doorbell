@@ -132,3 +132,11 @@ test('media that already ended when the view starts gives the still picture (bet
   assert.strictEqual(media.listenerCount('video'), 0);
   await cam.stopStream('eeeeeeee-1', 'test');
 });
+
+test("ring preview video becomes the visitor's picture (test build)", () => {
+  const cam = camera({ ringPreview: true });
+  const callObj = {};
+  for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  const v = cam.keyframes.visitor(60_000);
+  assert.ok(v && v.includes(0x65));
+});

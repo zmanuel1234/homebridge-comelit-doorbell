@@ -182,6 +182,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 | Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
 | Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each call's raw media is saved, once however many devices watch it: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 calls are kept. About 3–5 MB per minute. |
+| Visitor's picture in the ring notification (test) (`ringPreview`) | off | Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The log says whether it works (`Ring preview (test): …`) and when HomeKit asked for the picture. Needs the doorbell camera, and **Show the last visitor for** above 0. |
 
 ## How ring and unlock work
 

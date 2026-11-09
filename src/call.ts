@@ -73,6 +73,8 @@ interface Call {
    * The intercom sends that request right after the answer, often before ours.
    */
   panelAudioHandle?: number;
+  /** The ring preview: video asked for during the ring, before anyone answers. */
+  preview?: RingPreview;
 }
 
 interface Waiter {
@@ -82,6 +84,15 @@ interface Waiter {
 }
 
 const hex = (b: Buffer) => b.toString('hex');
+/** The ring preview stops this long after its first keyframe, or after PREVIEW_MAX_MS. */
+const PREVIEW_AFTER_KEYFRAME_MS = 500;
+const PREVIEW_MAX_MS = 8_000;
+
+/** Ring preview settings: off unless set. `onVideo` gets the preview's H.264 units. */
+export interface RingPreviewOptions {
+  hd: boolean;
+  onVideo: (call: object, unit: Buffer) => void;
+}
 const le16 = (v: number) => {
   const b = Buffer.alloc(2);
   b.writeUInt16LE(v & 0xffff, 0);
@@ -128,10 +139,18 @@ export class CallHandler {
     this.client = client;
   }
 
+  /** Experimental: ask for video during the ring, before anyone answers (see RingPreview). */
+  private preview?: RingPreviewOptions;
+  enablePreview(options: RingPreviewOptions | undefined): void {
+    this.preview = options;
+  }
+
   /** True while a call is answered, or its media is starting or running. */
   busy(): boolean {
     this.activeCall(); // drops ended and stale calls
-    return [...this.calls.values()].some((c) => !c.ended && (c.answered || c.answering !== undefined || c.media !== undefined || c.mediaStarting !== undefined));
+    return [...this.calls.values()].some(
+      (c) => !c.ended && (c.answered || c.answering !== undefined || c.media !== undefined || c.mediaStarting !== undefined || (c.preview !== undefined && !c.preview.done)),
+    );
   }
 
   /** The most recent call still in progress, if any. */
@@ -188,6 +207,7 @@ export class CallHandler {
     if (frame.opcode === Opcode.RELEASE || frame.flags & Flag.FIN) {
       call.ended = true;
       call.media?.end('the intercom ended the call');
+      void call.preview?.stop(`the intercom ended the call${frame.body.length >= 3 && frame.opcode === Opcode.RELEASE ? ` (cause ${frame.body[2]})` : ''}`);
       return;
     }
     // Data from the intercom must be acknowledged. Most of it is, by the next frame we send; what
@@ -207,6 +227,11 @@ export class CallHandler {
       await this.send(call, Flag.DATA, Buffer.from(frame.body), 'invite echo');
     } else if (frame.opcode === Opcode.CAPABILITIES) {
       await this.send(call, Flag.DATA, APP_CAPABILITIES, 'capabilities'); // acknowledges it too
+      if (this.preview && this.client && !call.preview && !call.answered && call.answering === undefined) {
+        // Not awaited: the call's frames must keep flowing while the preview waits for video.
+        call.preview = new RingPreview(this, this.client, call, this.preview, this.log);
+        void call.preview.start();
+      }
     } else if (needsAck) {
       await this.sendAck(call);
     }
@@ -223,6 +248,8 @@ export class CallHandler {
       return;
     }
     call.answering ??= (async () => {
+      // The preview's channels go before the call's own media starts.
+      await call.preview?.stop('the call is being answered');
       const reply = this.wait(call, Opcode.SETUP_ACK, 1500);
       await this.send(call, Flag.DATA, SETUP_ACK, 'answer 000c');
       await reply;
@@ -592,5 +619,130 @@ export class MediaSession extends EventEmitter {
     }, LATE_PACKETS_MS);
     release.unref?.();
     this.emit('end', reason);
+  }
+}
+
+/**
+ * Experimental ring preview: asks the intercom for video during the ring, without answering,
+ * so the notification can show who is at the door. Logs what the intercom does, as nobody
+ * knows yet whether it sends video to the app before an answer (its own monitor gets it).
+ * Stops after the first keyframe, after PREVIEW_MAX_MS, or when the call is answered or ends;
+ * never hangs up.
+ */
+export class RingPreview {
+  done = false;
+  private udpHandle?: number;
+  private videoHandle?: number;
+  private readonly handles = new Set<number>();
+  private readonly depacketizer = new H264Depacketizer();
+  private startedAt = 0;
+  private firstVideoAt = 0;
+  private keyframeAt = 0;
+  private size?: string;
+  private packets = 0;
+  private timer?: NodeJS.Timeout;
+  private stopping?: Promise<void>;
+  private readonly drop = (): void => undefined;
+
+  constructor(
+    private readonly handler: CallHandler,
+    private readonly client: IconaBridgeClient,
+    private readonly call: Call,
+    private readonly options: RingPreviewOptions,
+    private readonly log?: Logging,
+  ) {}
+
+  async start(): Promise<void> {
+    this.startedAt = Date.now();
+    this.timer = setTimeout(() => void this.stop(`no keyframe within ${PREVIEW_MAX_MS / 1000} s`), PREVIEW_MAX_MS);
+    try {
+      this.udpHandle = (await this.client.openChannel('UDPM', ChannelType.UAUT)).serverChannelId;
+      if (this.done) {
+        return void (await this.close());
+      }
+      this.videoHandle = (await this.client.openChannel('RTPC-video', ChannelType.UAUT, undefined, 0, 'RTPC')).serverChannelId;
+      if (this.done) {
+        return void (await this.close());
+      }
+      // The intercom sends video on the handle after the one offered.
+      for (const h of [this.videoHandle, (this.videoHandle + 1) & 0xffff]) {
+        this.handles.add(h);
+        this.client.setBinaryHandler(h, (body) => this.onMedia(body));
+      }
+      const settings = this.options.hd ? videoSettings(HD_RESOLUTION, 1000) : videoSettings(SD_RESOLUTION, 0);
+      const reply = this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 2000);
+      await this.handler.send(this.call, Flag.DATA, Buffer.concat([VIDEO_OFFER, le16(this.videoHandle), settings]), 'ring preview video request');
+      const r = await reply;
+      this.log?.debug(`call: ring preview: reply to the video request ${r ? `op=0x${r.opcode.toString(16)} body=${hex(r.body)}` : 'none within 2 s'}`);
+    } catch (e) {
+      await this.stop(`setup failed: ${(e as Error).message}`);
+    }
+  }
+
+  private onMedia(body: Buffer): void {
+    const rtp = parseRtp(body);
+    if (!rtp || this.done) {
+      return;
+    }
+    this.packets++;
+    if (this.firstVideoAt === 0) {
+      this.firstVideoAt = Date.now();
+    }
+    for (const unit of this.depacketizer.push(rtp)) {
+      const type = nalType(unit);
+      if (type === 7 && !this.size) {
+        const sps = parseSps(unit);
+        this.size = sps ? `${sps.width}x${sps.height}` : 'size unknown';
+      }
+      this.options.onVideo(this.call, unit);
+      if (type === 5 && this.keyframeAt === 0) {
+        this.keyframeAt = Date.now();
+        clearTimeout(this.timer);
+        // A little more, so the keyframe's last slices and the next frame arrive.
+        this.timer = setTimeout(() => void this.stop('got a picture'), PREVIEW_AFTER_KEYFRAME_MS);
+      }
+    }
+  }
+
+  /** Stops the preview and closes its channels (never hangs up). Logs the result once. */
+  stop(reason: string): Promise<void> {
+    this.stopping ??= (async () => {
+      this.done = true;
+      clearTimeout(this.timer);
+      const t = (at: number) => (at ? `${((at - this.startedAt) / 1000).toFixed(1)} s` : 'never');
+      const result = this.keyframeAt
+        ? 'video before answering works'
+        : this.packets
+          ? 'video came, but no keyframe'
+          : 'no video before answering';
+      this.log?.info(
+        `Ring preview (test): ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
+          `${this.size ?? 'size unknown'}, ${this.packets} packets; stopped: ${reason}`,
+      );
+      await this.close();
+    })();
+    return this.stopping;
+  }
+
+  private async close(): Promise<void> {
+    for (const h of this.handles) {
+      this.client.setBinaryHandler(h, this.drop);
+    }
+    const open = [['RTPC-video', this.videoHandle], ['UDPM', this.udpHandle]] as const;
+    this.videoHandle = this.udpHandle = undefined; // closed once, even if stop and start both close
+    for (const [name, h] of open) {
+      if (h !== undefined) {
+        await this.client.closeHandle(name, h).catch(() => undefined);
+      }
+    }
+    const handles = [...this.handles];
+    const release = setTimeout(() => {
+      for (const h of handles) {
+        if (this.client.binaryHandlerFor(h) === this.drop) {
+          this.client.setBinaryHandler(h);
+        }
+      }
+    }, LATE_PACKETS_MS);
+    release.unref?.();
   }
 }

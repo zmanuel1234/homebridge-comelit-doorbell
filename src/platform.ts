@@ -233,6 +233,11 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       });
       listener = new VipEventListener(client, deviceConfig, (ev) => this.onEvent(ev), this.log, call);
       call.attach(client);
+      call.enablePreview(
+        s.ringPreview && s.camera
+          ? { hd: s.videoQuality === 'hd', onVideo: (c, unit) => this.camera?.previewVideo(c, unit) }
+          : undefined,
+      );
       this.callHandler = call;
       this.vipListener = listener;
       await listener.start().catch((e) => this.log.warn(`VIP listener start failed: ${(e as Error).message}`));

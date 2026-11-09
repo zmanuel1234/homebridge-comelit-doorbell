@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0-beta.27 (2026-11-09)
+
+A test build for the visitor's picture in the ring notification. Everything else is as in beta.26.
+
+### Added
+
+- **Visitor's picture in the ring notification (test)** (`ringPreview`, off by default, in the troubleshooting section): on a ring, asks the intercom for video before anyone answers, so the notification can show who is at the door instead of an older picture. It doesn't answer: the phones and the monitor keep ringing, and it stops at the first picture, after 8 s at most, or as soon as the call is answered (the live view and doctor mode work as before). The log says what happened (`Ring preview (test): video before answering works / no video before answering …`), and when HomeKit asked for the notification's picture, to see whether the picture comes in time.
+
 ## 2.1.0-beta.26 (2026-11-09)
 
 Fixes from an independent review of beta.25, before the stable 2.1.0.

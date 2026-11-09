@@ -318,7 +318,17 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   ring(): void {
+    this.ringAt = Date.now();
     this.controller.ringDoorbell();
+  }
+
+  /** When the doorbell last rang (for the ring preview test's log). */
+  private ringAt = 0;
+
+  /** Video from the ring preview: its first keyframe becomes the visitor's picture. */
+  previewVideo(call: object, unit: Buffer): void {
+    this.keyframes.newCall(call);
+    this.keyframes.push(unit);
   }
 
   // ─── Snapshots ─────────────────────────────────────────────────────────────
@@ -333,7 +343,14 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private async snapshot(request: SnapshotRequest): Promise<Buffer> {
-    return (await this.lastVisitor(request.width)) ?? this.placeholderImage();
+    const visitor = await this.lastVisitor(request.width);
+    if (this.settings.ringPreview && this.ringAt && Date.now() - this.ringAt < 60_000) {
+      this.log.info(
+        `Ring preview (test): HomeKit asked for the picture ${((Date.now() - this.ringAt) / 1000).toFixed(1)} s after the ring; ` +
+          `${visitor ? "gave the visitor's picture" : 'no picture yet, gave the idle one'}`,
+      );
+    }
+    return visitor ?? this.placeholderImage();
   }
 
   /** The last visitor's picture from the last call, if it is recent enough (lastVisitorMinutes). */
