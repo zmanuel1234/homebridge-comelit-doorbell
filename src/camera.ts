@@ -268,6 +268,8 @@ export function talkSdp(address: string, ipv6: boolean, port: number, srtp: Buff
 
 /** The last visitor's picture, saved in Homebridge's storage folder. */
 const VISITOR_FILE = 'comelit-last-visitor.h264';
+/** How long after a ring a picture request waits for the ring preview's picture. */
+const PREVIEW_PICTURE_WAIT_MS = 4_500;
 
 export class DoorbellCamera implements CameraStreamingDelegate {
   readonly controller: DoorbellController;
@@ -322,9 +324,12 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     const storage = api.user?.storagePath?.();
     if (storage && settings.lastVisitorMs > 0) {
       this.visitorFile = path.join(storage, VISITOR_FILE);
-      this.keyframes.onVisitor = (frame) => void this.saveVisitor(frame);
       void this.loadVisitor();
     }
+    this.keyframes.onVisitor = (frame) => {
+      this.pictureWait?.resolve();
+      void this.saveVisitor(frame);
+    };
   }
 
   /** Where the last visitor's picture is saved (as H.264), if anywhere. */
@@ -361,11 +366,29 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   ring(): void {
     this.ringAt = Date.now();
+    if (this.settings.ringPreview) {
+      // HomeKit asks for the notification's picture within a second or two of the ring; the
+      // intercom's first picture comes about 3 s after it. Hold such requests until it is here.
+      this.pictureWait?.resolve();
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => (resolve = r));
+      const timer = setTimeout(resolve, PREVIEW_PICTURE_WAIT_MS);
+      timer.unref?.();
+      this.pictureWait = { promise, resolve: () => { clearTimeout(timer); resolve(); } };
+      void promise.then(() => (this.pictureWait = undefined));
+    }
     this.controller.ringDoorbell();
   }
 
-  /** When the doorbell last rang (for the ring preview test's log). */
+  /** When the doorbell last rang. */
   private ringAt = 0;
+  /** Set from a ring until the ring preview's picture arrives, the preview stops, or PREVIEW_PICTURE_WAIT_MS. */
+  private pictureWait?: { promise: Promise<void>; resolve: () => void };
+
+  /** The ring preview stopped: stop waiting for its picture (it may have none). */
+  previewDone(): void {
+    this.pictureWait?.resolve();
+  }
 
   /** Video from the ring preview: its first keyframe becomes the visitor's picture. */
   previewVideo(call: object, unit: Buffer): void {
@@ -385,12 +408,16 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private async snapshot(request: SnapshotRequest): Promise<Buffer> {
+    const asked = Date.now();
+    const waiting = this.pictureWait;
+    if (waiting) {
+      await waiting.promise;
+    }
     const visitor = await this.lastVisitor(request.width);
-    if (this.settings.ringPreview && this.ringAt && Date.now() - this.ringAt < 60_000) {
-      this.log.info(
-        `Ring preview (test): HomeKit asked for the picture ${((Date.now() - this.ringAt) / 1000).toFixed(1)} s after the ring; ` +
-          `${visitor ? "gave the visitor's picture" : 'no picture yet, gave the idle one'}`,
-      );
+    if (this.settings.ringPreview && this.ringAt && asked - this.ringAt < 60_000) {
+      const which = !visitor ? 'no picture, gave the idle one' : this.keyframes.visitorAt() >= this.ringAt ? "gave this ring's picture" : 'gave an earlier visitor\'s picture';
+      const waited = waiting ? ` after waiting ${((Date.now() - asked) / 1000).toFixed(1)} s` : '';
+      this.log.info(`Ring preview (test): HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; ${which}${waited}`);
     }
     return visitor ?? this.placeholderImage();
   }

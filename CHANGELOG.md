@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.0-beta.28 (2026-11-09)
+
+The ring preview test, second step. Everything else is as in beta.27.
+
+### Changed
+
+- **Visitor's picture in the ring notification (test)**: on the 6741W, video before an answer works, but the first picture comes about 3 s after the ring, while HomeKit asks for the notification's picture after 0.2–2 s, so it got the previous visitor's picture. A picture request in the first 4.5 s after a ring now waits for the preview's picture (or for the preview to stop without one). The ring itself still goes out at once.
+- The log line says which picture HomeKit got (this ring's, an earlier visitor's, or the idle one) and how long it waited.
+
 ## 2.1.0-beta.27 (2026-11-09)
 
 A test build for the visitor's picture in the ring notification. Everything else is as in beta.26.

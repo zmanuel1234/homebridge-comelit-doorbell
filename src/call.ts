@@ -92,6 +92,8 @@ const PREVIEW_MAX_MS = 8_000;
 export interface RingPreviewOptions {
   hd: boolean;
   onVideo: (call: object, unit: Buffer) => void;
+  /** The preview has stopped, with or without a picture. */
+  onDone?: (call: object) => void;
 }
 const le16 = (v: number) => {
   const b = Buffer.alloc(2);
@@ -719,6 +721,7 @@ export class RingPreview {
         `Ring preview (test): ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
           `${this.size ?? 'size unknown'}, ${this.packets} packets; stopped: ${reason}`,
       );
+      this.options.onDone?.(this.call);
       await this.close();
     })();
     return this.stopping;

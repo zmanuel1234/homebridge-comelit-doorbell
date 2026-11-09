@@ -277,7 +277,7 @@
         "title": "Visitor's picture in the ring notification (test)",
         "type": "boolean",
         "default": false,
-        "description": "Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is there. Doesn't answer the call. Logs 'Ring preview (test): …' with the result. Needs the doorbell camera."
+        "description": "Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is there; HomeKit's picture request waits up to 4.5 s after the ring for it. Doesn't answer the call. Logs 'Ring preview (test): …' with the result. Needs the doorbell camera."
       }
     },
     "required": [

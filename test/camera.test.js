@@ -167,3 +167,40 @@ test("the last visitor's picture survives a restart, and expires with lastVisito
   assert.strictEqual(later.keyframes.visitor(), undefined);
   fs.rmSync(dir, { recursive: true });
 });
+
+function pictureCamera(config) {
+  const cam = camera({ ringPreview: true, ...config });
+  cam.lastVisitor = async () => (cam.keyframes.visitor() ? Buffer.from('visitor') : undefined);
+  cam.placeholderImage = async () => Buffer.from('idle');
+  cam.controller.ringDoorbell = () => undefined;
+  return cam;
+}
+const feed = (cam, callObj) => { for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u])); };
+
+test("a picture asked for right after a ring waits for the ring preview's picture (beta.28)", async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  let got;
+  const asking = cam.snapshot({ width: 640, height: 480 }).then((b) => (got = b.toString()));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.strictEqual(got, undefined, 'still waiting');
+  feed(cam, {});
+  await asking;
+  assert.strictEqual(got, 'visitor');
+});
+
+test('the wait ends when the preview stops without a picture (beta.28)', async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  const asking = cam.snapshot({ width: 640, height: 480 });
+  cam.previewDone();
+  assert.strictEqual((await asking).toString(), 'idle');
+});
+
+test('without the ring preview, a picture is never held (beta.28)', async () => {
+  const cam = pictureCamera({ ringPreview: false });
+  cam.ring();
+  const t = Date.now();
+  assert.strictEqual((await cam.snapshot({ width: 640, height: 480 })).toString(), 'idle');
+  assert.ok(Date.now() - t < 100);
+});
