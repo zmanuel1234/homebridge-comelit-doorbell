@@ -211,7 +211,9 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
         ];
   return [
     '-hide_banner', '-loglevel', 'error',
-    '-fflags', '+genpts+nobuffer', '-flags', 'low_delay', '-probesize', '32768', '-analyzeduration', '0',
+    // No `nobuffer`: it drops what ffmpeg reads while probing the input, which is the intercom's
+    // first keyframe (33 KB), so the picture stayed grey until the next one, 3-7 s later.
+    '-fflags', '+genpts', '-flags', 'low_delay', '-probesize', '32768', '-analyzeduration', '0',
     ...LIVE_INPUT,
     '-an', '-sn', '-dn',
     ...encode,
@@ -227,6 +229,8 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
 export function audioArgs(o: { sampleRate: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; gainDb?: number }): string[] {
   return [
     '-hide_banner', '-loglevel', 'error',
+    // Without these, ffmpeg buffers about 3 s of audio to probe it, and the sound lags by that much.
+    '-probesize', '32', '-analyzeduration', '0',
     '-f', 'alaw', '-ar', '8000', '-ac', '1', '-i', 'pipe:0',
     '-vn', '-sn', '-dn',
     // The 6741W's microphone is quiet (speech about -33 dB, 2026-11-08): turn it up, with a

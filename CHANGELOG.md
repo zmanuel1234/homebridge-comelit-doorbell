@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0-beta.23 (2026-11-08)
+
+From the seventh real test (beta.22): the picture was still smeared at the start, and the sound from the door arrived a few seconds late. Both reproduced here with a recorded call and the Pi's ffmpeg 7.0.2, and both had the same kind of cause: ffmpeg's start-up handling of its input.
+
+### Fixed
+
+- **Smeared, grey start of the live video.** The video input used `-fflags nobuffer`, which makes ffmpeg drop what it reads while probing the input. That was the intercom's first keyframe (about 33 KB), so ffmpeg had nothing to build the picture on until the next keyframe, 3–7 s later, and showed grey smears in between. Without it, the picture is clean from the first frame. (This was probably also why beta.17 needed `showall`; the 2 s keyframe interval from beta.20 stays.)
+- **Sound from the door about 3 s late.** The audio input had no probe limits, so ffmpeg held about 3.3 s of audio before sending any, and the sound lagged by that much for the whole call. It now starts after about 0.1 s. Talk-back was measured too and has no such delay.
+
+### Added
+
+- Tests for both input options (72 in all).
+
 ## 2.1.0-beta.22 (2026-11-08)
 
 From the sixth real test (beta.21, doctor mode off): video, talk-back and the last visitor's picture work; the picture was smeared at the start, and the sound from the door was hard to hear.
