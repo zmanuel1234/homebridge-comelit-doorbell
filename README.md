@@ -241,7 +241,7 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 What a call looks like:
 
 - The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It starts clean, from the intercom's first keyframe.
-- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480. A Home app that knew the camera from before 2.1.0 may still ask for 1280x720 for a while; the plugin then enlarges the picture, which works but is less sharp.
+- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480. A Home app that knew the camera from an earlier beta may still ask for 1280x720; the plugin then enlarges the picture, which works but is less sharp. See [updating from 2.0.x](#updating-from-20x) for how to refresh it.
 - The intercom's microphone is quiet; the plugin turns it up by **Turn up the sound from the door by** (12 dB).
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
@@ -263,7 +263,8 @@ Your config keeps working. What changes:
 - **Doorbell camera trigger URL** has no default any more (see step 3 above).
 - **Talk-back** is on by default for the doorbell camera.
 - The log is quieter: protocol details (`call:`, `diag:`, renewals) need debug mode.
-- New: the doorbell camera with live video and talk-back, doctor mode, door volume, and a reconnect back-off. All are in the config editor.
+- New: the doorbell camera with live video and talk-back, the visitor's picture in the ring notification, unlocking during a ring without the video, doctor mode, door volume, and a reconnect back-off. All are in the config editor.
+- **If you used the doorbell camera in a 2.1.0 beta before beta.22**, the Home app may keep asking for 1280x720 (the live view summary says `asked 1280x720`): it cached the camera's old list of sizes. To refresh it, set **Talk back from the Home app** off, restart the child bridge, open the Home app once, then turn it back on and restart again. Changing talk-back adds or removes a service, which makes the Home app read the camera again; checked on a 6741W setup on 2026-11-09 (1280x720 → 640x360).
 
 ## Troubleshooting
 
