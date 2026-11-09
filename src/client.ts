@@ -273,7 +273,7 @@ export class IconaBridgeClient extends EventEmitter {
       const n = (this.unknownFrames.get(requestId) ?? 0) + 1;
       this.unknownFrames.set(requestId, n);
       if (n <= 3 || n % 500 === 0) {
-        this.log?.info(`diag: frame #${n} on unknown channel ${requestId} (${body.length} B): ${body.subarray(0, 64).toString('hex')}`);
+        this.log?.debug(`diag: frame #${n} on unknown channel ${requestId} (${body.length} B): ${body.subarray(0, 64).toString('hex')}`);
       }
       return;
     }
@@ -294,7 +294,7 @@ export class IconaBridgeClient extends EventEmitter {
       const name = body.length >= 14 ? body.subarray(8, 12).toString('latin1') : '';
       const devReqId = body.length >= 14 ? body.readUInt16LE(12) : body.readUInt16LE(body.length - 3);
       this.socket?.write(encodeChannelOpenResponse(devReqId));
-      this.log?.info(`diag: device opened channel ${name || '?'} as ${devReqId}`);
+      this.log?.debug(`diag: device opened channel ${name || '?'} as ${devReqId}`);
       this.emit('channel', name, devReqId);
       for (const ch of this.channels.values()) {
         if (!ch.isOpen && ch.serverChannelId === 0 && ch.requestId === 0) {

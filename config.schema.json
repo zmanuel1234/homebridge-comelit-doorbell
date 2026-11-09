@@ -64,7 +64,7 @@
       "leaseRefreshMode": {
         "title": "Registration refresh mode",
         "type": "string",
-        "default": "reconnect",
+        "default": "inplace",
         "oneOf": [
           {
             "title": "Reconnect",
@@ -73,7 +73,7 @@
             ]
           },
           {
-            "title": "Re-register in place",
+            "title": "Re-register in place (default)",
             "enum": [
               "inplace"
             ]
@@ -177,8 +177,8 @@
       "talkBack": {
         "title": "Talk back from the Home app (experimental)",
         "type": "boolean",
-        "default": false,
-        "description": "Sends the Home app's microphone to the intercom's speaker during a live view."
+        "default": true,
+        "description": "Sends the Home app's microphone to the intercom's speaker during a live view. On by default."
       },
       "videoQuality": {
         "title": "Video quality",

@@ -28,9 +28,21 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 
 ## Tested hardware
 
-| Model | Model id | Firmware | Works |
-|---|---|---|---|
-| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera (2.1.0-beta.19, ffmpeg 7.0.2 on the Homebridge Pi image): answering from the live view, live video (640x240, shown as 4:3), the intercom's audio, talk-back, unlocking during the call, the last visitor's picture |
+Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0), with Homebridge on a Raspberry Pi (Homebridge image, ffmpeg 7.0.2), plugin 2.1.0-beta.24:
+
+| Feature | Works | Notes |
+|---|---|---|
+| Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
+| Door release from HomeKit after a ring | ✅ | Refused outside the ring window; refused as *busy* during an unanswered ring unless answered |
+| Doorbell camera: answering by opening the live view | ✅ | |
+| Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, ~15 frames per second |
+| Sound from the door | ✅ | Turned up 12 dB by default; no delay |
+| Talk-back | ✅ | |
+| Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
+| Last visitor's picture | ✅ | Taken at the start of the call |
+| Doctor mode (always, or with its switch) | ✅ | |
+| Gate / actuator output | ❓ | Not tested |
+| Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
 Other ViP devices may work. You'll find the model id and firmware on the intercom's web page, under **Device info**. Please open an issue with them, whether it works or not.
 
@@ -71,8 +83,7 @@ Fill in **Intercom IP address**, **User token** and **User row number** in the p
   "name": "Comelit Intercom",
   "host": "192.168.1.50",
   "token": "0123456789abcdef0123456789abcdef",
-  "subaddress": 3,
-  "leaseRefreshMode": "inplace"
+  "subaddress": 3
 }
 ```
 
@@ -131,7 +142,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 
 | Setting | Default | Description |
 |---|---|---|
-| Registration refresh mode (`leaseRefreshMode`) | `reconnect` | `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed; a ring during the few seconds of re-registration is kept). `inplace`: renew on the open connection, with no gap (recommended). |
+| Registration refresh mode (`leaseRefreshMode`) | `inplace` | `inplace`: renew on the open connection, with no gap (default since 2.1.0). `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed; a ring during the few seconds of re-registration is kept). |
 | Registration refresh interval (`leaseRefreshMinutes`) | `2` | Minutes between refreshes. 2 is proven; longer intervals may miss rings. |
 | Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often |
 | Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops. Planned reconnects for the registration wait at most 2 s. |
@@ -151,7 +162,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Setting | Default | Description |
 |---|---|---|
 | Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera-experimental). |
-| Talk back from the Home app (`talkBack`) | `false` | Sends the Home app's microphone to the intercom's speaker during a live view |
+| Talk back from the Home app (`talkBack`) | `true` | Sends the Home app's microphone to the intercom's speaker during a live view (on by default since 2.1.0). Set to `false` to hide the microphone button. |
 | Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for up to 800x480. A 6741W sends 640x240 either way (its camera's format), which the plugin shows as 4:3. |
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
@@ -188,7 +199,7 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 | `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices stop ringing. |
 | `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Needs the doorbell camera. |
 
-Every message of the call is logged with the prefix `call:`. Please share those logs in an issue if you try it.
+Every message of the call is logged with the prefix `call:` at debug level: turn on **debug mode** for the child bridge to see them.
 
 ### Doctor mode
 
@@ -208,7 +219,7 @@ With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 - **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
 - **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it. Checked with ffmpeg 7.0.2 (Homebridge Raspberry Pi image) and 8.0.
 
-The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio, talk-back and unlocking during the call work on a 6741W with the Homebridge Raspberry Pi image's ffmpeg 7.0.2 (2.1.0-beta.19). The `call:` lines in the log count the video and audio packets received.
+The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio, talk-back and unlocking during the call work on a 6741W with the Homebridge Raspberry Pi image's ffmpeg 7.0.2 (2.1.0-beta.19). With debug mode on, the `call:` lines count the video and audio packets received. Every live view ends with a `Doorbell camera: live view summary` line at normal level.
 
 What a call looks like:
 
@@ -231,7 +242,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 
 | Symptom | What to check |
 |---|---|
-| Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. Check the log for `Registration renewed in place` or reconnects. |
+| Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. With debug mode on, the log shows `Registration renewed in place` every refresh; otherwise look for reconnects. |
 | No rings at all, but the phones ring | Make sure `subaddress` is a user of its own, not shared with a phone, and that `registerPush` is off. On the intercom's Extender page, the Homebridge user should appear under **Registered slaves**. |
 | Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
 | Rings arrive, but camera-ffmpeg's doorbell no longer rings (after updating to 2.1.0-beta.7) | The trigger URL has no default any more. Set **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. |
@@ -250,7 +261,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | No sound in the live view, or `Unknown encoder 'libfdk_aac'` | The ffmpeg in use lacks `libfdk_aac`. Check the `Doorbell camera: ffmpeg …` line at startup, and set **ffmpeg path** to one that has it (e.g. `/usr/local/bin/ffmpeg` on the Homebridge Pi image). |
 | The camera keeps showing a visitor from earlier | That's the last visitor, shown for **Show the last visitor for** minutes after a call. Set it to `0` to always show the idle picture. |
 
-Turn on **debug mode** for the child bridge to see every protocol message (`VIP msg:`).
+Turn on **debug mode** for the child bridge to see every protocol message (`VIP msg:`), the call's messages (`call:`), diagnostics (`diag:`) and the registration renewals. Without it, the log keeps to rings, door opens, warnings and one summary line per live view. The `call:` lines mentioned in this README need debug mode.
 
 ### What to send when reporting a doorbell camera problem
 

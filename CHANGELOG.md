@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.0-beta.25 (2026-11-08)
+
+Preparing the stable 2.1.0 release.
+
+### Changed
+
+- **Quieter log.** The call's messages (`call:`), diagnostics (`diag:`), registration renewals (`Registration renewed in place`, `VIP:` lines) and event lines are now logged at debug level. Without debug mode, the log keeps to rings, door opens, warnings and one summary line per live view. Turn on debug mode for the child bridge to see everything, as before.
+- **`leaseRefreshMode` defaults to `inplace`** (was `reconnect`): renewing on the open connection has no gap in which rings are missed, and is the mode tested for days. Configs that set `reconnect` keep it.
+- **`talkBack` defaults to on** (was off), since it works. With the doorbell camera, the Home app now shows a microphone button. Set `talkBack: false` to hide it. The warning about talk-back without the camera is gone.
+
+### Documentation
+
+- README: the tested-hardware section is a table of tested features; the new defaults; which log lines need debug mode; the example config no longer sets `leaseRefreshMode`.
+
 ## 2.1.0-beta.24 (2026-11-08)
 
 From the eighth real test (beta.23): clean video, sound without delay, doctor mode working.

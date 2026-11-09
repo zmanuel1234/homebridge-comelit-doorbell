@@ -231,7 +231,7 @@ export class VipEventListener {
     try {
       await this.client.sendBinary(this.channel, encodeCallResponseAck(this.ourAddress, aptAddr, word));
       await this.client.sendBinary(this.channel, encodeCallResponseAck(this.ourAddress, aptAddr, word, 0x1820));
-      this.log?.info('VIP: sent renewal ACK pair');
+      this.log?.debug('VIP: sent renewal ACK pair');
     } catch (e) {
       this.log?.warn(`VIP: failed to send renewal ACK: ${(e as Error).message}`);
     }
@@ -243,7 +243,7 @@ export class VipEventListener {
       return;
     }
     this.lastFired.set(eventType, now);
-    this.log?.info(`VIP: firing ${eventType} (addrs=${addresses.join(',')})`);
+    this.log?.debug(`VIP: firing ${eventType} (addrs=${addresses.join(',')})`);
     try {
       this.callback({ eventType, aptAddress: addresses[0] ?? '', timestamp: now / 1000, raw: { source: 'ctpp_vip', addresses } });
     } catch {

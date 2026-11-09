@@ -204,7 +204,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       throw new Error('CTPP channel not open');
     }
     await client.sendBinary(ch, encodeCtppInit(cfg.aptAddress, cfg.aptSubaddress, (Date.now() / 1000) | 0));
-    this.log.info('Registration renewed in place');
+    this.log.debug('Registration renewed in place');
   }
 
   private teardown(): void {
@@ -282,7 +282,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   // ─── Events and door ───────────────────────────────────────────────────────
 
   private onEvent(event: IntercomEvent): void {
-    this.log.info(`Event: ${event.eventType} from ${event.aptAddress}`);
+    this.log.debug(`Event: ${event.eventType} from ${event.aptAddress}`);
     if (event.eventType === 'doorbell_ring') {
       this.lastRingAt = Date.now();
       this.doorbellAccessory?.triggerRing();
