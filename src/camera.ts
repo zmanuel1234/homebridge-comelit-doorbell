@@ -196,7 +196,9 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
       ? ['-c:v', 'copy']
       : [
           '-c:v', o.codec,
-          ...(o.codec === 'libx264' ? ['-preset', 'ultrafast', '-tune', 'zerolatency'] : []),
+          // A keyframe every 2 s: the Home app joins the stream a moment after it starts, and
+          // without a keyframe it shows grey smears until one comes (x264's default is 250 frames).
+          ...(o.codec === 'libx264' ? ['-preset', 'ultrafast', '-tune', 'zerolatency', '-g', String(o.fps * 2)] : []),
           '-pix_fmt', 'yuv420p',
           '-color_range', 'mpeg',
           '-r', String(o.fps),
