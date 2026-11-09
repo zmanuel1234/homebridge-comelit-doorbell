@@ -201,3 +201,28 @@ test('doctor mode: a forced open answers and opens even with answering in handsh
   assert.ok(o.indexOf('c') >= 0 && o.indexOf('2d') > o.indexOf('c'), `answer, then open: ${o.join(' ')}`);
   assert.ok(o.indexOf('e') > o.indexOf('2d'), 'hung up afterwards');
 });
+
+test('data from the intercom is acknowledged, including the keepalive probe of an unanswered ring', async () => {
+  const sent = [];
+  const call = new CallHandler('answer-on-view', 'SB0000023', 'SB000002', async (f) => { sent.push(parseFrame(f)); }, quietLog());
+  await ring(call); // INVITE (seq b4) and capabilities (seq b5): answered with our echo and capabilities
+  const acks = () => sent.filter((f) => f.flags === 0x00);
+  assert.strictEqual(acks().length, 0, 'capabilities are acknowledged by our own capabilities');
+  const ackNow = sent.at(-1).ack;
+  // 20 s later: an empty data frame that doesn't consume a sequence number (seen 2026-11-08 22:07)
+  const probe = { flags: 0x40, conn0: 0x36, conn1: 0x96, seq: 0xb6, ack: 0xd9, body: Buffer.alloc(0), opcode: -1 };
+  await call.onFrame(probe, ['SB000002']);
+  assert.strictEqual(acks().length, 1);
+  assert.strictEqual(acks()[0].ack, ackNow, 'probe acknowledged without advancing');
+  assert.strictEqual(acks()[0].conn0, 0x36 ^ 0x80, 'on our side of the connection');
+  // it was sent again: acknowledged again
+  await call.onFrame(probe, ['SB000002']);
+  assert.strictEqual(acks().length, 2);
+  // the intercom's media request (data with a body): acknowledged, ack advanced
+  await call.onFrame({ flags: 0x40, conn0: 0x36, conn1: 0x96, seq: 0xb6, ack: 0xd9, body: Buffer.from('001118020000000067b5', 'hex'), opcode: 0x0011 }, ['SB000002']);
+  assert.strictEqual(acks().length, 3);
+  assert.strictEqual(acks()[2].ack, 0xb7);
+  // plain acks from the intercom are not acknowledged back
+  await call.onFrame({ flags: 0x00, conn0: 0x36, conn1: 0x96, seq: 0xb7, ack: 0xd9, body: Buffer.alloc(0), opcode: -1 }, ['SB000002']);
+  assert.strictEqual(acks().length, 3);
+});

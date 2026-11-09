@@ -190,16 +190,31 @@ export class CallHandler {
       call.media?.end('the intercom ended the call');
       return;
     }
+    // Data from the intercom must be acknowledged. Most of it is, by the next frame we send; what
+    // isn't was sent again and again: the media request three times (2026-11-08 17:02), and the
+    // empty frame the intercom sends after 20 s of unanswered ringing five times over 7 s
+    // (22:07, a keepalive probe: its sequence number isn't consumed, so the ack stays the same).
+    const needsAck = frame.flags === Flag.DATA;
     const tag = `${frame.seq}:${frame.opcode}`;
     if (call.seen.has(tag)) {
-      return; // retransmission
+      if (needsAck) {
+        await this.sendAck(call); // a retransmission: our acknowledgement was missed
+      }
+      return;
     }
     call.seen.add(tag);
     if (frame.opcode === Opcode.INVITE) {
       await this.send(call, Flag.DATA, Buffer.from(frame.body), 'invite echo');
     } else if (frame.opcode === Opcode.CAPABILITIES) {
-      await this.send(call, Flag.DATA, APP_CAPABILITIES, 'capabilities');
+      await this.send(call, Flag.DATA, APP_CAPABILITIES, 'capabilities'); // acknowledges it too
+    } else if (needsAck) {
+      await this.sendAck(call);
     }
+  }
+
+  /** A plain acknowledgement (no data), as the intercom sends for ours. */
+  private async sendAck(call: Call): Promise<void> {
+    await this.send(call, Flag.ACK, Buffer.alloc(0), 'ack').catch(() => undefined);
   }
 
   /** Answers `call` (SETUP_ACK), once. */

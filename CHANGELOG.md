@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0-beta.24 (2026-11-08)
+
+From the eighth real test (beta.23): clean video, sound without delay, doctor mode working.
+
+### Fixed
+
+- **Messages from the intercom during a call are acknowledged right away.** Before, the plugin only acknowledged them with its next message, so anything it had no reply to was sent again and again: after 20 s of unanswered ringing the intercom checks that the plugin is still there (an empty message), and repeated it five times over 7 s; earlier, its media request arrived three times. The plugin now sends a plain acknowledgement, as the intercom does for ours. This applies while calls are followed (any `answerMode` but `off`, or doctor mode on).
+
+### Added
+
+- Test for the acknowledgements: the empty check, a repeated message, the media request, and no acknowledgement of acknowledgements (73 in all).
+
 ## 2.1.0-beta.23 (2026-11-08)
 
 From the seventh real test (beta.22): the picture was still smeared at the start, and the sound from the door arrived a few seconds late. Both reproduced here with a recorded call and the Pi's ffmpeg 7.0.2, and both had the same kind of cause: ffmpeg's start-up handling of its input.
