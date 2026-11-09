@@ -10,6 +10,7 @@ test('defaults', () => {
   assert.strictEqual(s.ringWindowMs, 90_000);
   assert.strictEqual(s.doorbellTriggerUrl, '');
   assert.strictEqual(s.maxReconnectDelayMs, 300_000);
+  assert.strictEqual(s.doorVolumeDb, 12);
   assert.strictEqual(s.registerPush, false);
   assert.strictEqual(s.answerMode, 'off');
   assert.strictEqual(s.reconnectDelayMs, 10_000);

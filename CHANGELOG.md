@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.0-beta.22 (2026-11-08)
+
+From the sixth real test (beta.21, doctor mode off): video, talk-back and the last visitor's picture work; the picture was smeared at the start, and the sound from the door was hard to hear.
+
+### Changed
+
+- **Sharper picture.** The camera offered the Home app up to 1920x1080, so it asked for 1280x720 at about 300 kbps. The intercom's picture (640x480 once restored to 4:3) was enlarged to four times the pixels and squeezed through that bitrate, which smeared it, most at the start. The camera now offers at most 640x480, the intercom's own size: three times more data per pixel, and less work for the Pi. You may have to close and reopen the Home app once.
+- **Louder sound from the door.** Measured on a recorded call: the intercom's microphone gives speech at about -33 dB, against about -20 dB for normal speech. The plugin now turns it up by 12 dB, with a limiter so loud sounds (like the door release, which peaks near full scale) don't distort. Checked with ffmpeg 7.0.2.
+
+### Added
+
+- `doorVolume` (12 dB, 0–24): how much to turn up the sound from the door. 0 leaves it as it is.
+- README: the setting, the picture size, the quiet microphone. Tests (72).
+
 ## 2.1.0-beta.21 (2026-11-08)
 
 ### Added

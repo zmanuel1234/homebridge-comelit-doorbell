@@ -156,6 +156,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
+| Turn up the sound from the door by (`doorVolume`) | `12` | dB of gain on the intercom's audio (its microphone is quiet). 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. `0`: as the intercom sends it. |
 | Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the start of the call, while the visitor waits at the panel. `0`: always the idle picture. |
 
 ### Experimental: media timing and troubleshooting
@@ -212,7 +213,8 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 What a call looks like:
 
 - The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It can be smeared for a moment at first; it clears at the next keyframe, which the plugin sends every 2 s.
-- The picture is the intercom's own: 640x240 on a 6741W, shown as 4:3, so it is softer than a modern camera.
+- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480, so it isn't enlarged.
+- The intercom's microphone is quiet; the plugin turns it up by **Turn up the sound from the door by** (12 dB). The Home app starts the live view muted: tap the speaker icon.
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
 - Inside a call the intercom doesn't send a separate answer to the door open; the plugin takes "no refusal" as opened.

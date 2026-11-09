@@ -251,6 +251,14 @@
         "maximum": 20,
         "description": "When the live view opens, wait this long for the intercom's video and audio, then show the picture (the Home app gives up on slow streams)."
       },
+      "doorVolume": {
+        "title": "Turn up the sound from the door by (dB)",
+        "type": "number",
+        "default": 12,
+        "minimum": 0,
+        "maximum": 24,
+        "description": "The intercom's microphone is quiet. 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. 0: as the intercom sends it."
+      },
       "lastVisitorMinutes": {
         "title": "Show the last visitor for (minutes)",
         "type": "number",
@@ -329,6 +337,7 @@
         "videoQuality",
         "videoCodec",
         "ffmpegPath",
+        "doorVolume",
         "snapshotImage",
         "lastVisitorMinutes"
       ]

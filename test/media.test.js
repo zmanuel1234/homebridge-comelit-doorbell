@@ -73,6 +73,9 @@ test('ffmpeg video arguments stream SRTP to HomeKit', () => {
   assert.strictEqual(v.at(-1), 'srtp://10.0.0.9:5000?rtcpport=5000&pkt_size=1316');
   assert.ok(videoArgs({ width: 1, height: 1, fps: 1, bitrate: 1, pt: 1, ssrc: 1, srtp, address: 'a', port: 1, mtu: 1, codec: 'copy' }).join(' ').includes('-c:v copy'));
   const a = audioArgs({ sampleRate: 16, bitrate: 24, pt: 110, ssrc: 6, srtp, address: '10.0.0.9', port: 5002 });
+  assert.ok(!a.includes('-af'), 'no gain unless asked');
+  const loud = audioArgs({ sampleRate: 16, bitrate: 24, pt: 110, ssrc: 6, srtp, address: '10.0.0.9', port: 5002, gainDb: 12 });
+  assert.strictEqual(loud[loud.indexOf('-af') + 1], 'volume=12dB,alimiter=limit=0.9');
   assert.ok(a.join(' ').includes('-f alaw -ar 8000 -ac 1 -i pipe:0') && a.includes('libfdk_aac') && a.includes('16k'));
   assert.ok(talkSdp('10.0.0.9', false, 5004, srtp).includes('m=audio 5004 RTP/AVP 110'));
 });
