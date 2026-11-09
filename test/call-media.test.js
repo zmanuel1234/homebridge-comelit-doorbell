@@ -226,3 +226,34 @@ test('data from the intercom is acknowledged, including the keepalive probe of a
   await call.onFrame({ flags: 0x00, conn0: 0x36, conn1: 0x96, seq: 0xb7, ack: 0xd9, body: Buffer.alloc(0), opcode: -1 }, ['SB000002']);
   assert.strictEqual(acks().length, 3);
 });
+
+const release = (call) => call.onFrame({ flags: 0x40, conn0: 0x36, conn1: 0x96, seq: 0xc0, ack: 0xd9, body: Buffer.from('000e0000', 'hex'), opcode: 0x000e }, ['SB000002']);
+
+test('a call the intercom ends while its media is being set up is not kept (beta.26)', async () => {
+  const { call, client } = setup('answer-on-view');
+  await ring(call);
+  const open = client.openChannel;
+  client.openChannel = async (name, ...rest) => {
+    const r = await open(name, ...rest);
+    if (name === 'RTPC-video') await release(call);
+    return r;
+  };
+  const session = await call.startMedia(false).catch(() => null);
+  assert.strictEqual(session, null);
+  assert.strictEqual(call.busy(), false);
+  assert.deepStrictEqual(client.closed.sort(), client.opened.map((o) => o[2]).sort(), 'all channels closed');
+});
+
+test('an open without a viewer does not hang up if a live view starts meanwhile (beta.26)', async () => {
+  const { call, sent } = setup('answer-on-view');
+  await ring(call);
+  const door = { name: 'Entrance', index: 0, outputIndex: 1, aptAddress: 'SB100001' };
+  const opening = call.openInCall(door, true);
+  // answering takes 1.5 s, the open waits 4 s for a reply, then 1.5 s before hanging up: view in that pause
+  await new Promise((r) => setTimeout(r, 6000));
+  const session = await call.startMedia(false);
+  assert.ok(session);
+  await opening;
+  assert.ok(!ops(sent).includes('e'), `not hung up: ${ops(sent).join(' ')}`);
+  await session.end('test');
+});

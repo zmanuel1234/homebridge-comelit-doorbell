@@ -91,3 +91,21 @@ test("videoCodec 'copy' falls back to libx264, with a warning", () => {
   assert.match(settingsWarnings(s).join(), /copy/);
   assert.strictEqual(resolveSettings({ platform: 'x', videoCodec: 'h264_v4l2m2m' }).videoCodec, 'h264_v4l2m2m');
 });
+
+test('values below the editor minimum, and invalid ones, are reported and replaced (beta.26)', () => {
+  const s = resolveSettings({ leaseRefreshMinutes: 0.1, leaseRecycleMinutes: 'x', liveViewWaitSeconds: 1, maxReconnectDelay: -5, lastVisitorMinutes: 'abc' });
+  assert.strictEqual(s.leaseRefreshMs, 2 * 60_000);
+  assert.strictEqual(s.leaseRecycleMs, 50 * 60_000);
+  assert.strictEqual(s.liveViewWaitMs, 8000);
+  assert.strictEqual(s.maxReconnectDelayMs, 300_000);
+  assert.strictEqual(s.lastVisitorMs, 5 * 60_000, 'an invalid value keeps the default, not 0 (off)');
+  assert.strictEqual(s.invalid.length, 5, s.invalid.join('\n'));
+});
+
+test("enableNotifications accepts 'false' as text; off with a ring window warns the lock can't open (beta.26)", () => {
+  assert.strictEqual(resolveSettings({ enableNotifications: 'false' }).enableNotifications, false);
+  assert.strictEqual(resolveSettings({ enableNotifications: 'true' }).enableNotifications, true);
+  assert.strictEqual(resolveSettings({ enableNotifications: 'nope' }).invalid.length, 1);
+  assert.ok(settingsWarnings(resolveSettings({ enableNotifications: false })).some((w) => /ringWindowSeconds\) to 0/.test(w)));
+  assert.ok(!settingsWarnings(resolveSettings({ enableNotifications: false, ringWindowSeconds: 0 })).some((w) => /refuses/.test(w)));
+});

@@ -87,8 +87,6 @@ export interface Settings {
   invalid: string[];
 }
 
-const positive = (v: unknown, fallback: number): number => (Number(v) > 0 ? Number(v) : fallback);
-
 const isSet = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
 
 export function resolveSettings(c: ComelitPlatformConfig): Settings {
@@ -109,6 +107,20 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
   if (String(c.videoCodec ?? '').trim() === 'copy') {
     invalid.push("videoCodec: 'copy' can't show the intercom's video (it needs re-encoding), using libx264");
   }
+  /** A number above zero and at least `min` (the editor's minimum), else the fallback, reported if it was set. */
+  const pos = (key: keyof ComelitPlatformConfig, fallback: number, min: number): number => num(key, fallback, (n) => n > 0 && n >= min);
+  /** true/false, also written as text; anything else is reported and gives the fallback. */
+  const bool = (key: keyof ComelitPlatformConfig, fallback: boolean): boolean => {
+    const v = c[key];
+    if (!isSet(v) || typeof v === 'boolean') {
+      return isSet(v) ? (v as boolean) : fallback;
+    }
+    if (v === 'true' || v === 'false') {
+      return v === 'true';
+    }
+    invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
+    return fallback;
+  };
   // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
   const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0);
   const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0) : NaN;
@@ -117,12 +129,12 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     port: num('port', ICONA_BRIDGE_PORT, (n) => Number.isInteger(n) && n > 0 && n < 65536),
     token: String(c.token ?? '').trim(),
     subaddress: Number.isNaN(subaddress) ? undefined : subaddress,
-    enableNotifications: c.enableNotifications ?? true,
+    enableNotifications: bool('enableNotifications', true),
     reconnectDelayMs: num('reconnectDelay', DEFAULT_RECONNECT_DELAY_S, (n) => n >= 1) * 1000,
-    maxReconnectDelayMs: positive(c.maxReconnectDelay, 300) * 1000,
+    maxReconnectDelayMs: pos('maxReconnectDelay', 300, 1) * 1000,
     leaseMode: c.leaseRefreshMode === 'reconnect' ? 'reconnect' : 'inplace',
-    leaseRefreshMs: positive(c.leaseRefreshMinutes, 2) * 60_000,
-    leaseRecycleMs: positive(c.leaseRecycleMinutes, 50) * 60_000,
+    leaseRefreshMs: pos('leaseRefreshMinutes', 2, 0.5) * 60_000,
+    leaseRecycleMs: pos('leaseRecycleMinutes', 50, 5) * 60_000,
     ringWindowMs: ringWindow * 1000,
     doorbellTriggerUrl: String(c.doorbellTriggerUrl ?? '').trim(),
     registerPush: c.registerPush === true,
@@ -139,11 +151,11 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     snapshotImage: (c.snapshotImage ?? '').trim(),
     mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
-    mediaStartTimeoutMs: positive(c.mediaStartTimeoutSeconds, 10) * 1000,
-    mediaSilenceMs: positive(c.mediaSilenceSeconds, 5) * 1000,
-    videoRefreshMs: positive(c.videoRefreshSeconds, 15) * 1000,
-    liveViewWaitMs: positive(c.liveViewWaitSeconds, 8) * 1000,
-    lastVisitorMs: (c.lastVisitorMinutes === undefined || c.lastVisitorMinutes === null ? 5 : Math.max(0, Number(c.lastVisitorMinutes) || 0)) * 60_000,
+    mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1) * 1000,
+    mediaSilenceMs: pos('mediaSilenceSeconds', 5, 1) * 1000,
+    videoRefreshMs: pos('videoRefreshSeconds', 15, 5) * 1000,
+    liveViewWaitMs: pos('liveViewWaitSeconds', 8, 2) * 1000,
+    lastVisitorMs: num('lastVisitorMinutes', 5, (n) => n >= 0) * 60_000,
     invalid,
   };
 }
@@ -165,6 +177,12 @@ export function settingsWarnings(s: Settings): string[] {
   const w: string[] = [...s.invalid];
   if (s.doctorMode !== 'off' && !s.enableNotifications) {
     w.push("doctorMode needs 'Listen for rings' (enableNotifications); without rings it never opens.");
+  }
+  if (!s.enableNotifications && s.ringWindowMs > 0) {
+    w.push(
+      "'Listen for rings' (enableNotifications) is off, so no ring is ever seen and the lock refuses to open. " +
+        "To use only the lock, set 'Unlock allowed for' (ringWindowSeconds) to 0.",
+    );
   }
   if (s.answerMode === 'answer-on-view' && !s.camera) {
     w.push("answerMode 'answer-on-view' needs the doorbell camera (camera: true); without it nothing answers the ring.");

@@ -69,6 +69,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.info("Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.");
     }
     api.on('didFinishLaunching', () => {
+      this.restoreCached();
       this.setupDevice().catch((e) => this.onSetupError('Initial setup', e));
     });
     api.on('shutdown', () => this.teardown());
@@ -76,6 +77,26 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   configureAccessory(accessory: PlatformAccessory): void {
     this.accessories.set(accessory.UUID, accessory);
+  }
+
+  /**
+   * Gives the cached accessories their handlers at startup, from the doors and cameras saved with
+   * them, so they answer HomeKit (a tap says the intercom isn't connected) before the first
+   * connection. The first connection rebuilds them only if the intercom's doors changed.
+   */
+  private restoreCached(): void {
+    const cached = [...this.accessories.values()];
+    const doors = cached.map((a) => a.context.door as Door | undefined).filter((d): d is Door => !!d).sort((a, b) => a.index - b.index);
+    if (doors.length === 0) {
+      return;
+    }
+    const cameras = cached.map((a) => a.context.camera as DeviceConfig['cameras'][number] | undefined).filter((c) => !!c);
+    try {
+      this.discoverAccessories({ doors, cameras } as unknown as DeviceConfig);
+    } catch (e) {
+      this.builtFrom = undefined;
+      this.log.warn(`Restoring the cached accessories failed: ${(e as Error).message}`);
+    }
   }
 
   /** Whether HomeKit may unlock now: within the ring window, or always if the window is 0. */
@@ -96,15 +117,39 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       return;
     }
     this.log.info(`Connecting to ${s.host}:${s.port} …`);
-    const client: IconaBridgeClient = new IconaBridgeClient(s.host, s.port, this.log, {
-      intervalMs: s.leaseRefreshMs,
-      mode: s.leaseMode,
-      recycleMs: s.leaseRecycleMs,
-      reregister: (): Promise<void> => this.reregister(client),
-      isBusy: () => this.callHandler?.busy() ?? false,
-    });
+    // The registration lease keeps rings coming. Without listening for rings there is no
+    // registration to renew: just reconnect every leaseRecycleMinutes, which also clears the
+    // door channels that opens leave on the intercom.
+    const client: IconaBridgeClient = new IconaBridgeClient(
+      s.host,
+      s.port,
+      this.log,
+      s.enableNotifications
+        ? {
+          intervalMs: s.leaseRefreshMs,
+          mode: s.leaseMode,
+          recycleMs: s.leaseRecycleMs,
+          reregister: (): Promise<void> => this.reregister(client),
+          isBusy: () => this.callHandler?.busy() ?? false,
+        }
+        : { intervalMs: s.leaseRecycleMs, mode: 'reconnect', recycleMs: s.leaseRecycleMs },
+    );
+    // Shutting down while connecting: close this connection and stop.
+    const stopped = async (): Promise<boolean> => {
+      if (!this.shuttingDown) {
+        return false;
+      }
+      if (this.client === client) {
+        this.client = undefined;
+      }
+      await client.disconnect().catch(() => undefined);
+      return true;
+    };
     try {
       await client.connect();
+      if (await stopped()) {
+        return;
+      }
     } catch (e) {
       this.log.error(`Connection failed: ${(e as Error).message}`);
       this.scheduleReconnect(true);
@@ -112,6 +157,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     try {
       await authenticate(client, s.token);
+      if (await stopped()) {
+        return;
+      }
       this.log.info('Authenticated');
     } catch (e) {
       this.log.error(`Authentication failed: ${(e as Error).message}`);
@@ -137,6 +185,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       await registerPush(client, deviceConfig, s.registerPush, (event) => this.onEvent(event));
     } catch (e) {
       this.log.warn(`Push registration failed (non-fatal): ${(e as Error).message}`);
+    }
+    if (await stopped()) {
+      return;
     }
     // Set the client and disconnect callback before the CTPP setup, so a drop during it
     // still triggers the reconnect.
@@ -180,6 +231,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.callHandler = call;
       this.vipListener = listener;
       await listener.start().catch((e) => this.log.warn(`VIP listener start failed: ${(e as Error).message}`));
+    }
+    if (await stopped()) {
+      this.vipListener?.stop().catch(() => undefined);
+      this.vipListener = undefined;
+      this.callHandler = undefined;
+      return;
     }
     this.startKeepalive(deviceConfig);
     this.discoverAccessories(deviceConfig);
