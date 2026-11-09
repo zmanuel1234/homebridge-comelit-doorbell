@@ -30,7 +30,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 
 | Model | Model id | Firmware | Works |
 |---|---|---|---|
-| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera (2.1.0-beta.19): answering from the live view, the intercom's audio, talk-back, unlocking during the call; live video (640x240, shown as 4:3) checked by replaying recorded calls, live on the Pi still to confirm |
+| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera (2.1.0-beta.19, ffmpeg 7.0.2 on the Homebridge Pi image): answering from the live view, live video (640x240, shown as 4:3), the intercom's audio, talk-back, unlocking during the call, the last visitor's picture |
 
 Other ViP devices may work. You'll find the model id and firmware on the intercom's web page, under **Device info**. Please open an issue with them, whether it works or not.
 
@@ -195,11 +195,11 @@ With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 - **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
 - **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it. Checked with ffmpeg 7.0.2 (Homebridge Raspberry Pi image) and 8.0.
 
-The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). The intercom's audio, talk-back and unlocking during the call work on a 6741W. Live video works when the recorded calls are replayed through ffmpeg 7.0.2 and 8.0; on the Pi itself it is still to be confirmed with 2.1.0-beta.19. The `call:` lines in the log count the video and audio packets received.
+The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio, talk-back and unlocking during the call work on a 6741W with the Homebridge Raspberry Pi image's ffmpeg 7.0.2 (2.1.0-beta.19). The `call:` lines in the log count the video and audio packets received.
 
 What a call looks like:
 
-- The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s).
+- The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It can be smeared for a moment at first; it clears at the next keyframe, which the plugin sends every 2 s.
 - The picture is the intercom's own: 640x240 on a 6741W, shown as 4:3, so it is softer than a modern camera.
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
@@ -268,7 +268,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 ## Known limits
 
 - Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, or `answer-on-view` from the camera's live view. Both are experimental.
-- The doorbell camera is experimental, tested on one 6741W: the intercom's audio, talk-back and unlocking during the call. Live video is checked with recordings, and still to be confirmed live on the Pi.
+- The doorbell camera is experimental, tested on one 6741W with a Raspberry Pi: live video, the intercom's audio, talk-back and unlocking during the call.
 - Only tested on one model and firmware (see above).
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 

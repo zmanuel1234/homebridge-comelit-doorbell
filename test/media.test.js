@@ -147,6 +147,7 @@ test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle
   const i = v.indexOf(LIVE_INPUT[0]);
   assert.deepStrictEqual(v.slice(i, i + LIVE_INPUT.length), LIVE_INPUT);
   assert.ok(LIVE_INPUT.includes('+showall'));
+  assert.strictEqual(v[v.indexOf('-g') + 1], '32', 'a keyframe every 2 s at 16 fps');
   // each frame gets its arrival time (works with ffmpeg 7.0 and 8), then 640x240 is stretched
   // back to 4:3 before fitting the Home app's size
   assert.match(v[v.indexOf('-vf') + 1], /^setpts=\(RTCTIME-RTCSTART\)\/\(TB\*1000000\),scale=w=iw:h='if\(gt\(iw\/ih,2\),2\*ih,ih\)',setsar=1,scale=1280:720/);

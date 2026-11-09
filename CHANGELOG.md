@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.1.0-beta.20 (2026-11-08)
 
-- README: tested hardware and known limits say what is tested with 2.1.0-beta.19, and which ffmpeg versions the video is checked with (7.0.2 on the Homebridge Raspberry Pi image, and 8.0). No changes to the plugin.
+Live video works on the Raspberry Pi with 2.1.0-beta.19 (565 frames in a 39 s call), and the last visitor's picture shows the visitor.
+
+### Fixed
+
+- **Grey, smeared picture for the first seconds** (most likely cause). The plugin's video encoder sent a keyframe only every 250 frames (x264's default, about 15 s). The Home app joins the stream a moment after it starts; if it misses the first keyframe, it smears until the next one. It now gets a keyframe every 2 s. The intercom's own video decodes cleanly from its first keyframe (checked on three recorded calls), so the smears came from our side of the stream.
+
+### Documentation
+
+- README: live video confirmed on the Pi (ffmpeg 7.0.2); the camera's tested features; a smeared start clears within 2 s.
 
 ## 2.1.0-beta.19 (2026-11-08)
 
