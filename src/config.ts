@@ -28,6 +28,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   ffmpegPath?: string;
   snapshotImage?: string;
   mediaCaptureDir?: string;
+  ringPreview?: boolean;
   doorVolume?: number | string;
   mediaStartTimeoutSeconds?: number;
   mediaSilenceSeconds?: number;
@@ -71,6 +72,8 @@ export interface Settings {
   snapshotImage: string;
   /** If set, each call's raw video and audio are saved here, for troubleshooting. */
   mediaCaptureDir: string;
+  /** Experimental: ask for the visitor's picture during the ring, before answering. */
+  ringPreview: boolean;
   /** Gain on the intercom's audio to the Home app, in dB (0: as is). */
   doorVolumeDb: number;
   /** Hang up if no video or audio arrives this long after answering. */
@@ -150,6 +153,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     ffmpegPath: (c.ffmpegPath ?? '').trim(),
     snapshotImage: (c.snapshotImage ?? '').trim(),
     mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),
+    ringPreview: bool('ringPreview', false),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
     mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1) * 1000,
     mediaSilenceMs: pos('mediaSilenceSeconds', 5, 1) * 1000,

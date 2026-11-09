@@ -269,3 +269,56 @@ test('a live view that fails to start in the pause after an open still lets the 
   await opening;
   assert.strictEqual(ops(sent).at(-1), 'e', `hung up: ${ops(sent).join(' ')}`);
 });
+
+const until = async (cond) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 5)); };
+
+test('ring preview: asks for video during the ring without answering, takes the keyframe, then closes its channels (test build)', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  const units = [];
+  call.enablePreview({ hd: false, onVideo: (c, u) => units.push(u) });
+  await ring(call);
+  await until(() => ops(sent).length >= 3);
+  // echo, capabilities, then the video request; no answer (0c), no audio
+  assert.deepStrictEqual(ops(sent), ['1', '3', '11']);
+  assert.strictEqual(parseFrame(sent[2]).body.subarray(0, 8).toString('hex'), '0011143200000000');
+  assert.deepStrictEqual(client.opened.map((o) => o[1]), ['UDPM', 'RTPC']);
+  assert.strictEqual(call.busy(), true, 'a planned reconnect waits for the preview');
+  client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: 1, timestamp: 0, ssrc: 2 }, Buffer.from([0x67, 1])));
+  client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: 2, timestamp: 0, ssrc: 2 }, Buffer.from([0x65, 9])));
+  assert.strictEqual(units.length, 2);
+  await until(() => client.closed.length === 2);
+  assert.deepStrictEqual(client.closed.sort(), [0x2001, 0x2002]);
+  assert.strictEqual(call.busy(), false);
+  assert.ok(!ops(sent).includes('e'), 'never hangs up');
+});
+
+test('ring preview: answering stops it first; the live view opens its own channels (test build)', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  call.enablePreview({ hd: false, onVideo: () => undefined });
+  await ring(call);
+  await until(() => ops(sent).length >= 3);
+  const session = await call.startMedia(false);
+  assert.ok(session);
+  assert.deepStrictEqual(client.closed.sort(), [0x2001, 0x2002], 'the preview channels closed before answering');
+  assert.deepStrictEqual(ops(sent).slice(2, 4), ['11', 'c']);
+  await session.end('test');
+});
+
+test('ring preview: the intercom ending the call stops it, without hanging up (test build)', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  call.enablePreview({ hd: false, onVideo: () => undefined });
+  await ring(call);
+  await until(() => ops(sent).length >= 3);
+  await release(call);
+  await until(() => client.closed.length === 2);
+  assert.deepStrictEqual(client.closed.sort(), [0x2001, 0x2002]);
+  assert.ok(!ops(sent).includes('e'));
+});
+
+test('ring preview off: nothing is asked during the ring', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  await ring(call);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepStrictEqual(ops(sent), ['1', '3']);
+  assert.deepStrictEqual(client.opened, []);
+});

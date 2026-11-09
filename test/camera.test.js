@@ -132,3 +132,38 @@ test('media that already ended when the view starts gives the still picture (bet
   assert.strictEqual(media.listenerCount('video'), 0);
   await cam.stopStream('eeeeeeee-1', 'test');
 });
+
+test("ring preview video becomes the visitor's picture (test build)", () => {
+  const cam = camera({ ringPreview: true });
+  const callObj = {};
+  for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  const v = cam.keyframes.visitor(60_000);
+  assert.ok(v && v.includes(0x65));
+});
+
+test("the last visitor's picture survives a restart, and expires with lastVisitorMinutes (beta.27)", async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-visitor-'));
+  const make = (config = {}) => {
+    const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't', ...config });
+    return new DoorbellCamera({ hap, user: { storagePath: () => dir } }, quietLog(), settings, () => undefined);
+  };
+  const file = path.join(dir, 'comelit-last-visitor.h264');
+  const first = make();
+  const callObj = {};
+  for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) first.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  for (let i = 0; i < 100 && !fs.existsSync(file); i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(fs.existsSync(file), 'saved');
+  const restarted = make();
+  for (let i = 0; i < 100 && !restarted.keyframes.visitor(); i++) await new Promise((r) => setTimeout(r, 5));
+  assert.deepStrictEqual(restarted.keyframes.visitor(), first.keyframes.visitor());
+  // older than lastVisitorMinutes: not shown
+  const old = (Date.now() - 2 * 60_000) / 1000;
+  fs.utimesSync(file, old, old);
+  const later = make({ lastVisitorMinutes: 1 });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.strictEqual(later.keyframes.visitor(), undefined);
+  fs.rmSync(dir, { recursive: true });
+});

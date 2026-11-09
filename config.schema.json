@@ -271,7 +271,13 @@
         "title": "Save each call's video and audio to (folder)",
         "type": "string",
         "placeholder": "/var/lib/homebridge/comelit-capture",
-        "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 live views. Empty: nothing is saved."
+        "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 calls. Empty: nothing is saved."
+      },
+      "ringPreview": {
+        "title": "Visitor's picture in the ring notification (test)",
+        "type": "boolean",
+        "default": false,
+        "description": "Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is there. Doesn't answer the call. Logs 'Ring preview (test): …' with the result. Needs the doorbell camera."
       }
     },
     "required": [
@@ -352,7 +358,8 @@
         "mediaSilenceSeconds",
         "videoRefreshSeconds",
         "liveViewWaitSeconds",
-        "mediaCaptureDir"
+        "mediaCaptureDir",
+        "ringPreview"
       ]
     }
   ]

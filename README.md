@@ -169,7 +169,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
 | Turn up the sound from the door by (`doorVolume`) | `12` | dB of gain on the intercom's audio (its microphone is quiet). 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. `0`: as the intercom sends it. |
-| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the start of the call, while the visitor waits at the panel. `0`: always the idle picture. |
+| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken when a live view of the call starts (or at the ring, with the ring preview test on), while the visitor waits at the panel. It is saved in Homebridge's storage folder (`comelit-last-visitor.h264`), so it survives a restart. `0`: always the idle picture. |
 
 ### Experimental: media timing and troubleshooting
 
@@ -182,6 +182,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 | Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
 | Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each call's raw media is saved, once however many devices watch it: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 calls are kept. About 3–5 MB per minute. |
+| Visitor's picture in the ring notification (test) (`ringPreview`) | off | Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The log says whether it works (`Ring preview (test): …`) and when HomeKit asked for the picture. Needs the doorbell camera, and **Show the last visitor for** above 0. |
 
 ## How ring and unlock work
 

@@ -266,6 +266,9 @@ export function talkSdp(address: string, ipv6: boolean, port: number, srtp: Buff
   ].join('\r\n');
 }
 
+/** The last visitor's picture, saved in Homebridge's storage folder. */
+const VISITOR_FILE = 'comelit-last-visitor.h264';
+
 export class DoorbellCamera implements CameraStreamingDelegate {
   readonly controller: DoorbellController;
   private readonly ffmpeg: string;
@@ -315,10 +318,59 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     };
     this.controller = new hap.DoorbellController(options);
     this.log.info(`Doorbell camera: ffmpeg ${this.ffmpeg}${settings.talkBack ? ', talk-back on' : ''}`);
+    // The last visitor's picture is kept on disk too, so it survives a restart.
+    const storage = api.user?.storagePath?.();
+    if (storage && settings.lastVisitorMs > 0) {
+      this.visitorFile = path.join(storage, VISITOR_FILE);
+      this.keyframes.onVisitor = (frame) => void this.saveVisitor(frame);
+      void this.loadVisitor();
+    }
+  }
+
+  /** Where the last visitor's picture is saved (as H.264), if anywhere. */
+  private visitorFile?: string;
+
+  private async saveVisitor(frame: Buffer): Promise<void> {
+    if (!this.visitorFile) {
+      return;
+    }
+    const tmp = `${this.visitorFile}.tmp`;
+    try {
+      await fs.writeFile(tmp, frame);
+      await fs.rename(tmp, this.visitorFile);
+    } catch (e) {
+      this.log.debug(`Doorbell camera: could not save the last visitor's picture: ${(e as Error).message}`);
+    }
+  }
+
+  /** Loads the picture saved before a restart; its age is the file's. */
+  private async loadVisitor(): Promise<void> {
+    if (!this.visitorFile) {
+      return;
+    }
+    try {
+      const [frame, stat] = await Promise.all([fs.readFile(this.visitorFile), fs.stat(this.visitorFile)]);
+      if (frame.length > 0 && Date.now() - stat.mtimeMs <= this.settings.lastVisitorMs) {
+        this.keyframes.restoreVisitor(frame, stat.mtimeMs);
+        this.log.debug(`Doorbell camera: showing the last visitor from ${stat.mtime.toLocaleString()}`);
+      }
+    } catch {
+      // none saved yet
+    }
   }
 
   ring(): void {
+    this.ringAt = Date.now();
     this.controller.ringDoorbell();
+  }
+
+  /** When the doorbell last rang (for the ring preview test's log). */
+  private ringAt = 0;
+
+  /** Video from the ring preview: its first keyframe becomes the visitor's picture. */
+  previewVideo(call: object, unit: Buffer): void {
+    this.keyframes.newCall(call);
+    this.keyframes.push(unit);
   }
 
   // ─── Snapshots ─────────────────────────────────────────────────────────────
@@ -333,7 +385,14 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private async snapshot(request: SnapshotRequest): Promise<Buffer> {
-    return (await this.lastVisitor(request.width)) ?? this.placeholderImage();
+    const visitor = await this.lastVisitor(request.width);
+    if (this.settings.ringPreview && this.ringAt && Date.now() - this.ringAt < 60_000) {
+      this.log.info(
+        `Ring preview (test): HomeKit asked for the picture ${((Date.now() - this.ringAt) / 1000).toFixed(1)} s after the ring; ` +
+          `${visitor ? "gave the visitor's picture" : 'no picture yet, gave the idle one'}`,
+      );
+    }
+    return visitor ?? this.placeholderImage();
   }
 
   /** The last visitor's picture from the last call, if it is recent enough (lastVisitorMinutes). */
