@@ -57,6 +57,17 @@ export class LockAccessory {
     void this.triggerOpen();
   }
 
+  /** Shows Unlocked for a moment after a door open that didn't come from this lock (doctor mode). */
+  showOpened(): void {
+    const { Characteristic } = this.platform;
+    this.lockState = Characteristic.LockCurrentState.UNSECURED;
+    this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.UNSECURED);
+    setTimeout(() => {
+      this.lockState = Characteristic.LockCurrentState.SECURED;
+      this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.SECURED);
+    }, SHOW_UNLOCKED_MS);
+  }
+
   async triggerOpen(): Promise<void> {
     const { Characteristic } = this.platform;
     const relock = () => {

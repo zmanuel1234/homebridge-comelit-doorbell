@@ -1,5 +1,6 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, Service } from 'homebridge';
 import { CameraAccessory } from './accessories/cameraAccessory';
+import { DoctorModeSwitch } from './accessories/doctorModeSwitch';
 import { DoorbellAccessory } from './accessories/doorbellAccessory';
 import { LockAccessory } from './accessories/lockAccessory';
 import { authenticate } from './auth';
@@ -34,6 +35,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   /** Failed connection attempts in a row, for the back-off. */
   private failures = 0;
   private shuttingDown = false;
+  private doctorPending = false;
+  private doctorSwitch?: DoctorModeSwitch;
   /** Doors and cameras the accessories were last built from, to skip rebuilding them on every reconnect. */
   private builtFrom?: string;
   private lastRingAt = 0;
@@ -53,11 +56,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     for (const w of settingsWarnings(this.settings)) {
       this.log.warn(w);
     }
+    if (this.settings.doctorMode === 'always') {
+      this.log.warn('Doctor mode is ON: every ring opens the door, for anyone at the door');
+    }
     const s = this.settings;
     this.log.info(
       `Settings: ${s.host || '(no host)'}:${s.port}, user row ${s.subaddress ?? 'from the intercom'}, refresh ${s.leaseMode} every ${s.leaseRefreshMs / 60_000} min, ` +
         `unlock ${s.ringWindowMs ? `within ${s.ringWindowMs / 1000} s of a ring` : 'at any time'}, answerMode ${s.answerMode}, camera ${s.camera ? 'on' : 'off'}` +
-        `${s.doorbellTriggerUrl ? ', trigger URL set' : ''}`,
+        `${s.doorbellTriggerUrl ? ', trigger URL set' : ''}${s.doctorMode !== 'off' ? `, doctor mode ${s.doctorMode}` : ''}`,
     );
     if (this.settings.camera && this.settings.answerMode !== 'answer-on-view') {
       this.log.info("Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.");
@@ -162,7 +168,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (s.enableNotifications && client.getChannel('CTPP')) {
       const ourAddress = `${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`;
       let listener: VipEventListener | undefined = undefined;
-      const call = new CallHandler(s.answerMode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log, {
+      // Doctor mode answers calls itself, so it needs calls followed even with answering off.
+      const mode = s.answerMode === 'off' && s.doctorMode !== 'off' ? 'handshake' : s.answerMode;
+      const call = new CallHandler(mode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log, {
         startTimeoutMs: s.mediaStartTimeoutMs,
         silenceMs: s.mediaSilenceMs,
         videoRefreshMs: s.videoRefreshMs,
@@ -279,7 +287,48 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.lastRingAt = Date.now();
       this.doorbellAccessory?.triggerRing();
       this.camera?.ring();
+      this.doctorOpen();
     }
+  }
+
+  /** Doctor mode is on: always, or while its HomeKit switch is on. */
+  doctorModeActive(): boolean {
+    return this.settings.doctorMode === 'always' || (this.settings.doctorMode === 'switch' && this.doctorSwitch?.on === true);
+  }
+
+  /** Doctor mode: answer the ring and open the door, after the configured delay. */
+  private doctorOpen(): void {
+    if (!this.doctorModeActive() || this.doctorPending) {
+      return;
+    }
+    const door = this.deviceConfig?.doors[0];
+    if (!door) {
+      this.log.warn('Doctor mode: no door to open');
+      return;
+    }
+    this.doctorPending = true;
+    const delay = this.settings.doctorModeDelayMs;
+    this.log.info(`Doctor mode: opening '${door.name}' in ${delay / 1000} s`);
+    setTimeout(async () => {
+      try {
+        const call = this.callHandler;
+        if (!call?.activeCall()) {
+          this.log.info('Doctor mode: the call is over (answered elsewhere or hung up); not opening');
+          return;
+        }
+        const result = await call.openInCall(door, true);
+        if (result) {
+          this.log.info(`Doctor mode: door '${door.name}' opened`);
+          [...this.lockAccessories.values()][0]?.showOpened();
+        } else {
+          this.log.info('Doctor mode: no call to answer; not opening');
+        }
+      } catch (e) {
+        this.log.warn(`Doctor mode: open failed: ${(e as Error).message}`);
+      } finally {
+        this.doctorPending = false;
+      }
+    }, delay);
   }
 
   async openDoor(door: Door): Promise<OpenResult> {
@@ -311,7 +360,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   discoverAccessories(config: DeviceConfig): void {
     // The accessories only change if the intercom's doors or cameras do; rebuilding them on
     // every reconnect would rewrite Homebridge's accessory cache each time.
-    const from = JSON.stringify([config.doors, config.cameras, this.settings.camera]);
+    const from = JSON.stringify([config.doors, config.cameras, this.settings.camera, this.settings.doctorMode]);
     if (from === this.builtFrom) {
       return;
     }
@@ -325,6 +374,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     const bell = this.accessoryFor('doorbell', this.displayName, keep);
     this.doorbellAccessory = new DoorbellAccessory(this, bell);
+    if (this.settings.doctorMode === 'switch') {
+      const sw = this.accessoryFor('doctor-mode', `${this.displayName} Doctor Mode`, keep);
+      this.doctorSwitch = new DoctorModeSwitch(this, sw);
+    } else {
+      this.doctorSwitch = undefined;
+    }
     if (this.settings.camera) {
       // Experimental doorbell camera, as an accessory of its own so turning it off removes it cleanly.
       if (!this.camera) {

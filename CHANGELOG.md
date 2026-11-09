@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0-beta.21 (2026-11-08)
+
+### Added
+
+- **Doctor mode** (`doctorMode`, off by default): every ring opens the first door by itself, after `doctorModeDelaySeconds` (2). The plugin answers the call, opens inside it and hangs up, as the Comelit app does, since the intercom refuses opens during an unanswered ring. `always`, or `switch` for a **Doctor Mode** HomeKit switch that turns it on and off (by hand or by automation; keeps its state across restarts). Works with any `answerMode`. Doesn't open if someone answered on a phone first. Startup warning when `always`.
+- Tests for doctor mode (72 in all).
+- README: the settings, the switch, how it works.
+
 ## 2.1.0-beta.20 (2026-11-08)
 
 Live video works on the Raspberry Pi with 2.1.0-beta.19 (565 frames in a 39 s call), and the last visitor's picture shows the visitor.
