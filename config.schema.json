@@ -238,7 +238,7 @@
         "default": 5,
         "minimum": 0,
         "maximum": 1440,
-        "description": "After a call, the camera picture shows the last video frame this long, then the idle picture again. 0: always the idle picture."
+        "description": "After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture again. 0: always the idle picture."
       },
       "mediaCaptureDir": {
         "title": "Save each call's video and audio to (folder)",
