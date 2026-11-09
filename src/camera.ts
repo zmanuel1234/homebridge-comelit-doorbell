@@ -275,6 +275,8 @@ const VISITOR_FILE = 'comelit-last-visitor.h264';
 const SNAPSHOT_QUALITY = ['-q:v', '2'];
 /** How long after a ring a picture request waits for the ring preview's picture. */
 const PREVIEW_PICTURE_WAIT_MS = 4_500;
+/** If no ring preview has started this long after a ring, picture requests stop waiting. */
+const PREVIEW_START_MS = 1_500;
 
 export class DoorbellCamera implements CameraStreamingDelegate {
   readonly controller: DoorbellController;
@@ -371,24 +373,45 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   ring(): void {
     this.ringAt = Date.now();
-    if (this.settings.ringPreview) {
-      // HomeKit asks for the notification's picture within a second or two of the ring; the
-      // intercom's first picture comes about 3 s after it. Hold such requests until it is here.
+    // HomeKit asks for the notification's picture within a second or two of the ring; the
+    // intercom's first picture comes about 3 s after it. Hold such requests until it is here,
+    // but only if a ring preview can run (it needs the call followed, and a picture to keep),
+    // and only until PREVIEW_START_MS if none starts (calls diverted, a failed setup).
+    if (this.settings.ringPreview && this.settings.lastVisitorMs > 0 && this.getCall()?.previewOn) {
       this.pictureWait?.resolve();
       let resolve!: () => void;
       const promise = new Promise<void>((r) => (resolve = r));
-      const timer = setTimeout(resolve, PREVIEW_PICTURE_WAIT_MS);
-      timer.unref?.();
-      this.pictureWait = { promise, resolve: () => { clearTimeout(timer); resolve(); } };
-      void promise.then(() => (this.pictureWait = undefined));
+      const timers = [setTimeout(resolve, PREVIEW_PICTURE_WAIT_MS), setTimeout(() => !wait.started && resolve(), PREVIEW_START_MS)];
+      timers.forEach((t) => t.unref?.());
+      const wait = {
+        promise,
+        started: false,
+        resolve: () => {
+          timers.forEach((t) => clearTimeout(t));
+          resolve();
+        },
+      };
+      this.pictureWait = wait;
+      void promise.then(() => {
+        if (this.pictureWait === wait) {
+          this.pictureWait = undefined; // not a newer ring's wait
+        }
+      });
     }
     this.controller.ringDoorbell();
+  }
+
+  /** The ring preview has started: keep waiting for its picture. */
+  previewStarted(): void {
+    if (this.pictureWait) {
+      this.pictureWait.started = true;
+    }
   }
 
   /** When the doorbell last rang. */
   private ringAt = 0;
   /** Set from a ring until the ring preview's picture arrives, the preview stops, or PREVIEW_PICTURE_WAIT_MS. */
-  private pictureWait?: { promise: Promise<void>; resolve: () => void };
+  private pictureWait?: { promise: Promise<void>; resolve: () => void; started: boolean };
 
   /** The ring preview stopped: stop waiting for its picture (it may have none). */
   previewDone(): void {

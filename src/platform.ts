@@ -250,7 +250,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       call.attach(client);
       call.enablePreview(
         s.ringPreview && s.camera
-          ? { hd: s.videoQuality === 'hd', onVideo: (c, unit) => this.camera?.previewVideo(c, unit), onDone: () => this.camera?.previewDone() }
+          ? { hd: s.videoQuality === 'hd', onVideo: (c, unit) => this.camera?.previewVideo(c, unit), onStart: () => this.camera?.previewStarted(), onDone: () => this.camera?.previewDone() }
           : undefined,
       );
       this.callHandler = call;
@@ -262,6 +262,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.vipListener = undefined;
       this.callHandler = undefined;
       return;
+    }
+    if (this.client !== client || !client.connected) {
+      return; // dropped during the setup: the reconnect is already scheduled
     }
     this.startKeepalive(deviceConfig);
     this.discoverAccessories(deviceConfig);

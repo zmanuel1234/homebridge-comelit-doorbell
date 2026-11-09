@@ -35,7 +35,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 |---|---|---|
 | Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
 | Door release from HomeKit after a ring | ✅ | Refused outside the ring window. During a ring the plugin answers first (`answer-on-view`, `answer-on-open`) |
-| Unlocking during a ring without opening the live view | ❓ | New in 2.1.0-beta.28: answers, opens, hangs up, as doctor mode does (tested) |
+| Unlocking during a ring without opening the live view | ❓ | New in 2.1.0-beta.28: answers, opens and hangs up, the same steps as doctor mode (which is tested) |
 | Visitor's picture in the ring notification | ✅ / ❓ | Video before answering works (first picture about 3 s after the ring); whether iOS waits for it for the banner is being tested |
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, ~15 frames per second |
@@ -150,7 +150,7 @@ In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that
 | Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera). |
 | Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring). `off`, `handshake`, `answer-on-open` or `answer-on-view`. |
 | Talk back from the Home app (`talkBack`) | `true` | Sends the Home app's microphone to the intercom's speaker during a live view (on by default since 2.1.0). Set to `false` to hide the microphone button. |
-| Visitor's picture in the ring notification (`ringPreview`) | `true` | On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. With debug mode on, the `Ring preview: …` lines say whether it worked, and which picture HomeKit got. Needs the doorbell camera, and **Show the last visitor for** above 0. |
+| Visitor's picture in the ring notification (`ringPreview`) | `true` | On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. With debug mode on, the `Ring preview: …` lines say whether it worked, and which picture HomeKit got. Needs the doorbell camera, **Answer the ring** (or doctor mode) not `off`, since the plugin must follow the call, and **Show the last visitor for** above 0. If the intercom sends no picture before an answer, the log says so (`Ring preview: no video before answering`); turn this off then. |
 
 ### Door
 
@@ -267,7 +267,7 @@ Your config keeps working. What changes:
 
 ## Troubleshooting
 
-The normal log is short: the settings at startup, rings, door opens, doctor mode, one summary line per live view, and anything that goes wrong. Everything else (the connection's steps, registration renewals, the call's messages, the ring preview) appears with the child bridge's **debug mode** on; turn it on before testing or reporting a problem.
+The normal log is short: the settings at startup, rings, door opens, doctor mode, one summary line per live view, and anything that goes wrong. Everything else (the connection's steps, registration renewals, the call's messages, the ring preview's details) appears with the child bridge's **debug mode** on; turn it on before testing or reporting a problem.
 
 | Symptom | What to check |
 |---|---|

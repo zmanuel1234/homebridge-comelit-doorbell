@@ -176,7 +176,7 @@
         "description": "Adds a HomeKit doorbell camera that shows the intercom's video and audio during a ring, and rings in HomeKit itself (the camera-ffmpeg doorbell is then not needed). Video needs 'Answer when viewing the camera'. Requires ffmpeg with libfdk_aac (ffmpeg-for-homebridge)."
       },
       "talkBack": {
-        "condition": { "functionBody": "return model.camera === true;" },
+        "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
         "title": "Talk back from the Home app",
         "type": "boolean",
         "default": true,
@@ -276,11 +276,11 @@
         "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 calls. Empty: nothing is saved."
       },
       "ringPreview": {
-        "condition": { "functionBody": "return model.camera === true;" },
+        "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
         "title": "Visitor's picture in the ring notification",
         "type": "boolean",
         "default": true,
-        "description": "On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is there. Doesn't answer the call. Needs the doorbell camera."
+        "description": "On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is there. Doesn't answer the call. Needs the doorbell camera, and Answer the ring (or doctor mode) not off."
       }
     },
     "required": [
