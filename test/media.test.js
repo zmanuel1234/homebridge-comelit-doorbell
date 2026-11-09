@@ -146,7 +146,33 @@ test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle
   // arrival time instead of the SPS's timing, and showing from the first keyframe
   const i = v.indexOf(LIVE_INPUT[0]);
   assert.deepStrictEqual(v.slice(i, i + LIVE_INPUT.length), LIVE_INPUT);
-  assert.ok(LIVE_INPUT.includes('-use_wallclock_as_timestamps') && LIVE_INPUT.includes('+showall'));
-  // 640x240 is stretched back to 4:3 before fitting the Home app's size
-  assert.match(v[v.indexOf('-vf') + 1], /^scale=w=iw:h='if\(gt\(iw\/ih,2\),2\*ih,ih\)',setsar=1,scale=1280:720/);
+  assert.ok(LIVE_INPUT.includes('+showall'));
+  // each frame gets its arrival time (works with ffmpeg 7.0 and 8), then 640x240 is stretched
+  // back to 4:3 before fitting the Home app's size
+  assert.match(v[v.indexOf('-vf') + 1], /^setpts=\(RTCTIME-RTCSTART\)\/\(TB\*1000000\),scale=w=iw:h='if\(gt\(iw\/ih,2\),2\*ih,ih\)',setsar=1,scale=1280:720/);
+  // the still picture keeps its own timing
+  const still = videoArgs({ width: 1280, height: 720, fps: 16, bitrate: 299, pt: 99, ssrc: 5, srtp: Buffer.alloc(30), address: 'a', port: 1, mtu: 1316, codec: 'libx264', live: false });
+  assert.match(still[still.indexOf('-vf') + 1], /^scale=w=iw/);
+});
+
+test('the last visitor picture is the call\'s first keyframe, not its last', () => {
+  const { KeyframeCache } = require('../dist/media');
+  const k = new KeyframeCache();
+  const u = (type, tag) => Buffer.from([0, 0, 0, 1, type, tag]);
+  const call = {};
+  k.newCall(call);
+  for (const [t, tag] of [[7, 1], [8, 1], [5, 1], [1, 1], [1, 2], [7, 2], [8, 2], [5, 2], [1, 3]]) {
+    k.push(u(t, tag));
+  }
+  assert.strictEqual(k.visitor().at(-1), 1, 'first keyframe of the call');
+  assert.strictEqual(k.keyframe().at(-1), 2, 'live views still join at the latest keyframe');
+  k.newCall(call); // the same call viewed again: keep its picture
+  k.push(u(5, 3));
+  k.push(u(1, 4));
+  assert.strictEqual(k.visitor().at(-1), 1);
+  k.newCall({}); // a new call: its first keyframe
+  k.push(u(5, 4));
+  k.push(u(1, 5));
+  assert.strictEqual(k.visitor().at(-1), 4);
+  assert.strictEqual(k.visitor(-1), undefined, 'too old');
 });
