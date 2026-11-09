@@ -136,6 +136,15 @@ export class KeyframeCache {
   private visitorFrame?: { frame: Buffer; at: number };
   private call?: unknown;
   private wantVisitor = false;
+  /** Called when a call's first keyframe becomes the visitor's picture (to save it). */
+  onVisitor?: (frame: Buffer, at: number) => void;
+
+  /** Restores a visitor's picture saved before a restart (kept only if no newer one). */
+  restoreVisitor(frame: Buffer, at: number): void {
+    if (!this.visitorFrame || this.visitorFrame.at < at) {
+      this.visitorFrame = { frame, at };
+    }
+  }
 
   /** A call's video starts (the same call can be viewed more than once). */
   newCall(call: unknown): void {
@@ -163,6 +172,7 @@ export class KeyframeCache {
       if (frame) {
         this.visitorFrame = { frame, at: this.at };
         this.wantVisitor = false;
+        this.onVisitor?.(frame, this.at);
       }
     }
     if (type === 7) {

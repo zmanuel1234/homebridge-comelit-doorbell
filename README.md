@@ -169,7 +169,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
 | Turn up the sound from the door by (`doorVolume`) | `12` | dB of gain on the intercom's audio (its microphone is quiet). 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. `0`: as the intercom sends it. |
-| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the start of the call, while the visitor waits at the panel. `0`: always the idle picture. |
+| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken when a live view of the call starts (or at the ring, with the ring preview test on), while the visitor waits at the panel. It is saved in Homebridge's storage folder (`comelit-last-visitor.h264`), so it survives a restart. `0`: always the idle picture. |
 
 ### Experimental: media timing and troubleshooting
 
