@@ -109,3 +109,9 @@ test("enableNotifications accepts 'false' as text; off with a ring window warns 
   assert.ok(settingsWarnings(resolveSettings({ enableNotifications: false })).some((w) => /ringWindowSeconds\) to 0/.test(w)));
   assert.ok(!settingsWarnings(resolveSettings({ enableNotifications: false, ringWindowSeconds: 0 })).some((w) => /refuses/.test(w)));
 });
+
+test('camera, talkBack and registerPush accept true/false as text (beta.26)', () => {
+  const s = resolveSettings({ camera: 'true', talkBack: 'false', registerPush: 'true' });
+  assert.deepStrictEqual([s.camera, s.talkBack, s.registerPush], [true, false, true]);
+  assert.deepStrictEqual(s.invalid, []);
+});

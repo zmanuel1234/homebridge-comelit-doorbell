@@ -257,11 +257,13 @@ export class CallHandler {
     // Inside a call the intercom only acknowledges the open (seen on a 6741W, 2026-11-08: the
     // door opened, no reply). A refusal ends the call with a cause, so no reply means accepted.
     this.log?.debug(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
-    if (!call.ended && !call.media && !call.mediaStarting) {
+    if (!call.ended && !call.media) {
       // Nobody is watching: hang up, as the app does after opening. Check again after the
-      // pause, in case a live view opened meanwhile.
+      // pause, in case a live view opened meanwhile (and wait for one that is starting: if it
+      // fails, the call is still to be hung up).
       await new Promise((r) => setTimeout(r, 1500));
-      if (!call.ended && !call.media && !call.mediaStarting) {
+      await call.mediaStarting?.catch(() => undefined);
+      if (!call.ended && !call.media) {
         await this.hangUp(call);
       }
     }
@@ -371,6 +373,11 @@ export class MediaSession extends EventEmitter {
   private readonly depacketizer = new H264Depacketizer();
   private timers: NodeJS.Timeout[] = [];
   private ended = false;
+
+  /** True once the session has ended (by us or the intercom). */
+  get isEnded(): boolean {
+    return this.ended;
+  }
   private lastMedia = 0;
   private stats = { video: 0, audio: 0, other: 0, sent: 0 };
   /** When media started, the first video packet, the first SPS and the keyframes (for the log). */

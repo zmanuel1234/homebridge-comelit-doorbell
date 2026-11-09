@@ -257,3 +257,15 @@ test('an open without a viewer does not hang up if a live view starts meanwhile 
   assert.ok(!ops(sent).includes('e'), `not hung up: ${ops(sent).join(' ')}`);
   await session.end('test');
 });
+
+test('a live view that fails to start in the pause after an open still lets the call be hung up (beta.26)', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  await ring(call);
+  client.openChannel = async () => { throw new Error('refused'); };
+  const door = { name: 'Entrance', index: 0, outputIndex: 1, aptAddress: 'SB100001' };
+  const opening = call.openInCall(door, true);
+  await new Promise((r) => setTimeout(r, 6000));
+  await assert.rejects(call.startMedia(false), /refused/);
+  await opening;
+  assert.strictEqual(ops(sent).at(-1), 'e', `hung up: ${ops(sent).join(' ')}`);
+});

@@ -219,3 +219,23 @@ test('shutting down while connecting closes the new connection (beta.26)', async
   assert.strictEqual(p.reconnectTimer, undefined);
   server.close();
 });
+
+test('restored accessories with two cameras in another order are not rebuilt; the cache gets renamed doors (beta.26)', () => {
+  const { api, p } = platform();
+  const config = { ...deviceConfig, cameras: [{ id: 'a', name: 'Cam A' }, { id: 'b', name: 'Cam B' }] };
+  const lockA = new api.platformAccessory('Entrance lock', 'uuid:homebridge-comelit-intercom-lock-0');
+  lockA.context.door = { ...deviceConfig.doors[0] };
+  p.configureAccessory(lockA);
+  for (const c of [...config.cameras].reverse()) {
+    const a = new api.platformAccessory(c.name, `uuid:homebridge-comelit-intercom-camera-${c.id}`);
+    a.context.camera = c;
+    p.configureAccessory(a);
+  }
+  p.restoreCached();
+  const lock = [...p.lockAccessories.values()][0];
+  p.discoverAccessories(JSON.parse(JSON.stringify(config)));
+  assert.strictEqual([...p.lockAccessories.values()][0], lock, 'not rebuilt');
+  const renamed = { ...config, doors: [{ ...deviceConfig.doors[0], name: 'Front door' }] };
+  p.discoverAccessories(renamed);
+  assert.strictEqual(lockA.context.door.name, 'Front door');
+});

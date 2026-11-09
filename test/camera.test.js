@@ -98,3 +98,37 @@ test('two viewers of one call feed the keyframe cache once (beta.26)', async () 
   await cam.stopStream('cccccccc-2', 'test');
   assert.strictEqual(media.ended, 1);
 });
+
+test('a call that ends while the recording starts ends the view instead of starting ffmpeg (beta.26)', async () => {
+  const media = fakeMedia();
+  const cam = camera({ mediaCaptureDir: '/tmp/x', talkBack: false }, media);
+  let release;
+  let closed = 0;
+  let forced = 0;
+  cam.controller.forceStopStreamingSession = () => forced++;
+  cam.startCapture = () => new Promise((r) => (release = r));
+  pending(cam, 'dddddddd-1');
+  const starting = cam.startStream('dddddddd-1', request('dddddddd-1'));
+  while (!release) await new Promise((r) => setImmediate(r));
+  Object.defineProperty(media, 'isEnded', { value: true });
+  media.emit('end', 'the intercom ended the call');
+  release({ close: () => closed++, video: { write() {} }, audio: { write() {} }, talk: { write() {} } });
+  await starting;
+  assert.deepStrictEqual(cam.spawned, []);
+  assert.strictEqual(closed, 1);
+  assert.strictEqual(forced, 1);
+  assert.strictEqual(cam.active.size, 0);
+});
+
+test('media that already ended when the view starts gives the still picture (beta.26)', async () => {
+  const media = fakeMedia();
+  Object.defineProperty(media, 'isEnded', { value: true });
+  const cam = camera({ talkBack: false }, media);
+  cam.lastVisitor = async () => undefined;
+  cam.placeholderPath = async () => '/nonexistent.jpg';
+  pending(cam, 'eeeeeeee-1');
+  await cam.startStream('eeeeeeee-1', request('eeeeeeee-1'));
+  assert.deepStrictEqual(cam.spawned.map(([w]) => w), ['video']);
+  assert.strictEqual(media.listenerCount('video'), 0);
+  await cam.stopStream('eeeeeeee-1', 'test');
+});

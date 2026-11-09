@@ -40,6 +40,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   /** Doors and cameras the accessories were last built from, to skip rebuilding them on every reconnect. */
   private builtFrom?: string;
   private lastRingAt = 0;
+  /** Door opens on their way, so a planned reconnect waits for them. */
+  private opening = 0;
   private camera?: DoorbellCamera;
   private cameraConfigured = false;
   private readonly displayName: string;
@@ -61,7 +63,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     const s = this.settings;
     this.log.info(
-      `Settings: ${s.host || '(no host)'}:${s.port}, user row ${s.subaddress ?? 'from the intercom'}, refresh ${s.leaseMode} every ${s.leaseRefreshMs / 60_000} min, ` +
+      `Settings: ${s.host || '(no host)'}:${s.port}, user row ${s.subaddress ?? 'from the intercom'}, ${s.enableNotifications ? `refresh ${s.leaseMode} every ${s.leaseRefreshMs / 60_000} min` : `rings off, reconnect every ${s.leaseRecycleMs / 60_000} min`}, ` +
         `unlock ${s.ringWindowMs ? `within ${s.ringWindowMs / 1000} s of a ring` : 'at any time'}, answerMode ${s.answerMode}, camera ${s.camera ? 'on' : 'off'}` +
         `${s.doorbellTriggerUrl ? ', trigger URL set' : ''}${s.doctorMode !== 'off' ? `, doctor mode ${s.doctorMode}` : ''}`,
     );
@@ -132,7 +134,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
           reregister: (): Promise<void> => this.reregister(client),
           isBusy: () => this.callHandler?.busy() ?? false,
         }
-        : { intervalMs: s.leaseRecycleMs, mode: 'reconnect', recycleMs: s.leaseRecycleMs },
+        : { intervalMs: s.leaseRecycleMs, mode: 'reconnect', recycleMs: s.leaseRecycleMs, isBusy: () => this.opening > 0 },
     );
     // Shutting down while connecting: close this connection and stop.
     const stopped = async (): Promise<boolean> => {
@@ -179,6 +181,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.error(`Config fetch failed: ${(e as Error).message}`);
       await client.disconnect();
       this.scheduleReconnect(true);
+      return;
+    }
+    if (await stopped()) {
       return;
     }
     try {
@@ -392,21 +397,32 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (!this.client || !this.deviceConfig) {
       throw new Error('Not connected');
     }
-    return openDoor(this.client, this.deviceConfig, door, { listener: this.vipListener, call: this.callHandler, log: this.log });
+    this.opening++;
+    try {
+      return await openDoor(this.client, this.deviceConfig, door, { listener: this.vipListener, call: this.callHandler, log: this.log });
+    } finally {
+      this.opening--;
+    }
   }
 
   // ─── Accessories ───────────────────────────────────────────────────────────
 
   /** Finds or creates the accessory for `seed`, registering it with Homebridge only once. */
-  private accessoryFor(seed: string, name: string, keep: Set<string>, init?: (a: PlatformAccessory) => void): PlatformAccessory {
+  /**
+   * `init` runs only for a new accessory; `context` is saved on new and cached ones alike, so the
+   * cache holds the intercom's current doors and cameras (restoreCached builds from them).
+   */
+  private accessoryFor(seed: string, name: string, keep: Set<string>, init?: (a: PlatformAccessory) => void, context?: Record<string, unknown>): PlatformAccessory {
     const uuid = this.api.hap.uuid.generate(`${UUID_SEED}-${seed}`);
     keep.add(uuid);
     const existing = this.accessories.get(uuid);
     if (existing) {
+      Object.assign(existing.context, context);
       this.api.updatePlatformAccessories([existing]);
       return existing;
     }
     const accessory = new this.api.platformAccessory(name, uuid);
+    Object.assign(accessory.context, context);
     init?.(accessory);
     this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     this.accessories.set(uuid, accessory);
@@ -417,16 +433,17 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   discoverAccessories(config: DeviceConfig): void {
     // The accessories only change if the intercom's doors or cameras do; rebuilding them on
     // every reconnect would rewrite Homebridge's accessory cache each time.
-    const from = JSON.stringify([config.doors, config.cameras, this.settings.camera, this.settings.doctorMode]);
+    // Sorted, so the same doors and cameras in another order (as restored from the cache) match.
+    const doors = [...config.doors].sort((a, b) => a.index - b.index);
+    const cameras = [...config.cameras].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode]);
     if (from === this.builtFrom) {
       return;
     }
     this.builtFrom = from;
     const keep = new Set<string>();
     for (const door of config.doors) {
-      const accessory = this.accessoryFor(`lock-${door.index}`, door.name || `Door ${door.index + 1}`, keep, (a) => {
-        a.context.door = door;
-      });
+      const accessory = this.accessoryFor(`lock-${door.index}`, door.name || `Door ${door.index + 1}`, keep, undefined, { door });
       this.lockAccessories.set(accessory.UUID, new LockAccessory(this, accessory, door));
     }
     const bell = this.accessoryFor('doorbell', this.displayName, keep);
@@ -454,9 +471,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }
     }
     for (const camera of config.cameras) {
-      const accessory = this.accessoryFor(`camera-${camera.id}`, camera.name || `Camera ${camera.id}`, keep, (a) => {
-        a.context.camera = camera;
-      });
+      const accessory = this.accessoryFor(`camera-${camera.id}`, camera.name || `Camera ${camera.id}`, keep, undefined, { camera });
       new CameraAccessory(this, accessory, camera);
     }
     const stale = [...this.accessories.values()].filter((a) => !keep.has(a.UUID));

@@ -497,6 +497,13 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       }
       return;
     }
+    if (media?.isEnded) {
+      // The call ended (or another viewer's leaving ended it) while it was starting: show the
+      // picture instead of a live view that would never get anything.
+      this.log.info('Doorbell camera: the call ended while the live view was starting; showing the picture');
+      media = null;
+      active.media = null;
+    }
     const v = request.video;
     this.log.info(`Doorbell camera: streaming ${v.width}x${v.height} ${v.fps} fps ${v.max_bit_rate} kbps (${media ? 'live from the intercom' : 'still image, no call to show'})`);
 
@@ -542,6 +549,13 @@ export class DoorbellCamera implements CameraStreamingDelegate {
           // stopStream has already ended the media if this was its last viewer.
           capture?.close();
           this.captured.delete(media);
+          return;
+        }
+        if (media.isEnded) {
+          // The call ended meanwhile: its 'end' came before anything below listens for it.
+          capture?.close();
+          this.controller.forceStopStreamingSession(sessionID);
+          await this.stopStream(sessionID, 'the intercom ended the call');
           return;
         }
       }
