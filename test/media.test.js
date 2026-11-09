@@ -74,6 +74,7 @@ test('ffmpeg video arguments stream SRTP to HomeKit', () => {
   assert.ok(videoArgs({ width: 1, height: 1, fps: 1, bitrate: 1, pt: 1, ssrc: 1, srtp, address: 'a', port: 1, mtu: 1, codec: 'copy' }).join(' ').includes('-c:v copy'));
   const a = audioArgs({ sampleRate: 16, bitrate: 24, pt: 110, ssrc: 6, srtp, address: '10.0.0.9', port: 5002 });
   assert.ok(!a.includes('-af'), 'no gain unless asked');
+  assert.strictEqual(a[a.indexOf('-analyzeduration') + 1], '0', 'no 3 s probing delay on the sound');
   const loud = audioArgs({ sampleRate: 16, bitrate: 24, pt: 110, ssrc: 6, srtp, address: '10.0.0.9', port: 5002, gainDb: 12 });
   assert.strictEqual(loud[loud.indexOf('-af') + 1], 'volume=12dB,alimiter=limit=0.9');
   assert.ok(a.join(' ').includes('-f alaw -ar 8000 -ac 1 -i pipe:0') && a.includes('libfdk_aac') && a.includes('16k'));
@@ -151,6 +152,7 @@ test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle
   assert.deepStrictEqual(v.slice(i, i + LIVE_INPUT.length), LIVE_INPUT);
   assert.ok(LIVE_INPUT.includes('+showall'));
   assert.strictEqual(v[v.indexOf('-g') + 1], '32', 'a keyframe every 2 s at 16 fps');
+  assert.strictEqual(v[v.indexOf('-fflags') + 1], '+genpts', 'nobuffer would drop the first keyframe');
   // each frame gets its arrival time (works with ffmpeg 7.0 and 8), then 640x240 is stretched
   // back to 4:3 before fitting the Home app's size
   assert.match(v[v.indexOf('-vf') + 1], /^setpts=\(RTCTIME-RTCSTART\)\/\(TB\*1000000\),scale=w=iw:h='if\(gt\(iw\/ih,2\),2\*ih,ih\)',setsar=1,scale=1280:720/);

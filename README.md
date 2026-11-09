@@ -212,7 +212,7 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 
 What a call looks like:
 
-- The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It can be smeared for a moment at first; it clears at the next keyframe, which the plugin sends every 2 s.
+- The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It starts clean, from the intercom's first keyframe.
 - The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480, so it isn't enlarged.
 - The intercom's microphone is quiet; the plugin turns it up by **Turn up the sound from the door by** (12 dB). The Home app starts the live view muted: tap the speaker icon.
 - The Home app starts live views muted: tap the speaker icon to hear the door.
