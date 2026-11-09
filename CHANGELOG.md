@@ -33,6 +33,7 @@ Clean-up for the stable 2.1.0: the log and the settings screen. No change to how
 - **Unlocking during a ring** just as the call ended (answered on the monitor or a phone, or the ringing timed out) sent the open into the ended call and showed Unlocked, though the door stayed shut. It now opens the normal way in that case.
 - **A connection lost during its setup** could clear the "unreachable since" time, delaying No Response.
 - `Ring preview: no video before answering …` is logged at normal level, once per ring, when the intercom gives no picture; the other ring preview lines stay at debug.
+- README: how to make the Home app forget an old camera resolution list (still asking for 1280x720): turn talk-back off and on, with a restart each time.
 - The settings screen also shows talk-back and the notification picture when `camera` is written as text (`"true"`). The README and the setting's description say the ring preview needs **Answer the ring** (or doctor mode) not `off`.
 
 Tests: 106 in all.
