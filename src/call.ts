@@ -714,7 +714,7 @@ export class RingPreview {
         : this.packets
           ? 'video came, but no keyframe'
           : 'no video before answering';
-      this.log?.info(
+      this.log?.debug(
         `Ring preview: ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
           `${this.size ?? 'size unknown'}, ${this.packets} packets; stopped: ${reason}`,
       );

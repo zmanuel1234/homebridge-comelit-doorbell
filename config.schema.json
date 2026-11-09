@@ -123,6 +123,7 @@
         "description": "Like a doctor's office: when someone rings, the plugin answers the call and opens the first door after a short delay. Anyone who rings gets in. 'With a HomeKit switch' adds a switch, so you can turn it on only when you expect someone, or by an automation."
       },
       "doctorModeDelaySeconds": {
+        "condition": { "functionBody": "return model.doctorMode === 'always' || model.doctorMode === 'switch';" },
         "title": "Doctor mode: open after (seconds)",
         "type": "number",
         "default": 2,
@@ -137,7 +138,7 @@
         "description": "Leave off. Registering for push diverts calls away from Homebridge."
       },
       "answerMode": {
-        "title": "Answer the ring (experimental)",
+        "title": "Answer the ring",
         "type": "string",
         "default": "off",
         "oneOf": [
@@ -169,13 +170,14 @@
         "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up. Answer when viewing the camera: opening the doorbell camera's live view answers the ring (needs the doorbell camera); unlocking during a ring opens inside the call, answering it first (and hanging up afterwards) if the live view isn't open."
       },
       "camera": {
-        "title": "Doorbell camera with live video (experimental)",
+        "title": "Doorbell camera with live video",
         "type": "boolean",
         "default": false,
         "description": "Adds a HomeKit doorbell camera that shows the intercom's video and audio during a ring, and rings in HomeKit itself (the camera-ffmpeg doorbell is then not needed). Video needs 'Answer when viewing the camera'. Requires ffmpeg with libfdk_aac (ffmpeg-for-homebridge)."
       },
       "talkBack": {
-        "title": "Talk back from the Home app (experimental)",
+        "condition": { "functionBody": "return model.camera === true;" },
+        "title": "Talk back from the Home app",
         "type": "boolean",
         "default": true,
         "description": "Sends the Home app's microphone to the intercom's speaker during a live view. On by default."
@@ -274,6 +276,7 @@
         "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 calls. Empty: nothing is saved."
       },
       "ringPreview": {
+        "condition": { "functionBody": "return model.camera === true;" },
         "title": "Visitor's picture in the ring notification",
         "type": "boolean",
         "default": true,
@@ -289,30 +292,57 @@
   "layout": [
     {
       "type": "fieldset",
-      "title": "Connection",
+      "title": "Intercom",
       "items": [
         "name",
         "host",
-        "port",
         "token",
         "subaddress"
       ]
     },
     {
       "type": "fieldset",
-      "title": "Doorbell and door",
+      "title": "Doorbell camera and answering",
       "items": [
-        "enableNotifications",
-        "doorbellTriggerUrl",
-        "ringWindowSeconds"
+        "camera",
+        "answerMode",
+        "talkBack",
+        "ringPreview"
       ]
     },
     {
       "type": "fieldset",
-      "title": "Registration",
+      "title": "Door",
+      "items": [
+        "ringWindowSeconds",
+        "doctorMode",
+        "doctorModeDelaySeconds"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Picture and sound",
       "expandable": true,
       "expanded": false,
       "items": [
+        "videoQuality",
+        "doorVolume",
+        "lastVisitorMinutes",
+        "snapshotImage"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "port",
+        "enableNotifications",
+        "doorbellTriggerUrl",
+        "registerPush",
+        "videoCodec",
+        "ffmpegPath",
         "leaseRefreshMode",
         "leaseRefreshMinutes",
         "leaseRecycleMinutes",
@@ -322,36 +352,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Advanced and experimental",
-      "expandable": true,
-      "expanded": false,
-      "items": [
-        "answerMode",
-        "doctorMode",
-        "doctorModeDelaySeconds",
-        "registerPush"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Experimental: doorbell camera",
-      "expandable": true,
-      "expanded": false,
-      "items": [
-        "camera",
-        "talkBack",
-        "videoQuality",
-        "videoCodec",
-        "ffmpegPath",
-        "doorVolume",
-        "snapshotImage",
-        "lastVisitorMinutes",
-        "ringPreview"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Experimental: media timing and troubleshooting",
+      "title": "Troubleshooting",
       "expandable": true,
       "expanded": false,
       "items": [

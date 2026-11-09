@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0-beta.29 (2026-11-09)
+
+Clean-up for the stable 2.1.0: the log and the settings screen. No change to how the plugin works.
+
+### Changed
+
+- **A short normal log**: the settings at startup, `Comelit Intercom ready` (at startup and after a lost connection), rings, door opens, doctor mode, one summary line per live view, and problems. Moved to debug: the connection's steps (`Connecting`, `Authenticated`, `Device config`, CTPP), planned reconnects every **Full reconnect every** minutes and the `ready` after them, closed channels, the live view's details (`streaming`, `first picture`, `call ended`, `viewer inactive`, talk-back arriving) and the ring preview's lines. Nothing is dropped: with the child bridge's debug mode on, the log shows everything as before.
+- **The settings screen**, regrouped by what you use: **Intercom**, **Doorbell camera and answering**, **Door** (open), then **Picture and sound**, **Advanced** and **Troubleshooting** (folded away). Talk-back and the notification picture only show with the doorbell camera on, and the doctor mode delay only with doctor mode on. Nothing is renamed or removed in the JSON.
+- **"Experimental" removed** from the doorbell camera, answering and talk-back, which are tested on a 6741W.
+- **README**: a new introduction, a **Recommended Home app setup** section (room, notifications, banners, opening without the video, chime, expected visitors), the settings tables in the same groups as the screen, a note on what the normal and debug logs show, and a troubleshooting row for No Response.
+- A test checks that the settings screen shows every setting once and the README documents each (101 tests).
+
 ## 2.1.0-beta.28 (2026-11-09)
 
 Towards the stable 2.1.0: the HomeKit experience during a ring.

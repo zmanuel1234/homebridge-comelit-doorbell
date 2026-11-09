@@ -22,7 +22,7 @@ export class CameraAccessory {
     const service = accessory.getService(Service.MotionSensor) || accessory.addService(Service.MotionSensor, camera.name);
     service.getCharacteristic(Characteristic.MotionDetected).onGet(() => false);
     if (camera.rtspUrl) {
-      platform.log.info(`Camera '${camera.name}' RTSP URL: ${camera.rtspUrl} (streaming not yet implemented)`);
+      platform.log.debug(`Camera '${camera.name}' RTSP URL: ${camera.rtspUrl} (streaming not yet implemented)`);
     }
   }
 }

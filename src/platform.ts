@@ -45,6 +45,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private lastRingAt = 0;
   /** Since when the intercom is not connected (from startup until the first connection); undefined while connected. */
   private downSince: number | undefined = Date.now();
+  /** The last disconnect was a planned refresh: its reconnect is routine (debug log). */
+  private plannedReconnect = false;
   /** Door opens on their way, so a planned reconnect waits for them. */
   private opening = 0;
   private camera?: DoorbellCamera;
@@ -131,7 +133,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.error('Missing required config: host and token are required');
       return;
     }
-    this.log.info(`Connecting to ${s.host}:${s.port} …`);
+    this.log.debug(`Connecting to ${s.host}:${s.port} …`);
     // The registration lease keeps rings coming. Without listening for rings there is no
     // registration to renew: just reconnect every leaseRecycleMinutes, which also clears the
     // door channels that opens leave on the intercom.
@@ -175,7 +177,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       if (await stopped()) {
         return;
       }
-      this.log.info('Authenticated');
+      this.log.debug('Authenticated');
     } catch (e) {
       this.log.error(`Authentication failed: ${(e as Error).message}`);
       await client.disconnect();
@@ -189,7 +191,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         // Register as our own Comelit user, so calls aren't shared with a phone.
         deviceConfig.aptSubaddress = s.subaddress;
       }
-      this.log.info(`Device config: ${deviceConfig.doors.length} door(s), apt=${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`);
+      this.log.debug(`Device config: ${deviceConfig.doors.length} door(s), apt=${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`);
     } catch (e) {
       this.log.error(`Config fetch failed: ${(e as Error).message}`);
       await client.disconnect();
@@ -222,7 +224,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (s.enableNotifications) {
       try {
         await this.openCtppChannels(client, deviceConfig);
-        this.log.info('CTPP channels open for VIP events');
+        this.log.debug('CTPP channels open for VIP events');
       } catch (e) {
         this.log.warn(`CTPP setup failed (notifications disabled): ${(e as Error).message}`);
       }
@@ -271,7 +273,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         lock.refresh();
       }
     }
-    this.log.info('Comelit Intercom ready');
+    (this.plannedReconnect ? this.log.debug : this.log.info).call(this.log, 'Comelit Intercom ready');
+    this.plannedReconnect = false;
   }
 
   private async openCtppChannels(client: IconaBridgeClient, config: DeviceConfig): Promise<void> {
@@ -306,6 +309,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   }
 
   private onClientDisconnect(planned: boolean): void {
+    this.plannedReconnect = planned;
     if (planned) {
       this.log.debug('Reconnecting to refresh the registration');
     } else {
@@ -331,11 +335,15 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     this.downSince ??= Date.now();
     const failed = why === true;
+    if (failed) {
+      this.plannedReconnect = false; // a failed attempt is worth seeing when it comes back
+    }
     const delay = reconnectDelay(this.settings, why === 'planned' ? -1 : failed ? this.failures : 0);
     if (failed) {
       this.failures++;
     }
-    this.log.info(`Reconnecting in ${delay / 1000} s …`);
+    // A planned refresh is routine; a reconnect after a drop or a failure is worth seeing.
+    (why === 'planned' ? this.log.debug : this.log.info).call(this.log, `Reconnecting in ${delay / 1000} s …`);
     this.reconnectTimer = setTimeout(() => {
       this.setupDevice().catch((e) => this.onSetupError('Reconnect', e));
     }, delay);
