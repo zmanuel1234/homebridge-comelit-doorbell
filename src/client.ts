@@ -165,7 +165,7 @@ export class IconaBridgeClient extends EventEmitter {
   private plannedReconnect(lease: LeaseOptions, since: number): void {
     if (lease.isBusy?.() && Date.now() - since < (lease.maxBusyWaitMs ?? 600_000)) {
       const wait = lease.busyRecheckMs ?? 30_000;
-      this.log?.info(`Registration refresh: a call is in progress, reconnecting after it (checking again in ${wait / 1000} s)`);
+      this.log?.debug(`Registration refresh: a call is in progress, reconnecting after it (checking again in ${wait / 1000} s)`);
       this.leaseTimer = setTimeout(() => this.plannedReconnect(lease, since), wait);
       return;
     }
@@ -222,7 +222,11 @@ export class IconaBridgeClient extends EventEmitter {
     }
     this._connected = false;
     this.clearDeadTimer();
-    this.log?.info(planned ? `Reconnecting (${reason})` : `Connection lost (${reason})`);
+    if (planned) {
+      this.log?.debug(`Reconnecting (${reason})`);
+    } else {
+      this.log?.info(`Connection lost (${reason})`);
+    }
     this.failPending();
     if (this.socket) {
       this.socket.destroy();
@@ -330,7 +334,7 @@ export class IconaBridgeClient extends EventEmitter {
           ch.isOpen = false;
           ch.responseQueue.clear();
           this.channels.delete(name);
-          this.log?.info(`The intercom closed channel ${name}`);
+          this.log?.debug(`The intercom closed channel ${name}`);
           this.emit('channelClosed', name);
         }
       }

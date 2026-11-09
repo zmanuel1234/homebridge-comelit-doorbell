@@ -330,3 +330,23 @@ test('ring preview off: nothing is asked during the ring', async () => {
   assert.deepStrictEqual(ops(sent), ['1', '3']);
   assert.deepStrictEqual(client.opened, []);
 });
+
+test('an open whose call ends while answering opens the normal way (beta.29)', async () => {
+  const { call, sent } = setup('answer-on-view');
+  await ring(call);
+  const opening = call.openInCall({ aptAddress: 'SB100001', outputIndex: 1 });
+  await until(() => ops(sent).includes('c'));
+  await release(call);
+  assert.strictEqual(await opening, null);
+  assert.ok(!ops(sent).includes('2d'), 'no open sent into the ended call');
+});
+
+test('previewOn: only with calls followed and the preview set', () => {
+  const a = setup('off').call;
+  a.enablePreview({ hd: false, onVideo: () => undefined });
+  assert.strictEqual(a.previewOn, false);
+  const b = setup('answer-on-view').call;
+  assert.strictEqual(b.previewOn, false);
+  b.enablePreview({ hd: false, onVideo: () => undefined });
+  assert.strictEqual(b.previewOn, true);
+});

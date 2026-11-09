@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.1.0-beta.29 (2026-11-09)
+
+Clean-up for the stable 2.1.0: the log and the settings screen. No change to how the plugin works.
+
+### Changed
+
+- **A short normal log**: the settings at startup, `Comelit Intercom ready` (at startup and after a lost connection), rings, door opens, doctor mode, one summary line per live view, and problems. Moved to debug: the connection's steps (`Connecting`, `Authenticated`, `Device config`, CTPP), planned reconnects every **Full reconnect every** minutes and the `ready` after them, closed channels, the live view's details (`streaming`, `first picture`, `call ended`, `viewer inactive`, talk-back arriving) and the ring preview's lines. Nothing is dropped: with the child bridge's debug mode on, the log shows everything as before.
+- **The settings screen**, regrouped by what you use: **Intercom**, **Doorbell camera and answering**, **Door** (open), then **Picture and sound**, **Advanced** and **Troubleshooting** (folded away). Talk-back and the notification picture only show with the doorbell camera on, and the doctor mode delay only with doctor mode on. Nothing is renamed or removed in the JSON.
+- **"Experimental" removed** from the doorbell camera, answering and talk-back, which are tested on a 6741W.
+- **README**: a new introduction, a **Recommended Home app setup** section (room, notifications, banners, opening without the video, chime, expected visitors), the settings tables in the same groups as the screen, a note on what the normal and debug logs show, and a troubleshooting row for No Response.
+- A test checks that the settings screen shows every setting once and the README documents each.
+
+### Fixed (from an independent review of beta.28)
+
+- **The notification picture waited 4.5 s for nothing** when no ring preview could run: with **Answer the ring** `off` (the default) and doctor mode off, with **Show the last visitor for** `0`, or when calls go elsewhere. It now waits only when a preview can run, and stops waiting 1.5 s after the ring if none started.
+- **A second ring** while the first one's picture was awaited could drop the wait.
+- **Unlocking during a ring** just as the call ended (answered on the monitor or a phone, or the ringing timed out) sent the open into the ended call and showed Unlocked, though the door stayed shut. It now opens the normal way in that case.
+- **A connection lost during its setup** could clear the "unreachable since" time, delaying No Response.
+- `Ring preview: no video before answering …` is logged at normal level, once per ring, when the intercom gives no picture; the other ring preview lines stay at debug.
+- The settings screen also shows talk-back and the notification picture when `camera` is written as text (`"true"`). The README and the setting's description say the ring preview needs **Answer the ring** (or doctor mode) not `off`.
+
+Tests: 106 in all.
+
 ## 2.1.0-beta.28 (2026-11-09)
 
 Towards the stable 2.1.0: the HomeKit experience during a ring.

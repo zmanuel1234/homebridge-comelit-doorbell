@@ -115,3 +115,22 @@ test('camera, talkBack and registerPush accept true/false as text (beta.26)', ()
   assert.deepStrictEqual([s.camera, s.talkBack, s.registerPush], [true, false, true]);
   assert.deepStrictEqual(s.invalid, []);
 });
+
+test('the settings screen shows every setting exactly once, and the README documents each (beta.29)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.schema.json'), 'utf8'));
+  const keys = Object.keys(schema.schema.properties);
+  const shown = schema.layout.flatMap((s) => s.items.map((i) => (typeof i === 'string' ? i : i.key)));
+  assert.deepStrictEqual([...shown].sort(), [...keys].sort());
+  assert.strictEqual(new Set(shown).size, shown.length);
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  for (const k of keys) {
+    assert.ok(readme.includes(`(\`${k}\`)`), `README documents ${k}`);
+  }
+  // the defaults in the schema match the plugin's
+  const s = resolveSettings({});
+  assert.strictEqual(schema.schema.properties.ringPreview.default, s.ringPreview);
+  assert.strictEqual(schema.schema.properties.talkBack.default, s.talkBack);
+  assert.strictEqual(schema.schema.properties.camera.default, s.camera);
+});

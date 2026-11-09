@@ -92,6 +92,8 @@ const PREVIEW_MAX_MS = 8_000;
 export interface RingPreviewOptions {
   hd: boolean;
   onVideo: (call: object, unit: Buffer) => void;
+  /** The preview has started (its channels are being opened). */
+  onStart?: (call: object) => void;
   /** The preview has stopped, with or without a picture. */
   onDone?: (call: object) => void;
 }
@@ -130,6 +132,11 @@ export class CallHandler {
 
   get enabled(): boolean {
     return this.mode !== 'off';
+  }
+
+  /** Whether a ring starts a ring preview (calls are followed and the preview is on). */
+  get previewOn(): boolean {
+    return this.enabled && this.preview !== undefined;
   }
 
   get answerMode(): AnswerMode {
@@ -232,6 +239,7 @@ export class CallHandler {
       if (this.preview && this.client && !call.preview && !call.answered && call.answering === undefined) {
         // Not awaited: the call's frames must keep flowing while the preview waits for video.
         call.preview = new RingPreview(this, this.client, call, this.preview, this.log);
+        this.preview.onStart?.(call);
         void call.preview.start();
       }
     } else if (needsAck) {
@@ -275,6 +283,11 @@ export class CallHandler {
     }
     this.log?.debug('call: opening the door inside the call');
     await this.answer(call);
+    if (call.ended) {
+      // Answered elsewhere, or the ringing ended, meanwhile: open the normal way instead.
+      this.log?.debug('call: the call ended while answering; opening the normal way');
+      return null;
+    }
     const output = Number(door.outputIndex) || 1;
     const openBody = Buffer.concat([Buffer.from([0x00, 0x2d]), logicalAddress(door.aptAddress), Buffer.from([output & 0xff])]);
     const replyWait = this.wait(call, Opcode.OPEN_DOOR, 4000);
@@ -714,7 +727,10 @@ export class RingPreview {
         : this.packets
           ? 'video came, but no keyframe'
           : 'no video before answering';
-      this.log?.info(
+      // Normal level only when the intercom gave no picture (not when the call was answered or ended first).
+      const failed = !this.keyframeAt && /^(no keyframe|setup failed)/.test(reason);
+      (failed ? this.log?.info : this.log?.debug)?.call(
+        this.log,
         `Ring preview: ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
           `${this.size ?? 'size unknown'}, ${this.packets} packets; stopped: ${reason}`,
       );

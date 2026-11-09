@@ -173,6 +173,7 @@ function pictureCamera(config) {
   cam.lastVisitor = async () => (cam.keyframes.visitor() ? Buffer.from('visitor') : undefined);
   cam.placeholderImage = async () => Buffer.from('idle');
   cam.controller.ringDoorbell = () => undefined;
+  cam.getCall = () => ({ previewOn: true });
   return cam;
 }
 const feed = (cam, callObj) => { for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u])); };
@@ -203,4 +204,40 @@ test('without the ring preview, a picture is never held (beta.28)', async () => 
   const t = Date.now();
   assert.strictEqual((await cam.snapshot({ width: 640, height: 480 })).toString(), 'idle');
   assert.ok(Date.now() - t < 100);
+});
+
+test('no wait when no ring preview can run (answering off, or no picture kept) (beta.29)', async () => {
+  for (const [config, call] of [[{}, { previewOn: false }], [{ lastVisitorMinutes: 0 }, { previewOn: true }]]) {
+    const cam = pictureCamera(config);
+    cam.getCall = () => call;
+    cam.ring();
+    const t = Date.now();
+    await cam.snapshot({ width: 640, height: 480 });
+    assert.ok(Date.now() - t < 100, JSON.stringify(config));
+  }
+});
+
+test('a second ring keeps a wait (beta.29)', async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  cam.ring();
+  await new Promise((r) => setImmediate(r));
+  assert.ok(cam.pictureWait, 'the second ring still waits');
+  cam.previewStarted();
+  let got;
+  const asking = cam.snapshot({ width: 640, height: 480 }).then((b) => (got = b.toString()));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.strictEqual(got, undefined);
+  feed(cam, {});
+  await asking;
+  assert.strictEqual(got, 'visitor');
+});
+
+test('the wait ends 1.5 s after the ring if no preview starts (beta.29)', async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  const t = Date.now();
+  assert.strictEqual((await cam.snapshot({ width: 640, height: 480 })).toString(), 'idle');
+  const waited = Date.now() - t;
+  assert.ok(waited >= 1400 && waited < 2500, `waited ${waited} ms`);
 });

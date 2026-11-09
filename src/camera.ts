@@ -275,6 +275,8 @@ const VISITOR_FILE = 'comelit-last-visitor.h264';
 const SNAPSHOT_QUALITY = ['-q:v', '2'];
 /** How long after a ring a picture request waits for the ring preview's picture. */
 const PREVIEW_PICTURE_WAIT_MS = 4_500;
+/** If no ring preview has started this long after a ring, picture requests stop waiting. */
+const PREVIEW_START_MS = 1_500;
 
 export class DoorbellCamera implements CameraStreamingDelegate {
   readonly controller: DoorbellController;
@@ -371,24 +373,45 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   ring(): void {
     this.ringAt = Date.now();
-    if (this.settings.ringPreview) {
-      // HomeKit asks for the notification's picture within a second or two of the ring; the
-      // intercom's first picture comes about 3 s after it. Hold such requests until it is here.
+    // HomeKit asks for the notification's picture within a second or two of the ring; the
+    // intercom's first picture comes about 3 s after it. Hold such requests until it is here,
+    // but only if a ring preview can run (it needs the call followed, and a picture to keep),
+    // and only until PREVIEW_START_MS if none starts (calls diverted, a failed setup).
+    if (this.settings.ringPreview && this.settings.lastVisitorMs > 0 && this.getCall()?.previewOn) {
       this.pictureWait?.resolve();
       let resolve!: () => void;
       const promise = new Promise<void>((r) => (resolve = r));
-      const timer = setTimeout(resolve, PREVIEW_PICTURE_WAIT_MS);
-      timer.unref?.();
-      this.pictureWait = { promise, resolve: () => { clearTimeout(timer); resolve(); } };
-      void promise.then(() => (this.pictureWait = undefined));
+      const timers = [setTimeout(resolve, PREVIEW_PICTURE_WAIT_MS), setTimeout(() => !wait.started && resolve(), PREVIEW_START_MS)];
+      timers.forEach((t) => t.unref?.());
+      const wait = {
+        promise,
+        started: false,
+        resolve: () => {
+          timers.forEach((t) => clearTimeout(t));
+          resolve();
+        },
+      };
+      this.pictureWait = wait;
+      void promise.then(() => {
+        if (this.pictureWait === wait) {
+          this.pictureWait = undefined; // not a newer ring's wait
+        }
+      });
     }
     this.controller.ringDoorbell();
+  }
+
+  /** The ring preview has started: keep waiting for its picture. */
+  previewStarted(): void {
+    if (this.pictureWait) {
+      this.pictureWait.started = true;
+    }
   }
 
   /** When the doorbell last rang. */
   private ringAt = 0;
   /** Set from a ring until the ring preview's picture arrives, the preview stops, or PREVIEW_PICTURE_WAIT_MS. */
-  private pictureWait?: { promise: Promise<void>; resolve: () => void };
+  private pictureWait?: { promise: Promise<void>; resolve: () => void; started: boolean };
 
   /** The ring preview stopped: stop waiting for its picture (it may have none). */
   previewDone(): void {
@@ -422,7 +445,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     if (this.settings.ringPreview && this.ringAt && asked - this.ringAt < 60_000) {
       const which = !visitor ? 'no picture, gave the idle one' : this.keyframes.visitorAt() >= this.ringAt ? "gave this ring's picture" : 'gave an earlier visitor\'s picture';
       const waited = waiting ? ` after waiting ${((Date.now() - asked) / 1000).toFixed(1)} s` : '';
-      this.log.info(`Ring preview: HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; ${which}${waited}`);
+      this.log.debug(`Ring preview: HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; ${which}${waited}`);
     }
     return visitor ?? this.placeholderImage();
   }
@@ -591,12 +614,12 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     if (media?.isEnded) {
       // The call ended (or another viewer's leaving ended it) while it was starting: show the
       // picture instead of a live view that would never get anything.
-      this.log.info('Doorbell camera: the call ended while the live view was starting; showing the picture');
+      this.log.debug('Doorbell camera: the call ended while the live view was starting; showing the picture');
       media = null;
       active.media = null;
     }
     const v = request.video;
-    this.log.info(`Doorbell camera: streaming ${v.width}x${v.height} ${v.fps} fps ${v.max_bit_rate} kbps (${media ? 'live from the intercom' : 'still image, no call to show'})`);
+    this.log.debug(`Doorbell camera: streaming ${v.width}x${v.height} ${v.fps} fps ${v.max_bit_rate} kbps (${media ? 'live from the intercom' : 'still image, no call to show'})`);
 
     const vargs = videoArgs({
       width: v.width, height: v.height, fps: Math.min(v.fps, 16), bitrate: v.max_bit_rate, pt: v.pt, ssrc: p.videoSsrc, srtp: p.videoSrtp,
@@ -681,7 +704,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         if (!decodable && nalType(unit) === 7) {
           decodable = true;
           active.stats.firstPictureAt = Date.now();
-          this.log.info(`Doorbell camera: first picture to HomeKit ${((Date.now() - viewStart) / 1000).toFixed(1)} s after the live view started`);
+          this.log.debug(`Doorbell camera: first picture to HomeKit ${((Date.now() - viewStart) / 1000).toFixed(1)} s after the live view started`);
         }
         if (decodable) {
           active.stats.unitsToFfmpeg++;
@@ -698,7 +721,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       active.cleanup.push(() => media?.off('audio', onAudio));
 
       const onEnd = (reason: string) => {
-        this.log.info(`Doorbell camera: call ended (${reason})`);
+        this.log.debug(`Doorbell camera: call ended (${reason})`);
         this.controller.forceStopStreamingSession(sessionID);
         void this.stopStream(sessionID, reason);
       };
@@ -716,7 +739,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     const armInactivity = () => {
       clearTimeout(active.inactivity);
       active.inactivity = setTimeout(() => {
-        this.log.info('Doorbell camera: viewer inactive, stopping');
+        this.log.debug('Doorbell camera: viewer inactive, stopping');
         this.controller.forceStopStreamingSession(sessionID);
         void this.stopStream(sessionID, 'viewer inactive');
       }, Math.max(v.rtcp_interval, 0.5) * 5 * 1000 + 5000);
@@ -804,7 +827,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     let frames = 0;
     talk.stdout.on('data', (d: Buffer) => {
       if (frames === 0) {
-        this.log.info('Doorbell camera: talk-back: sound from the Home app microphone is arriving');
+        this.log.debug('Doorbell camera: talk-back: sound from the Home app microphone is arriving');
       }
       frames++;
       active.stats.micFrames++;

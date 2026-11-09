@@ -5,11 +5,11 @@
 
 Homebridge plugin for **Comelit ViP** Wi-Fi intercoms (6701W / 6741W Mini). It talks the ViP protocol directly on your network (TCP 64100), with no Comelit cloud involved.
 
-- **Doorbell notifications** in the Home app
-- **Door release** as a HomeKit lock, allowed only shortly after a ring
-- **Experimental:** answer the ring from HomeKit, so anyone in your Home can open the door without the Comelit app
-- **Experimental:** a HomeKit video doorbell showing the intercom's video and audio during a ring, with optional talk-back
-- Every setting is in the Homebridge config editor
+- **A HomeKit video doorbell**: rings on all your Apple devices, with the visitor's picture in the notification
+- **Answer from HomeKit**: live video, the door's sound and talk-back, like the Comelit app
+- **Open the door** from the live view, the lock, the Apple Watch or Siri, allowed only shortly after a ring
+- **Doctor mode**: let every visitor in automatically, always or with a HomeKit switch
+- Every setting is in the Homebridge config editor; tested on a 6741W (see [tested hardware](#tested-hardware))
 
 It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homebridge-comelit-intercom) 1.1.1 by danimal4326, whose repository is no longer available. See [NOTICE](NOTICE) and [CHANGELOG](CHANGELOG.md).
 
@@ -19,6 +19,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 - [Requirements](#requirements)
 - [Setup](#setup)
 - [What appears in HomeKit](#what-appears-in-homekit)
+- [Recommended Home app setup](#recommended-home-app-setup)
 - [Settings](#settings)
 - [How ring and unlock work](#how-ring-and-unlock-work)
 - [Migrating from homebridge-comelit-intercom](#migrating-from-homebridge-comelit-intercom) (and [updating from 2.0.x](#updating-from-20x))
@@ -34,7 +35,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 |---|---|---|
 | Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
 | Door release from HomeKit after a ring | ✅ | Refused outside the ring window. During a ring the plugin answers first (`answer-on-view`, `answer-on-open`) |
-| Unlocking during a ring without opening the live view | ❓ | New in 2.1.0-beta.28: answers, opens, hangs up, as doctor mode does (tested) |
+| Unlocking during a ring without opening the live view | ❓ | New in 2.1.0-beta.28: answers, opens and hangs up, the same steps as doctor mode (which is tested) |
 | Visitor's picture in the ring notification | ✅ / ❓ | Video before answering works (first picture about 3 s after the ring); whether iOS waits for it for the banner is being tested |
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, ~15 frames per second |
@@ -55,7 +56,7 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 - The intercom on your local network, ideally with a fixed IP address
 - **A Comelit user of its own for Homebridge.** If Homebridge shares a user with a phone, the intercom delivers each call to only one of them.
 - For a HomeKit doorbell notification, one of:
-  - the plugin's own **doorbell camera** (experimental), which needs ffmpeg with the `libfdk_aac` encoder. The Homebridge Raspberry Pi image has it (`/usr/local/bin/ffmpeg`, ffmpeg 7.0), and so does the ffmpeg-for-homebridge package (ffmpeg 7.0 or 8.0, depending on its version). Video is checked with ffmpeg 7.0.2 and 8.0.
+  - the plugin's own **doorbell camera**, which needs ffmpeg with the `libfdk_aac` encoder. The Homebridge Raspberry Pi image has it (`/usr/local/bin/ffmpeg`, ffmpeg 7.0), and so does the ffmpeg-for-homebridge package (ffmpeg 7.0 or 8.0, depending on its version). Video is checked with ffmpeg 7.0.2 and 8.0.
   - a still-image doorbell camera from [homebridge-camera-ffmpeg](https://github.com/homebridge-plugins/homebridge-camera-ffmpeg) (step 4 below)
 
 ## Setup
@@ -97,7 +98,7 @@ Everything else has working defaults. Running the plugin as a **child bridge** i
 
 HomeKit only sends a proper doorbell notification for a doorbell camera. There are two ways to get one:
 
-- **The plugin's own doorbell camera** (experimental): turn on **Doorbell camera with live video**. It rings in HomeKit by itself and, with `answerMode: answer-on-view`, shows the intercom's video during a ring. See [the doorbell camera](#doorbell-camera-experimental). Leave the trigger URL below empty, or each ring gives two notifications.
+- **The plugin's own doorbell camera** (recommended): turn on **Doorbell camera with live video**. It rings in HomeKit by itself and, with `answerMode: answer-on-view`, shows the intercom's video during a ring. See [the doorbell camera](#doorbell-camera). Leave the trigger URL below empty, or each ring gives two notifications.
 - **A still-image camera from homebridge-camera-ffmpeg**, triggered by this plugin:
 
 1. In camera-ffmpeg, turn on its local HTTP server (`porthttp`, for example 8089, with `localhttp: true`), and add a camera named `Doorbell` with **doorbell** enabled.
@@ -112,72 +113,83 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
 | Doctor mode switch (named **Name** + `Doctor Mode`), only with **Doctor mode** set to *With a HomeKit switch* | Switch | While on, every ring opens the door. Keeps its state across restarts. See [doctor mode](#doctor-mode). |
-| Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Experimental. Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera-experimental). |
+| Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera). |
 
 Without the doorbell camera, the plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
 
+## Recommended Home app setup
+
+For the fewest taps when someone rings (with **Doorbell camera** on and **Answer the ring** set to `answer-on-view`):
+
+- **Room:** put the doorbell camera and the Comelit lock in the same room, and keep other accessories out of it. The live view and the expanded notification show that room's accessories under the picture, so the lock is one tap away.
+- **Notifications** (Home app → the camera → settings): keep the doorbell notification on. Turn off notifications for the plugin's ring sensor (the motion sensor named after **Name**), or each ring notifies twice.
+- **Banners** (iPhone Settings → Notifications → Home): *Persistent* keeps the ring on screen until you act; *Time Sensitive* lets it through Focus modes.
+- **Opening without the video:** add the Comelit lock to Control Centre or the Lock Screen, or use the Apple Watch or Siri ("unlock" followed by the lock's name). During a ring the plugin answers, opens and hangs up by itself.
+- **Chime and TV:** a HomePod can play a chime when the doorbell rings, and an Apple TV can show the camera in a corner of the screen; both are turned on in the Home app's settings.
+- **Expected visitors:** set **Doctor mode** to *With a HomeKit switch* and turn the switch on by hand, by Siri, or from a Home automation (for example during a delivery window).
+
 ## Settings
 
-In the config editor, settings are grouped as below. JSON keys are shown in brackets.
+In the config editor, settings are grouped as below: the first three groups are open, the others are folded away. Talk-back and the notification picture only show with the doorbell camera on, and the doctor mode delay only with doctor mode on. JSON keys are shown in brackets.
 
 In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that isn't valid, or below the minimum the config editor allows, is replaced by its default, and the log says so at startup (`… is not valid, using …`). `true`/`false` may also be written as text. For **Unlock allowed for** that means the 90 s window is kept: only an explicit `0` allows unlocking at any time. At startup the log also shows a one-line summary of the settings in use (`Settings: …`), without the token.
 
-### Connection
+### Intercom
 
 | Setting | Default | Description |
 |---|---|---|
 | Name (`name`) | `Comelit Intercom` | Platform name in the log, and the Doorbell accessory's name when first created |
 | Intercom IP address (`host`) | required | Local IP of the Comelit monitor or Extender |
-| ViP port (`port`) | `64100` | Leave as is |
 | User token (`token`) | required | 32-character token of Homebridge's Comelit user |
 | User row number (`subaddress`) | the device's default | Row number (#) of that user. Strongly recommended. |
 
-### Doorbell and door
+### Doorbell camera and answering
 
 | Setting | Default | Description |
 |---|---|---|
-| Listen for rings (`enableNotifications`) | `true` | Keeps a connection open to receive rings. Turned off, no ring is seen, so the lock refuses to open unless **Unlock allowed for** is `0` (the log warns at startup). |
-| Doorbell camera trigger URL (`doorbellTriggerUrl`) | empty | Called on every ring, e.g. `http://localhost:8089/doorbell?Doorbell` for a homebridge-camera-ffmpeg doorbell. Leave empty if you don't use one, or if you use this plugin's doorbell camera. |
-| Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. `0` allows unlocking at any time. |
+| Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera). |
+| Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring). `off`, `handshake`, `answer-on-open` or `answer-on-view`. |
+| Talk back from the Home app (`talkBack`) | `true` | Sends the Home app's microphone to the intercom's speaker during a live view (on by default since 2.1.0). Set to `false` to hide the microphone button. |
+| Visitor's picture in the ring notification (`ringPreview`) | `true` | On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. With debug mode on, the `Ring preview: …` lines say whether it worked, and which picture HomeKit got. Needs the doorbell camera, **Answer the ring** (or doctor mode) not `off`, since the plugin must follow the call, and **Show the last visitor for** above 0. If the intercom sends no picture before an answer, the log says so (`Ring preview: no video before answering`); turn this off then. |
 
-### Registration
+### Door
+
+| Setting | Default | Description |
+|---|---|---|
+| Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. `0` allows unlocking at any time. |
+| Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
+| Doctor mode: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). |
+
+### Picture and sound
+
+| Setting | Default | Description |
+|---|---|---|
+| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for up to 800x480. A 6741W sends 640x240 either way (its camera's format), which the plugin shows as 4:3. |
+| Turn up the sound from the door by (`doorVolume`) | `12` | dB of gain on the intercom's audio (its microphone is quiet). 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. `0`: as the intercom sends it. |
+| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the ring (with **Visitor's picture in the ring notification** on), or when a live view of the call starts, while the visitor waits at the panel. It is saved in Homebridge's storage folder (`comelit-last-visitor.h264`), so it survives a restart. `0`: always the idle picture. |
+| Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
+
+### Advanced
 
 The intercom only routes rings to a registration for a few minutes, so the plugin refreshes it regularly. A refresh that needs a full reconnect waits while a call is answered (live view or `answer-on-open`), so it can't cut the call (for at most 10 minutes); in-place renewals carry on as usual.
 
 | Setting | Default | Description |
 |---|---|---|
+| ViP port (`port`) | `64100` | Leave as is |
+| Listen for rings (`enableNotifications`) | `true` | Keeps a connection open to receive rings. Turned off, no ring is seen, so the lock refuses to open unless **Unlock allowed for** is `0` (the log warns at startup). |
+| Doorbell camera trigger URL (`doorbellTriggerUrl`) | empty | Called on every ring, e.g. `http://localhost:8089/doorbell?Doorbell` for a homebridge-camera-ffmpeg doorbell. Leave empty if you don't use one, or if you use this plugin's doorbell camera. |
+| Register as a push device (`registerPush`) | `false` | Original behavior. Leave off: it diverts calls away from Homebridge. |
+| Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit, e.g. a hardware encoder your ffmpeg has. `copy` isn't possible: the intercom's video needs new timestamps and its 4:3 shape restored, so it is re-encoded; `copy` falls back to `libx264` with a warning. |
+| ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Registration refresh mode (`leaseRefreshMode`) | `inplace` | `inplace`: renew on the open connection, with no gap (default since 2.1.0). `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed; a ring during the few seconds of re-registration is kept). |
 | Registration refresh interval (`leaseRefreshMinutes`) | `2` | Minutes between refreshes. 2 is proven; longer intervals may miss rings. |
 | Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often. With **Listen for rings** off, the only reconnect. |
 | Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops. Planned reconnects for the registration wait at most 2 s. |
 | Longest reconnect wait (`maxReconnectDelay`) | `300` | If the intercom can't be reached, the wait doubles after each failed attempt (10, 20, 40 … s) up to this many seconds. It goes back to the reconnect delay once connected. |
 
-### Advanced and experimental
+### Troubleshooting (settings)
 
-| Setting | Default | Description |
-|---|---|---|
-| Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring-experimental). `off`, `handshake`, `answer-on-open` or `answer-on-view`. |
-| Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
-| Doctor mode: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). |
-| Register as a push device (`registerPush`) | `false` | Original behavior. Leave off: it diverts calls away from Homebridge. |
-
-### Experimental: doorbell camera
-
-| Setting | Default | Description |
-|---|---|---|
-| Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera-experimental). |
-| Talk back from the Home app (`talkBack`) | `true` | Sends the Home app's microphone to the intercom's speaker during a live view (on by default since 2.1.0). Set to `false` to hide the microphone button. |
-| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for up to 800x480. A 6741W sends 640x240 either way (its camera's format), which the plugin shows as 4:3. |
-| Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit, e.g. a hardware encoder your ffmpeg has. `copy` isn't possible: the intercom's video needs new timestamps and its 4:3 shape restored, so it is re-encoded; `copy` falls back to `libx264` with a warning. |
-| ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
-| Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
-| Turn up the sound from the door by (`doorVolume`) | `12` | dB of gain on the intercom's audio (its microphone is quiet). 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. `0`: as the intercom sends it. |
-| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the ring (with **Visitor's picture in the ring notification** on), or when a live view of the call starts, while the visitor waits at the panel. It is saved in Homebridge's storage folder (`comelit-last-visitor.h264`), so it survives a restart. `0`: always the idle picture. |
-| Visitor's picture in the ring notification (`ringPreview`) | `true` | On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. The log line `Ring preview: …` says whether it worked, and which picture HomeKit got. Needs the doorbell camera, and **Show the last visitor for** above 0. |
-
-### Experimental: media timing and troubleshooting
-
-For tuning the doorbell camera's live view after real tests. The defaults follow what comelit-vip measured on a 6741W.
+The defaults follow what was measured on a 6741W; change them only to troubleshoot.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -193,7 +205,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 2. The plugin activates the Doorbell motion sensor, and the HomeKit doorbell notification arrives: from the plugin's doorbell camera if it is on, or from the camera-ffmpeg doorbell through the trigger URL if that is set.
 3. During **Unlock allowed for** (90 s by default), anyone in your Home can unlock from the notification or from the lock tile. Outside that window, HomeKit shows the unlock as failed and the log says `Open refused`.
 
-### Answering the ring (experimental)
+### Answering the ring
 
 While a call is ringing and nobody has answered, the intercom refuses a door release from any device that didn't answer (it replies *busy*). The Comelit app works because it answers first. `answerMode` lets the plugin do the same:
 
@@ -215,7 +227,7 @@ Like the door of a doctor's office: when someone rings, the plugin answers the c
 
 How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones should stop ringing when it answers (not yet observed). If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Log lines start with `Doctor mode:`.
 
-### Doorbell camera (experimental)
+### Doorbell camera
 
 With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 
@@ -255,15 +267,18 @@ Your config keeps working. What changes:
 
 ## Troubleshooting
 
+The normal log is short: the settings at startup, rings, door opens, doctor mode, one summary line per live view, and anything that goes wrong. Everything else (the connection's steps, registration renewals, the call's messages, the ring preview's details) appears with the child bridge's **debug mode** on; turn it on before testing or reporting a problem.
+
 | Symptom | What to check |
 |---|---|
 | Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. With debug mode on, the log shows `Registration renewed in place` every refresh; otherwise look for reconnects. |
 | No rings at all, but the phones ring | Make sure `subaddress` is a user of its own, not shared with a phone, and that `registerPush` is off. On the intercom's Extender page, the Homebridge user should appear under **Registered slaves**. |
-| Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring-experimental). |
+| Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring with **Answer the ring** `off`, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring). |
+| The lock shows No Response | The intercom has been unreachable for more than 30 s: see the `Reconnecting in … s` lines and check the IP address and the intercom's Wi-Fi. |
 | Rings arrive, but camera-ffmpeg's doorbell no longer rings (after updating from 2.0.x) | The trigger URL has no default any more. Set **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. |
 | Live view ends with `video ffmpeg stopped` | ffmpeg failed; the lines before it in the log say why (often a missing encoder: check **Video encoder** and **ffmpeg path**). The plugin ends the view instead of leaving a frozen picture. |
 | `… is not valid, using …` at startup | A setting has a value the plugin can't use (for example a negative number or a typo), so its default is used instead. Fix it in the config editor. |
-| `The intercom closed channel CTPP` followed by a reconnect | The intercom ended the channel rings arrive on. The plugin reconnects after the reconnect delay (10 s by default) so rings keep coming. If it happens often, please open an issue with the log. |
+| `The intercom closed channel CTPP` (debug) followed by `Reconnecting in … s` | The intercom ended the channel rings arrive on. The plugin reconnects after the reconnect delay (10 s by default) so rings keep coming. If it happens often, please open an issue with the log. |
 | `Reconnecting in … s` with growing waits | The intercom can't be reached (powered off, Wi-Fi, IP changed). The plugin keeps trying, at most every **Longest reconnect wait**. Check the IP address. |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
@@ -309,7 +324,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 ## Known limits
 
 - Unlocking from HomeKit **during** a ring needs the call to be answered, which the plugin does itself with `answerMode: answer-on-open` or `answer-on-view`, and in doctor mode. With `answerMode: off` or `handshake`, the intercom refuses an open during a ring as *busy*.
-- The doorbell camera is experimental, tested on one 6741W with a Raspberry Pi: live video, the intercom's audio, talk-back and unlocking during the call.
+- The doorbell camera is tested on one 6741W with a Raspberry Pi: live video, the intercom's audio, talk-back and unlocking during the call.
 - Only tested on one model and firmware (see above).
 - Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
