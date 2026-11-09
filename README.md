@@ -21,7 +21,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 - [What appears in HomeKit](#what-appears-in-homekit)
 - [Settings](#settings)
 - [How ring and unlock work](#how-ring-and-unlock-work)
-- [Migrating from homebridge-comelit-intercom](#migrating-from-homebridge-comelit-intercom)
+- [Migrating from homebridge-comelit-intercom](#migrating-from-homebridge-comelit-intercom) (and [updating from 2.0.x](#updating-from-20x))
 - [Troubleshooting](#troubleshooting)
 - [Known limits](#known-limits)
 - [Development](#development)
@@ -60,8 +60,9 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 ### 1. Create a Comelit user for Homebridge
 
 1. Open the intercom's web page, `http://<intercom-ip>:8080`, and sign in with the installer password.
-2. Open **Users**, add a user for Homebridge, and save. Note its row number (`#3`, for example). That number is the **sub-address**.
-3. Download a **backup** from the web page. Open the archive and find `users.cfg`. The 32-character token on the line of your new user is the **token**.
+2. Open **Users** and add a user of type **Apps** for Homebridge. Note its row number (`#3`, for example). That number is the **sub-address**.
+3. **Activate it once** with the Comelit app, on any phone or tablet, using the user's activation code. The intercom only creates the user's token at activation: a user that was never activated has none, and the plugin can't log in with it. Afterwards, delete the app from that device or sign out, but **don't deactivate or delete the user** on the intercom, or its token stops working. Nothing else may use this user: if a phone keeps it, the intercom delivers each call to only one of them.
+4. Download a **backup** from the web page. Open the archive and find `users.cfg`. Your user is the line `mspUsersMap.0.<row number>`, and its token is the 32-character value in the `9:4:"…"` field.
 
 Treat the token like a password: don't post it in issues or screenshots. To revoke it, delete the user on the intercom and create a new one.
 
@@ -196,7 +197,7 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 |---|---|
 | `off` | The plugin never takes part in the call. Unlocking during a ring is refused as busy. |
 | `handshake` | The plugin replies to the call without answering it, for testing. Phones keep ringing. |
-| `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices stop ringing. |
+| `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices should stop ringing. |
 | `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Needs the doorbell camera. |
 
 Every message of the call is logged with the prefix `call:` at debug level: turn on **debug mode** for the child bridge to see them.
@@ -208,7 +209,7 @@ Like the door of a doctor's office: when someone rings, the plugin answers the c
 - **Always on** (`"doctorMode": "always"`): every ring opens the door until you change the setting. The log warns about it at startup.
 - **With a HomeKit switch** (`"doctorMode": "switch"`): adds a **Doctor Mode** switch. Every ring opens the door only while it is on, so you can turn it on by hand or with a HomeKit automation (for example during opening hours) and off again. It starts off and keeps its state across restarts.
 
-How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones stop ringing when it answers. If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Log lines start with `Doctor mode:`.
+How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones should stop ringing when it answers (not yet observed). If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Log lines start with `Doctor mode:`.
 
 ### Doorbell camera (experimental)
 
@@ -216,7 +217,7 @@ With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 
 - **It rings by itself.** You no longer need the homebridge-camera-ffmpeg doorbell, and you can clear the trigger URL.
 - **Live video needs a call.** The intercom only sends video and audio inside a call, so set **Answer the ring** to `answer-on-view`. Opening the live view during a ring then answers it, like pressing Answer in the Comelit app, and the other devices stop ringing. Outside a call, the camera shows a still picture.
-- **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
+- **Talk-back** (on by default) sends the Home app's microphone to the intercom's speaker: tap the microphone button in the live view.
 - **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it. Checked with ffmpeg 7.0.2 (Homebridge Raspberry Pi image) and 8.0.
 
 The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio, talk-back and unlocking during the call work on a 6741W with the Homebridge Raspberry Pi image's ffmpeg 7.0.2. With debug mode on, the `call:` lines count the video and audio packets received. Every live view ends with a `Doorbell camera: live view summary` line at normal level.
@@ -224,8 +225,8 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 What a call looks like:
 
 - The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It starts clean, from the intercom's first keyframe.
-- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480, so it isn't enlarged.
-- The intercom's microphone is quiet; the plugin turns it up by **Turn up the sound from the door by** (12 dB). The Home app starts the live view muted: tap the speaker icon.
+- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480. A Home app that knew the camera from before 2.1.0 may still ask for 1280x720 for a while; the plugin then enlarges the picture, which works but is less sharp.
+- The intercom's microphone is quiet; the plugin turns it up by **Turn up the sound from the door by** (12 dB).
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
 - Inside a call the intercom doesn't send a separate answer to the door open; the plugin takes "no refusal" as opened.
@@ -237,6 +238,16 @@ What a call looks like:
 3. If you used a homebridge-camera-ffmpeg doorbell, check that **Doorbell camera trigger URL** is filled in. The old plugin and 2.0.x called `http://localhost:8089/doorbell?Doorbell` when the setting was missing; 2.1.0 and later call nothing.
 
 The platform name stays `ComelitIntercom`, so your config block works unchanged, including the child bridge. Accessory IDs are also unchanged, so rooms and automations should carry over. Any local patches you applied to the old plugin are not needed.
+
+### Updating from 2.0.x
+
+Your config keeps working. What changes:
+
+- **Registration refresh mode** defaults to `inplace` (no gap in which rings are missed). Set `leaseRefreshMode: reconnect` to keep the old behavior.
+- **Doorbell camera trigger URL** has no default any more (see step 3 above).
+- **Talk-back** is on by default for the doorbell camera.
+- The log is quieter: protocol details (`call:`, `diag:`, renewals) need debug mode.
+- New: the doorbell camera with live video and talk-back, doctor mode, door volume, and a reconnect back-off. All are in the config editor.
 
 ## Troubleshooting
 
@@ -254,11 +265,12 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
 | The live view shows a frozen, almost still or grey picture | Shouldn't happen since 2.1.0 (tested with ffmpeg 7.0.2 and 8.0). The summary line's `frames sent to the Home app` should grow by about 16 per second. |
-| The live view stays blank for several seconds | The video can only start at a keyframe. The log shows `call: video …; first keyframe … s after …` and `call: a keyframe every … s`; please share those lines in an issue if it takes long. |
-| Talk-back: the visitor doesn't hear you | Look for `talk-back: sound from the Home app microphone is arriving` (the Home app sends your voice) and `talk-back sent=…` above zero in `call: media received` (it goes to the intercom). |
+| The live view stays blank for several seconds | The video can only start at the intercom's first keyframe. The live view's summary line shows `first picture …` and `first keyframe …`; please share it in an issue if it takes long. |
+| Talk-back: the visitor doesn't hear you | In the live view's summary line, `microphone data` above zero means the Home app sent your voice, and `talk-back sent` above zero means it went on to the intercom. If both are zero, check the Home app's microphone permission (iPhone **Settings → Home → Microphone**). |
 | The live view closes by itself shortly after unlocking | Expected: the intercom ends the call about 10–15 s after the door opens. |
-| Live view shows only the picture during a ring | Check `answerMode` is `answer-on-view`. Then look for `call: media received video=… audio=…` in the log: zeros mean the intercom accepted the call but sent no media. `took over … s; showing the picture` means it was slow; raise **Live view: wait**. |
+| Live view shows only the picture during a ring | Check `answerMode` is `answer-on-view`. The summary line then says `still picture` instead of `live`; with debug mode on, the `call:` lines show whether the intercom answered. `took over … s; showing the picture` means its media was slow; raise **Live view: wait**. |
 | No sound in the live view, or `Unknown encoder 'libfdk_aac'` | The ffmpeg in use lacks `libfdk_aac`. Check the `Doorbell camera: ffmpeg …` line at startup, and set **ffmpeg path** to one that has it (e.g. `/usr/local/bin/ffmpeg` on the Homebridge Pi image). |
+| A ring right after a restart doesn't reach the Home app | After Homebridge or the child bridge restarts, the Home app needs up to a minute or two to reconnect. Rings in that time can be missed by HomeKit, though the plugin logs them (`Doorbell ring`). |
 | The camera keeps showing a visitor from earlier | That's the last visitor, shown for **Show the last visitor for** minutes after a call. Set it to `0` to always show the idle picture. |
 
 Turn on **debug mode** for the child bridge to see every protocol message (`VIP msg:`), the call's messages (`call:`), diagnostics (`diag:`) and the registration renewals. Without it, the log keeps to rings, door opens, warnings and one summary line per live view. The `call:` lines mentioned in this README need debug mode.
@@ -268,10 +280,10 @@ Turn on **debug mode** for the child bridge to see every protocol message (`VIP 
 Every live view ends with one summary line, which answers most questions on its own:
 
 ```
-Doorbell camera: live view summary: 33.1 s, live, asked 1280x720 30 fps 299 kbps, first picture 2.4 s,
-frames sent to the Home app=480, video units to ffmpeg=1650, Home app reports=62, microphone data=210,
-ended: the intercom ended the call; intercom: 800x480, first video 0.9 s, first keyframe 2.3 s,
-keyframe every 2.0 s, packets video=3706 audio=1548 other=0, talk-back sent=840
+Doorbell camera: live view summary: 48.6 s, live, asked 640x480 30 fps 299 kbps, first picture 2.5 s,
+frames sent to the Home app=718, video units to ffmpeg=756, Home app reports=94, microphone data=187,
+ended: the intercom ended the call; intercom: 640x240, first video 0.9 s, first keyframe 1.0 s,
+keyframe every 3.1 s, packets video=5228 audio=2277 other=0, talk-back sent=299
 ```
 
 | Part | Meaning |
@@ -295,6 +307,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 - Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, `answer-on-view` from the camera's live view, or doctor mode. All are experimental.
 - The doorbell camera is experimental, tested on one 6741W with a Raspberry Pi: live video, the intercom's audio, talk-back and unlocking during the call.
 - Only tested on one model and firmware (see above).
+- Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 
 ## Development
@@ -324,7 +337,7 @@ CI runs the checks on Node 24 (the required `check` job) and the build and tests
 | `channels.ts` | Channel state and the message queue each channel reads from |
 | `ctpp.ts` | Registering on the CTPP channel after connecting |
 | `auth.ts`, `configReader.ts`, `push.ts` | Login with the token, reading doors and cameras from the intercom, keepalive |
-| `accessories/` | The HomeKit lock, ring sensor and (unused) RTSP camera placeholders |
+| `accessories/` | The HomeKit lock, ring sensor, doctor mode switch and (unused) RTSP camera placeholders |
 | `settings.ts` | Names and fixed timings |
 
 Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag. The release tag must be `v` followed by the version in `package.json` (e.g. `v2.1.0`, or `v2.1.0-beta.25` for a pre-release), or the publish stops.
