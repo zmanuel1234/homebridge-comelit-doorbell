@@ -275,6 +275,10 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   private placeholder?: Buffer;
   private placeholderFile?: string;
   private warnedMissingImage = false;
+  /** Which live view's microphone a call's talk-back is coming from (one at a time). */
+  private readonly talkers = new WeakMap<MediaSession, { who: ActiveSession; at: number }>();
+  /** Calls already being recorded (mediaCaptureDir). */
+  private readonly captured = new WeakSet<MediaSession>();
 
   constructor(
     private readonly api: API,
@@ -504,8 +508,11 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       const visitor = await this.lastVisitor(v.width);
       let still = await this.placeholderPath();
       if (visitor) {
-        still = path.join(os.tmpdir(), `comelit-last-visitor-${process.pid}.jpg`);
-        await fs.writeFile(still, visitor);
+        // One file per view: ffmpeg re-reads it for every frame, so views mustn't share it.
+        const file = path.join(os.tmpdir(), `comelit-last-visitor-${process.pid}-${sessionID.slice(0, 8)}.jpg`);
+        await fs.writeFile(file, visitor);
+        still = file;
+        active.cleanup.push(() => void fs.unlink(file).catch(() => undefined));
         active.stats.request += ', showing the last visitor';
       }
       const idx = vargs.indexOf(LIVE_INPUT[0]);
@@ -515,7 +522,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     } else {
       active.video = this.spawnProcess('video', vargs);
       this.watchProgress(active);
-      const capture = this.settings.mediaCaptureDir ? await this.startCapture() : undefined;
+      // One recording per call, even when several devices watch it.
+      const capture = this.settings.mediaCaptureDir && !this.captured.has(media) ? await this.startCapture() : undefined;
       if (capture) {
         const onRawVideo = (unit: Buffer) => capture.video.write(unit);
         const onRawAudio = (alaw: Buffer) => capture.audio.write(alaw);
@@ -527,6 +535,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
           capture.close();
         });
         active.capture = capture;
+        this.captured.add(media);
       }
       this.keyframes.newCall(media);
       const first = this.keyframes.keyframe(FRESH_KEYFRAME_MS);
@@ -665,6 +674,15 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       active.stats.micFrames++;
       active.capture?.talk.write(d);
       pending = Buffer.concat([pending, d]);
+      // Two viewers talking at once would interleave their sound into a garble: whoever
+      // talks first keeps the line until they have been quiet (no data) for a second.
+      const now = Date.now();
+      const talker = this.talkers.get(media);
+      if (talker && talker.who !== active && now - talker.at < 1000) {
+        pending = Buffer.alloc(0);
+        return;
+      }
+      this.talkers.set(media, { who: active, at: now });
       while (pending.length >= ALAW_FRAME_BYTES) {
         const frame = pending.subarray(0, ALAW_FRAME_BYTES);
         pending = pending.subarray(ALAW_FRAME_BYTES);

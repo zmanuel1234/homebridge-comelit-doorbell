@@ -205,7 +205,7 @@
         "type": "string",
         "default": "libx264",
         "placeholder": "libx264",
-        "description": "ffmpeg encoder for HomeKit. 'copy' passes the intercom's H.264 through without re-encoding (less CPU, may not play on every device)."
+        "description": "ffmpeg encoder for HomeKit, e.g. libx264 (default) or a hardware encoder your ffmpeg has. 'copy' isn't possible: the intercom's video has to be re-encoded."
       },
       "ffmpegPath": {
         "title": "ffmpeg path",

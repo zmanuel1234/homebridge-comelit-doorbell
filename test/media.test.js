@@ -182,3 +182,17 @@ test('the last visitor picture is the call\'s first keyframe, not its last', () 
   assert.strictEqual(k.visitor().at(-1), 4);
   assert.strictEqual(k.visitor(-1), undefined, 'too old');
 });
+
+test("a new call doesn't start from the previous call's keyframe", () => {
+  const { KeyframeCache } = require('../dist/media');
+  const k = new KeyframeCache();
+  const u = (type, tag) => Buffer.from([0, 0, 0, 1, type, tag]);
+  k.newCall({});
+  for (const [t, tag] of [[7, 1], [8, 1], [5, 1], [1, 1]]) {
+    k.push(u(t, tag));
+  }
+  assert.ok(k.keyframe(10_000), 'within the call');
+  k.newCall({}); // the next ring, seconds later
+  assert.strictEqual(k.keyframe(10_000), undefined, 'not the old call\'s keyframe');
+  assert.strictEqual(k.visitor().at(-1), 1, 'the last visitor picture is kept');
+});

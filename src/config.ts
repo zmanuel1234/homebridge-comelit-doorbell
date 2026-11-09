@@ -106,6 +106,9 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
     return fallback;
   };
+  if (String(c.videoCodec ?? '').trim() === 'copy') {
+    invalid.push("videoCodec: 'copy' can't show the intercom's video (it needs re-encoding), using libx264");
+  }
   // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
   const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0);
   const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0) : NaN;
@@ -129,7 +132,9 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     camera: c.camera === true,
     talkBack: c.talkBack !== false,
     videoQuality: c.videoQuality === 'hd' ? 'hd' : 'sd',
-    videoCodec: (c.videoCodec ?? '').trim() || 'libx264',
+    // 'copy' can't work: the intercom's stream needs new timestamps and its picture restored to 4:3,
+    // both done by ffmpeg filters, which need re-encoding.
+    videoCodec: ['', 'copy'].includes((c.videoCodec ?? '').trim()) ? 'libx264' : String(c.videoCodec).trim(),
     ffmpegPath: (c.ffmpegPath ?? '').trim(),
     snapshotImage: (c.snapshotImage ?? '').trim(),
     mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),

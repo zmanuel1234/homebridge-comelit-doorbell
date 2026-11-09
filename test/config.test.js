@@ -84,3 +84,10 @@ test('an invalid sub-address is reported, not used', () => {
   assert.strictEqual(s.subaddress, undefined);
   assert.match(settingsWarnings(s).join(), /subaddress/);
 });
+
+test("videoCodec 'copy' falls back to libx264, with a warning", () => {
+  const s = resolveSettings({ platform: 'x', videoCodec: 'copy' });
+  assert.strictEqual(s.videoCodec, 'libx264');
+  assert.match(settingsWarnings(s).join(), /copy/);
+  assert.strictEqual(resolveSettings({ platform: 'x', videoCodec: 'h264_v4l2m2m' }).videoCodec, 'h264_v4l2m2m');
+});

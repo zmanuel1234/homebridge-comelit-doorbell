@@ -142,6 +142,10 @@ export class KeyframeCache {
     if (call !== this.call) {
       this.call = call;
       this.wantVisitor = true;
+      // The previous call's keyframe must not start this call's video: its frames refer to
+      // their own keyframe, and decoding them on top of another gives a garbled picture.
+      this.idr = undefined;
+      this.at = 0;
     }
   }
 
