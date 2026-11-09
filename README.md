@@ -96,6 +96,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 | One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds once the intercom confirms, then Locked again. Extra taps while an open is on its way are ignored. If the intercom refuses, it goes straight back to Locked and the log says why. |
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
+| Doctor mode switch (named **Name** + `Doctor Mode`), only with **Doctor mode** set to *With a HomeKit switch* | Switch | While on, every ring opens the door. Keeps its state across restarts. See [doctor mode](#doctor-mode). |
 | Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Experimental. Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera-experimental). |
 
 Without the doorbell camera, the plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
@@ -141,6 +142,8 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | Setting | Default | Description |
 |---|---|---|
 | Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring-experimental). `off`, `handshake`, `answer-on-open` or `answer-on-view`. |
+| Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
+| Doctor mode: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). |
 | Register as a push device (`registerPush`) | `false` | Original behavior. Leave off: it diverts calls away from Homebridge. |
 
 ### Experimental: doorbell camera
@@ -185,6 +188,15 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 | `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Needs the doorbell camera. |
 
 Every message of the call is logged with the prefix `call:`. Please share those logs in an issue if you try it.
+
+### Doctor mode
+
+Like the door of a doctor's office: when someone rings, the plugin answers the call and opens the first door by itself, after **Doctor mode: open after** seconds (2 by default). **Anyone who rings gets in**, so use it only while you expect visitors.
+
+- **Always on** (`"doctorMode": "always"`): every ring opens the door until you change the setting. The log warns about it at startup.
+- **With a HomeKit switch** (`"doctorMode": "switch"`): adds a **Doctor Mode** switch. Every ring opens the door only while it is on, so you can turn it on by hand or with a HomeKit automation (for example during opening hours) and off again. It starts off and keeps its state across restarts.
+
+How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones stop ringing when it answers. If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Log lines start with `Doctor mode:`.
 
 ### Doorbell camera (experimental)
 

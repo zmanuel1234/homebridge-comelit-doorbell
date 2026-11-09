@@ -143,3 +143,44 @@ test('after shutdown no reconnect is scheduled', () => {
   p.scheduleReconnect(true);
   assert.strictEqual(p.reconnectTimer, undefined);
 });
+
+function doctor(extra) {
+  const { api, p } = platform({ doctorModeDelaySeconds: 0, ...extra });
+  p.deviceConfig = deviceConfig;
+  p.discoverAccessories(deviceConfig);
+  const opened = [];
+  p.callHandler = { activeCall: () => ({}), openInCall: async (door, force) => { opened.push([door.name, force]); return { confirmed: true }; } };
+  const ring = async () => {
+    p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+    await new Promise((r) => setTimeout(r, 20));
+  };
+  return { api, p, opened, ring };
+}
+
+test('doctor mode off: a ring opens nothing', async () => {
+  const { opened, ring } = doctor({});
+  await ring();
+  assert.deepStrictEqual(opened, []);
+});
+
+test('doctor mode always: a ring answers and opens the first door inside the call', async () => {
+  const { opened, ring, api } = doctor({ doctorMode: 'always' });
+  await ring();
+  assert.deepStrictEqual(opened, [[deviceConfig.doors[0].name, true]]);
+  assert.ok(![...api.registered].some((u) => u.includes('doctor-mode')), 'no switch');
+});
+
+test('doctor mode switch: opens only while the HomeKit switch is on', async () => {
+  const { p, opened, ring, api } = doctor({ doctorMode: 'switch' });
+  assert.ok([...api.registered].some((u) => u.includes('doctor-mode')), 'switch accessory');
+  await ring();
+  assert.deepStrictEqual(opened, [], 'switch off');
+  p.doctorSwitch.accessory.context.on = true;
+  await ring();
+  assert.strictEqual(opened.length, 1);
+  // a call that is already over (answered on a phone) is not opened
+  p.doctorSwitch.accessory.context.on = true;
+  p.callHandler.activeCall = () => undefined;
+  await ring();
+  assert.strictEqual(opened.length, 1);
+});

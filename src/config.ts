@@ -1,5 +1,7 @@
 import type { PlatformConfig } from 'homebridge';
 import type { AnswerMode } from './call';
+
+export type DoctorMode = 'off' | 'switch' | 'always';
 import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_MS } from './settings';
 
 /** The plugin's block in config.json (see config.schema.json). */
@@ -17,6 +19,8 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   doorbellTriggerUrl?: string;
   registerPush?: boolean;
   answerMode?: string;
+  doctorMode?: string;
+  doctorModeDelaySeconds?: number | string;
   camera?: boolean;
   talkBack?: boolean;
   videoQuality?: string;
@@ -51,6 +55,9 @@ export interface Settings {
   doorbellTriggerUrl: string;
   registerPush: boolean;
   answerMode: AnswerMode;
+  /** Open the door by itself on every ring: never, always, or while a HomeKit switch is on. */
+  doctorMode: DoctorMode;
+  doctorModeDelayMs: number;
   /** Experimental: a doorbell camera with the intercom's video. */
   camera: boolean;
   talkBack: boolean;
@@ -114,6 +121,8 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     doorbellTriggerUrl: String(c.doorbellTriggerUrl ?? '').trim(),
     registerPush: c.registerPush === true,
     answerMode: (['handshake', 'answer-on-open', 'answer-on-view'] as const).find((m) => m === c.answerMode) ?? 'off',
+    doctorMode: (['switch', 'always'] as const).find((m) => m === c.doctorMode) ?? 'off',
+    doctorModeDelayMs: num('doctorModeDelaySeconds', 2, (n) => n >= 0 && n <= 30) * 1000,
     camera: c.camera === true,
     talkBack: c.talkBack === true,
     videoQuality: c.videoQuality === 'hd' ? 'hd' : 'sd',
@@ -145,6 +154,9 @@ export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconn
 /** Settings that don't work together, as log warnings. */
 export function settingsWarnings(s: Settings): string[] {
   const w: string[] = [...s.invalid];
+  if (s.doctorMode !== 'off' && !s.enableNotifications) {
+    w.push("doctorMode needs 'Listen for rings' (enableNotifications); without rings it never opens.");
+  }
   if (s.answerMode === 'answer-on-view' && !s.camera) {
     w.push("answerMode 'answer-on-view' needs the doorbell camera (camera: true); without it nothing answers the ring.");
   }

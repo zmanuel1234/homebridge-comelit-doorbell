@@ -189,3 +189,15 @@ test('video without a keyframe asks for video again; the SPS is logged with its 
   }
   assert.ok(!log.lines.some((l) => /unknown channel/.test(l)));
 });
+
+test('doctor mode: a forced open answers and opens even with answering in handshake mode', async () => {
+  const { call, sent } = setup('handshake');
+  await ring(call);
+  const door = { name: 'Entrance', index: 0, outputIndex: 1, aptAddress: 'SB100001' };
+  assert.strictEqual(await call.openInCall(door, false), null, 'not without force');
+  const result = await call.openInCall(door, true);
+  assert.deepStrictEqual(result, { confirmed: true });
+  const o = ops(sent);
+  assert.ok(o.indexOf('c') >= 0 && o.indexOf('2d') > o.indexOf('c'), `answer, then open: ${o.join(' ')}`);
+  assert.ok(o.indexOf('e') > o.indexOf('2d'), 'hung up afterwards');
+});

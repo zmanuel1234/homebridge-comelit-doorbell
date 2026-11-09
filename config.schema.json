@@ -111,6 +111,25 @@
         "placeholder": "http://localhost:8089/doorbell?Doorbell",
         "description": "Called on every ring, to make a homebridge-camera-ffmpeg doorbell send the HomeKit doorbell notification. Leave empty if you don't use one, or if you use this plugin's doorbell camera."
       },
+      "doctorMode": {
+        "title": "Doctor mode: open the door on every ring",
+        "type": "string",
+        "default": "off",
+        "oneOf": [
+          { "title": "Off", "enum": ["off"] },
+          { "title": "Always on (every ring opens the door)", "enum": ["always"] },
+          { "title": "With a HomeKit switch (on while the switch is on)", "enum": ["switch"] }
+        ],
+        "description": "Like a doctor's office: when someone rings, the plugin answers the call and opens the first door after a short delay. Anyone who rings gets in. 'With a HomeKit switch' adds a switch, so you can turn it on only when you expect someone, or by an automation."
+      },
+      "doctorModeDelaySeconds": {
+        "title": "Doctor mode: open after (seconds)",
+        "type": "number",
+        "default": 2,
+        "minimum": 0,
+        "maximum": 30,
+        "description": "Wait this long after the ring before opening."
+      },
       "registerPush": {
         "title": "Register as a push device (original behavior)",
         "type": "boolean",
@@ -294,6 +313,8 @@
       "expanded": false,
       "items": [
         "answerMode",
+        "doctorMode",
+        "doctorModeDelaySeconds",
         "registerPush"
       ]
     },
