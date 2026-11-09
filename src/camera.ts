@@ -224,11 +224,14 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
   ];
 }
 
-export function audioArgs(o: { sampleRate: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number }): string[] {
+export function audioArgs(o: { sampleRate: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; gainDb?: number }): string[] {
   return [
     '-hide_banner', '-loglevel', 'error',
     '-f', 'alaw', '-ar', '8000', '-ac', '1', '-i', 'pipe:0',
     '-vn', '-sn', '-dn',
+    // The 6741W's microphone is quiet (speech about -33 dB, 2026-11-08): turn it up, with a
+    // limiter so loud sounds (the door release) don't distort.
+    ...(o.gainDb ? ['-af', `volume=${o.gainDb}dB,alimiter=limit=0.9`] : []),
     '-c:a', 'libfdk_aac', '-profile:a', 'aac_eld', '-flags', '+global_header',
     '-ar', `${o.sampleRate}k`, '-b:a', `${o.bitrate}k`, '-ac', '1',
     '-payload_type', String(o.pt),
@@ -283,13 +286,14 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       streamingOptions: {
         supportedCryptoSuites: [hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
         video: {
+          // Nothing larger than the intercom's own picture (640x240, shown as 640x480): offered
+          // 1280x720, the Home app took it at ~300 kbps, and the enlarged picture came out
+          // smeared, worst at the start.
           resolutions: [
             [320, 240, 15],
             [480, 360, 15],
             [640, 360, 15],
             [640, 480, 15],
-            [1280, 720, 15],
-            [1920, 1080, 15],
           ],
           codec: { profiles: [hap.H264Profile.BASELINE, hap.H264Profile.MAIN, hap.H264Profile.HIGH], levels: [hap.H264Level.LEVEL3_1, hap.H264Level.LEVEL3_2, hap.H264Level.LEVEL4_0] },
         },
@@ -548,7 +552,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       active.cleanup.push(() => media?.off('video', onVideo));
 
       const a = request.audio;
-      active.audio = this.spawnProcess('audio', audioArgs({ sampleRate: a.sample_rate, bitrate: a.max_bit_rate, pt: a.pt, ssrc: p.audioSsrc, srtp: p.audioSrtp, address: p.address, port: p.audioPort }));
+      active.audio = this.spawnProcess('audio', audioArgs({ sampleRate: a.sample_rate, bitrate: a.max_bit_rate, pt: a.pt, ssrc: p.audioSsrc, srtp: p.audioSrtp, address: p.address, port: p.audioPort, gainDb: this.settings.doorVolumeDb }));
       const onAudio = (alaw: Buffer) => active.audio?.stdin.write(alaw);
       media.on('audio', onAudio);
       active.cleanup.push(() => media?.off('audio', onAudio));
