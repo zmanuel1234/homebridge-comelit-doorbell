@@ -184,3 +184,58 @@ test('doctor mode switch: opens only while the HomeKit switch is on', async () =
   await ring();
   assert.strictEqual(opened.length, 1);
 });
+
+test('cached accessories answer HomeKit before the first connection (beta.26)', async () => {
+  const { api, p } = platform({ ringWindowSeconds: 0 });
+  const cached = new api.platformAccessory('Entrance lock', 'uuid:homebridge-comelit-intercom-lock-0');
+  cached.context.door = deviceConfig.doors[0];
+  p.configureAccessory(cached);
+  p.configureAccessory(new api.platformAccessory('Comelit Intercom', 'uuid:homebridge-comelit-intercom-doorbell'));
+  p.restoreCached();
+  assert.strictEqual(api.duplicates, 0);
+  const lock = [...p.lockAccessories.values()][0];
+  assert.ok(lock, 'the lock has its handlers');
+  const target = lock.service.getCharacteristic(p.Characteristic.LockTargetState);
+  target.set(0);
+  await new Promise((r) => setImmediate(r));
+  assert.strictEqual(lock.lockState, 1, 'not connected: stays Locked');
+  // the first connection, with the same doors, keeps them
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  assert.strictEqual([...p.lockAccessories.values()][0], lock);
+});
+
+test('shutting down while connecting closes the new connection (beta.26)', async () => {
+  const net = require('node:net');
+  let closed;
+  const gone = new Promise((r) => (closed = r));
+  const server = net.createServer((s) => { s.on('close', closed); s.on('error', () => undefined); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const { p } = platform({ host: '127.0.0.1', port: server.address().port, token: 'x' });
+  const setup = p.setupDevice();
+  p.teardown();
+  await setup;
+  await gone;
+  assert.strictEqual(p.client, undefined);
+  assert.strictEqual(p.reconnectTimer, undefined);
+  server.close();
+});
+
+test('restored accessories with two cameras in another order are not rebuilt; the cache gets renamed doors (beta.26)', () => {
+  const { api, p } = platform();
+  const config = { ...deviceConfig, cameras: [{ id: 'a', name: 'Cam A' }, { id: 'b', name: 'Cam B' }] };
+  const lockA = new api.platformAccessory('Entrance lock', 'uuid:homebridge-comelit-intercom-lock-0');
+  lockA.context.door = { ...deviceConfig.doors[0] };
+  p.configureAccessory(lockA);
+  for (const c of [...config.cameras].reverse()) {
+    const a = new api.platformAccessory(c.name, `uuid:homebridge-comelit-intercom-camera-${c.id}`);
+    a.context.camera = c;
+    p.configureAccessory(a);
+  }
+  p.restoreCached();
+  const lock = [...p.lockAccessories.values()][0];
+  p.discoverAccessories(JSON.parse(JSON.stringify(config)));
+  assert.strictEqual([...p.lockAccessories.values()][0], lock, 'not rebuilt');
+  const renamed = { ...config, doors: [{ ...deviceConfig.doors[0], name: 'Front door' }] };
+  p.discoverAccessories(renamed);
+  assert.strictEqual(lockA.context.door.name, 'Front door');
+});

@@ -36,7 +36,7 @@
         "title": "Listen for rings",
         "type": "boolean",
         "default": true,
-        "description": "Keep a connection open to receive rings. Turn off only if you just want the door lock."
+        "description": "Keep a connection open to receive rings. Without rings the lock only opens with 'Unlock allowed for' set to 0."
       },
       "reconnectDelay": {
         "title": "Reconnect delay (seconds)",
@@ -186,19 +186,19 @@
         "default": "sd",
         "oneOf": [
           {
-            "title": "Standard (320x240)",
+            "title": "Standard (asks for 320x240)",
             "enum": [
               "sd"
             ]
           },
           {
-            "title": "High (640x240)",
+            "title": "High (asks for up to 800x480)",
             "enum": [
               "hd"
             ]
           }
         ],
-        "description": "What to ask the intercom for. A 6741W offers 320x240 and 640x240."
+        "description": "What to ask the intercom for. A 6741W sends 640x240 either way, shown as 4:3."
       },
       "videoCodec": {
         "title": "Video encoder",

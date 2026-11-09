@@ -1,7 +1,28 @@
 # Changelog
 
-## Unreleased
+## 2.1.0-beta.26 (2026-11-09)
 
+Fixes from an independent review of beta.25, before the stable 2.1.0.
+
+### Fixed
+
+- **Live view closed while it was starting** (doorbell camera): ffmpeg and the return socket could be started after the viewer had already left, and run until restart. The plugin now checks after each step and starts nothing for a viewer who left; a recording started for it is closed.
+- **Call ended by the intercom while its media was being set up**: the media is now ended at once instead of being kept for a call that no longer exists.
+- **Doctor mode or unlock without a viewer**: the hang-up 1.5 s after opening now checks again that no live view started meanwhile, instead of cutting that view off.
+- **Two devices watching one call** fed each video frame twice into the picture cache.
+- **Call ended while a live view was starting** (for example while its recording was being set up): the view showed nothing until HomeKit gave up. It now shows the picture, or ends.
+- **A live view that fails to start during the pause after a door open** left the call answered; it is now hung up.
+- **Listen for rings off** (`enableNotifications: false`): no more registration refresh every 2 minutes for a registration that doesn't exist; the connection is renewed every **Full reconnect every** minutes instead. As no ring is ever seen, the lock refuses to open unless **Unlock allowed for** is `0`, and the log now says so at startup. `"false"` written as text is now read as false (it was read as true); the same for `camera`, `talkBack` and `registerPush`.
+- **Settings below the config editor's minimum** (for example a refresh interval of 0.1 minutes, or a live view wait of 1 s) are now replaced by the default and reported at startup, like other invalid values. An invalid **Show the last visitor for** keeps the 5-minute default instead of turning the picture off.
+- **Restart and shutdown**: a Homebridge shutdown during the connection setup no longer leaves a connection open; the locks and other accessories answer HomeKit from startup (a tap before the first connection says it isn't connected) instead of only after the first connection. The cache now keeps the intercom's current doors and cameras, so the first connection rebuilds the accessories only if they changed.
+
+Tests for the fixes (89 in all).
+
+### Documentation
+
+- The video quality options say what they ask for (320x240, up to 800x480); a 6741W sends 640x240 either way.
+- Lock: inside a call the intercom doesn't confirm an open, so Unlocked there means sent and not refused.
+- The troubleshooting row for a closed ring channel gives the real reconnect delay; recordings are kept per call (last 10 calls), not per view; two new known limits (door output 0 inside a call; door channels left open with rings off).
 - README only, from a second review of 2.1.0-beta.25: setting up the Comelit user (a user needs one activation in the Comelit app before it has a token, and must not be deactivated afterwards; where the token is in `users.cfg`); a section on updating from 2.0.x; a real summary line as the example; troubleshooting rows that rely on the summary line instead of debug-only lines, and one for rings missed right after a restart; hedged statements that aren't observed yet (the phones stopping when HomeKit answers); a duplicate line removed; the doctor mode switch in the module list and known limits.
 
 ## 2.1.0-beta.25 (2026-11-08)

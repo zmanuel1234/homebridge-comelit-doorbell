@@ -279,6 +279,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   private readonly talkers = new WeakMap<MediaSession, { who: ActiveSession; at: number }>();
   /** Calls already being recorded (mediaCaptureDir). */
   private readonly captured = new WeakSet<MediaSession>();
+  /** Calls whose video already feeds the keyframe cache. */
+  private readonly fed = new WeakSet<MediaSession>();
 
   constructor(
     private readonly api: API,
@@ -485,12 +487,22 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       }
     }
     active.media = media;
-    if (this.active.get(sessionID) !== active) {
+    // The viewer can leave (stopStream) during any await below: check again after each, before
+    // starting ffmpeg or the socket, which stopStream would no longer clean up.
+    const left = (): boolean => this.active.get(sessionID) !== active;
+    if (left()) {
       // The viewer left while the media was starting: end the media if nobody else watches it.
       if (media && ![...this.active.values()].some((s) => s.media === media)) {
         void media.end('viewer left');
       }
       return;
+    }
+    if (media?.isEnded) {
+      // The call ended (or another viewer's leaving ended it) while it was starting: show the
+      // picture instead of a live view that would never get anything.
+      this.log.info('Doorbell camera: the call ended while the live view was starting; showing the picture');
+      media = null;
+      active.media = null;
     }
     const v = request.video;
     this.log.info(`Doorbell camera: streaming ${v.width}x${v.height} ${v.fps} fps ${v.max_bit_rate} kbps (${media ? 'live from the intercom' : 'still image, no call to show'})`);
@@ -507,12 +519,20 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       // camera after a call shows the same picture as its tile (not the idle one).
       const visitor = await this.lastVisitor(v.width);
       let still = await this.placeholderPath();
+      if (left()) {
+        return;
+      }
       if (visitor) {
         // One file per view: ffmpeg re-reads it for every frame, so views mustn't share it.
         const file = path.join(os.tmpdir(), `comelit-last-visitor-${process.pid}-${sessionID.slice(0, 8)}.jpg`);
+        const remove = () => void fs.unlink(file).catch(() => undefined);
         await fs.writeFile(file, visitor);
+        if (left()) {
+          remove();
+          return;
+        }
         still = file;
-        active.cleanup.push(() => void fs.unlink(file).catch(() => undefined));
+        active.cleanup.push(remove);
         active.stats.request += ', showing the last visitor';
       }
       const idx = vargs.indexOf(LIVE_INPUT[0]);
@@ -520,10 +540,27 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       active.video = this.spawnProcess('video', vargs);
       this.watchProgress(active);
     } else {
+      // One recording per call, even when several devices watch it.
+      let capture: MediaCapture | undefined;
+      if (this.settings.mediaCaptureDir && !this.captured.has(media)) {
+        this.captured.add(media);
+        capture = await this.startCapture();
+        if (left()) {
+          // stopStream has already ended the media if this was its last viewer.
+          capture?.close();
+          this.captured.delete(media);
+          return;
+        }
+        if (media.isEnded) {
+          // The call ended meanwhile: its 'end' came before anything below listens for it.
+          capture?.close();
+          this.controller.forceStopStreamingSession(sessionID);
+          await this.stopStream(sessionID, 'the intercom ended the call');
+          return;
+        }
+      }
       active.video = this.spawnProcess('video', vargs);
       this.watchProgress(active);
-      // One recording per call, even when several devices watch it.
-      const capture = this.settings.mediaCaptureDir && !this.captured.has(media) ? await this.startCapture() : undefined;
       if (capture) {
         const onRawVideo = (unit: Buffer) => capture.video.write(unit);
         const onRawAudio = (alaw: Buffer) => capture.audio.write(alaw);
@@ -535,9 +572,9 @@ export class DoorbellCamera implements CameraStreamingDelegate {
           capture.close();
         });
         active.capture = capture;
-        this.captured.add(media);
       }
       this.keyframes.newCall(media);
+      this.feedKeyframes(media);
       const first = this.keyframes.keyframe(FRESH_KEYFRAME_MS);
       if (first) {
         active.video.stdin.write(first);
@@ -550,7 +587,6 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         active.stats.firstPictureAt = viewStart;
       }
       const onVideo = (unit: Buffer) => {
-        this.keyframes.push(unit);
         if (!decodable && nalType(unit) === 7) {
           decodable = true;
           active.stats.firstPictureAt = Date.now();
@@ -609,6 +645,15 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     armInactivity();
     socket.bind(p.videoReturnPort);
     active.socket = socket;
+  }
+
+  /** Keeps the call's keyframes for the snapshot and later views: once per call, however many watch it. */
+  private feedKeyframes(media: MediaSession): void {
+    if (this.fed.has(media)) {
+      return;
+    }
+    this.fed.add(media);
+    media.on('video', (unit: Buffer) => this.keyframes.push(unit));
   }
 
   /** Reads ffmpeg's progress (key=value lines) for the number of frames sent to the Home app. */

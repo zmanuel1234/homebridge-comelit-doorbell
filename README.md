@@ -105,7 +105,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 
 | Accessory | HomeKit type | Notes |
 |---|---|---|
-| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. The lock shows Unlocked for 3 seconds once the intercom confirms, then Locked again. Extra taps while an open is on its way are ignored. If the intercom refuses, it goes straight back to Locked and the log says why. |
+| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. After a tap the lock shows Unlocked for 3 seconds, then Locked again. Outside a call the intercom confirms the open; inside a call it doesn't reply, so Unlocked there means the open was sent and not refused (the log says which). Extra taps while an open is on its way are ignored. If the intercom refuses, it goes straight back to Locked and the log says why. |
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
 | Doctor mode switch (named **Name** + `Doctor Mode`), only with **Doctor mode** set to *With a HomeKit switch* | Switch | While on, every ring opens the door. Keeps its state across restarts. See [doctor mode](#doctor-mode). |
@@ -117,7 +117,7 @@ Without the doorbell camera, the plugin's own doorbell accessory doesn't produce
 
 In the config editor, settings are grouped as below. JSON keys are shown in brackets.
 
-In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that isn't valid is replaced by its default, and the log says so at startup (`… is not valid, using …`). For **Unlock allowed for** that means the 90 s window is kept: only an explicit `0` allows unlocking at any time. At startup the log also shows a one-line summary of the settings in use (`Settings: …`), without the token.
+In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that isn't valid, or below the minimum the config editor allows, is replaced by its default, and the log says so at startup (`… is not valid, using …`). `true`/`false` may also be written as text. For **Unlock allowed for** that means the 90 s window is kept: only an explicit `0` allows unlocking at any time. At startup the log also shows a one-line summary of the settings in use (`Settings: …`), without the token.
 
 ### Connection
 
@@ -133,7 +133,7 @@ In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that
 
 | Setting | Default | Description |
 |---|---|---|
-| Listen for rings (`enableNotifications`) | `true` | Keeps a connection open to receive rings. Turn off to use only the lock. |
+| Listen for rings (`enableNotifications`) | `true` | Keeps a connection open to receive rings. Turned off, no ring is seen, so the lock refuses to open unless **Unlock allowed for** is `0` (the log warns at startup). |
 | Doorbell camera trigger URL (`doorbellTriggerUrl`) | empty | Called on every ring, e.g. `http://localhost:8089/doorbell?Doorbell` for a homebridge-camera-ffmpeg doorbell. Leave empty if you don't use one, or if you use this plugin's doorbell camera. |
 | Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. `0` allows unlocking at any time. |
 
@@ -145,7 +145,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 |---|---|---|
 | Registration refresh mode (`leaseRefreshMode`) | `inplace` | `inplace`: renew on the open connection, with no gap (default since 2.1.0). `reconnect`: drop and reopen the connection, within 2 s (rings in that gap are missed; a ring during the few seconds of re-registration is kept). |
 | Registration refresh interval (`leaseRefreshMinutes`) | `2` | Minutes between refreshes. 2 is proven; longer intervals may miss rings. |
-| Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often |
+| Full reconnect every (`leaseRecycleMinutes`) | `50` | In `inplace` mode, still reconnect fully this often. With **Listen for rings** off, the only reconnect. |
 | Reconnect delay (`reconnectDelay`) | `10` | Seconds to wait after the connection drops. Planned reconnects for the registration wait at most 2 s. |
 | Longest reconnect wait (`maxReconnectDelay`) | `300` | If the intercom can't be reached, the wait doubles after each failed attempt (10, 20, 40 … s) up to this many seconds. It goes back to the reconnect delay once connected. |
 
@@ -181,7 +181,7 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | End the call after media stops for (`mediaSilenceSeconds`) | `5` | Treat the call as over when video and audio stop for this long |
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 | Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
-| Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each live view's raw media is saved: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 views are kept. About 3–5 MB per minute. |
+| Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each call's raw media is saved, once however many devices watch it: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 calls are kept. About 3–5 MB per minute. |
 
 ## How ring and unlock work
 
@@ -259,7 +259,7 @@ Your config keeps working. What changes:
 | Rings arrive, but camera-ffmpeg's doorbell no longer rings (after updating from 2.0.x) | The trigger URL has no default any more. Set **Doorbell camera trigger URL** to `http://localhost:8089/doorbell?Doorbell`. |
 | Live view ends with `video ffmpeg stopped` | ffmpeg failed; the lines before it in the log say why (often a missing encoder: check **Video encoder** and **ffmpeg path**). The plugin ends the view instead of leaving a frozen picture. |
 | `… is not valid, using …` at startup | A setting has a value the plugin can't use (for example a negative number or a typo), so its default is used instead. Fix it in the config editor. |
-| `The intercom closed channel CTPP` followed by a reconnect | The intercom ended the channel rings arrive on. The plugin reconnects at once so rings keep coming. If it happens often, please open an issue with the log. |
+| `The intercom closed channel CTPP` followed by a reconnect | The intercom ended the channel rings arrive on. The plugin reconnects after the reconnect delay (10 s by default) so rings keep coming. If it happens often, please open an issue with the log. |
 | `Reconnecting in … s` with growing waits | The intercom can't be reached (powered off, Wi-Fi, IP changed). The plugin keeps trying, at most every **Longest reconnect wait**. Check the IP address. |
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
@@ -309,6 +309,8 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 - Only tested on one model and firmware (see above).
 - Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
+- Opening inside a call (`answer-on-open`, `answer-on-view`, doctor mode) uses the door's output, but an output of `0` is sent as `1`: tested only on a door with output 1.
+- With **Listen for rings** off, each open sets up a door channel that is left open on the intercom until the next full reconnect (every **Full reconnect every** minutes).
 
 ## Development
 

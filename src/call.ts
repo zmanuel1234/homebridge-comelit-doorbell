@@ -258,9 +258,14 @@ export class CallHandler {
     // door opened, no reply). A refusal ends the call with a cause, so no reply means accepted.
     this.log?.debug(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
     if (!call.ended && !call.media) {
-      // Nobody is watching: hang up, as the app does after opening.
+      // Nobody is watching: hang up, as the app does after opening. Check again after the
+      // pause, in case a live view opened meanwhile (and wait for one that is starting: if it
+      // fails, the call is still to be hung up).
       await new Promise((r) => setTimeout(r, 1500));
-      await this.hangUp(call);
+      await call.mediaStarting?.catch(() => undefined);
+      if (!call.ended && !call.media) {
+        await this.hangUp(call);
+      }
     }
     const released = reply && reply.opcode === Opcode.RELEASE && reply.body.length >= 3;
     if (released && reply.body[2] !== 0) {
@@ -295,6 +300,11 @@ export class CallHandler {
         // Leave nothing half-set-up behind; keep the call, so unlocking still works in it.
         await session.end(`media setup failed: ${(e as Error).message}`, false);
         throw e;
+      }
+      if (call.ended) {
+        // The intercom ended the call while the media was being set up.
+        await session.end('the intercom ended the call', false);
+        return null;
       }
       call.media = session;
       session.once('end', () => {
@@ -363,6 +373,11 @@ export class MediaSession extends EventEmitter {
   private readonly depacketizer = new H264Depacketizer();
   private timers: NodeJS.Timeout[] = [];
   private ended = false;
+
+  /** True once the session has ended (by us or the intercom). */
+  get isEnded(): boolean {
+    return this.ended;
+  }
   private lastMedia = 0;
   private stats = { video: 0, audio: 0, other: 0, sent: 0 };
   /** When media started, the first video packet, the first SPS and the keyframes (for the log). */
