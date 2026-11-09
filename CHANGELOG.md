@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- README only, from a second review of 2.1.0-beta.25: setting up the Comelit user (a user needs one activation in the Comelit app before it has a token, and must not be deactivated afterwards; where the token is in `users.cfg`); a section on updating from 2.0.x; a real summary line as the example; troubleshooting rows that rely on the summary line instead of debug-only lines, and one for rings missed right after a restart; hedged statements that aren't observed yet (the phones stopping when HomeKit answers); a duplicate line removed; the doctor mode switch in the module list and known limits.
+
 ## 2.1.0-beta.25 (2026-11-08)
 
 Preparing the stable 2.1.0 release.
