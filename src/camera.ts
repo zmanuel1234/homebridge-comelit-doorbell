@@ -268,6 +268,11 @@ export function talkSdp(address: string, ipv6: boolean, port: number, srtp: Buff
 
 /** The last visitor's picture, saved in Homebridge's storage folder. */
 const VISITOR_FILE = 'comelit-last-visitor.h264';
+/**
+ * JPEG quality for the visitor's picture. ffmpeg's default is low; near-best quality measured
+ * +2.7 dB (PSNR) on a 6741W frame, about 60 KB instead of 33 KB at 640x480.
+ */
+const SNAPSHOT_QUALITY = ['-q:v', '2'];
 /** How long after a ring a picture request waits for the ring preview's picture. */
 const PREVIEW_PICTURE_WAIT_MS = 4_500;
 
@@ -429,7 +434,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       return undefined;
     }
     try {
-      return await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `${RESTORE_ASPECT},scale=${width}:-2`, '-f', 'image2', '-'], keyframe);
+      return await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `${RESTORE_ASPECT},scale=${width}:-2`, ...SNAPSHOT_QUALITY, '-f', 'image2', '-'], keyframe);
     } catch (e) {
       this.log.warn(`Doorbell camera: could not make a picture from the video (${(e as Error).message}); showing the idle picture`);
       return undefined;

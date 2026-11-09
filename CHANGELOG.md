@@ -7,6 +7,7 @@ The ring preview test, second step. Everything else is as in beta.27.
 ### Changed
 
 - **Visitor's picture in the ring notification (test)**: on the 6741W, video before an answer works, but the first picture comes about 3 s after the ring, while HomeKit asks for the notification's picture after 0.2–2 s, so it got the previous visitor's picture. A picture request in the first 4.5 s after a ring now waits for the preview's picture (or for the preview to stop without one). The ring itself still goes out at once.
+- **A cleaner visitor's picture** (notification, camera tile and the still view): saved at near-best JPEG quality instead of ffmpeg's low default. Measured on a 6741W frame: noticeably less blocky, about 60 KB instead of 33 KB. The intercom's small 640x240 picture remains the limit.
 - The log line says which picture HomeKit got (this ring's, an earlier visitor's, or the idle one) and how long it waited.
 
 ## 2.1.0-beta.27 (2026-11-09)
