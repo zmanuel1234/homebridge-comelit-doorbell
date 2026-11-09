@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.1.0-beta.25 (2026-11-08)
+
+Preparing the stable 2.1.0 release.
+
+### Changed
+
+- **Quieter log.** The call's messages (`call:`), diagnostics (`diag:`), registration renewals (`Registration renewed in place`, `VIP:` lines) and event lines are now logged at debug level. Without debug mode, the log keeps to rings, door opens, warnings and one summary line per live view. Turn on debug mode for the child bridge to see everything, as before.
+- **`leaseRefreshMode` defaults to `inplace`** (was `reconnect`): renewing on the open connection has no gap in which rings are missed, and is the mode tested for days. Configs that set `reconnect` keep it.
+- **`talkBack` defaults to on** (was off), since it works. With the doorbell camera, the Home app now shows a microphone button. Set `talkBack: false` to hide it. The warning about talk-back without the camera is gone.
+
+### Fixed (review before the stable release)
+
+- `videoCodec: copy` could never show the intercom's video: the plugin restores its timestamps and its 4:3 shape with ffmpeg filters, which need re-encoding. `copy` now falls back to `libx264` with a startup warning.
+- A ring within 10 s of the previous call could start its live video from the previous call's keyframe, giving a garbled picture until the next keyframe. Each call now starts from its own.
+- Two devices opening the live view outside a call at the same moment shared one temporary picture file, which one of them could overwrite while the other was reading it. Each view now has its own, removed when it closes.
+- Two devices talking at once during a call had their voices interleaved into a garble. The first one to talk keeps the line until it has been quiet for a second.
+- With `mediaCaptureDir` set, each device watching a call made its own recording of the same media. There is now one per call.
+
+### Documentation
+
+- README: the tested-hardware section is a table of tested features; the new defaults; which log lines need debug mode; the example config no longer sets `leaseRefreshMode`; `copy` isn't a usable encoder; wording for users updating from 2.0.x instead of beta numbers.
+- Tests for the `copy` fallback and the keyframe reset (75 in all).
+
 ## 2.1.0-beta.24 (2026-11-08)
 
 From the eighth real test (beta.23): clean video, sound without delay, doctor mode working.

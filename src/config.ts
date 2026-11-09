@@ -106,6 +106,9 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
     return fallback;
   };
+  if (String(c.videoCodec ?? '').trim() === 'copy') {
+    invalid.push("videoCodec: 'copy' can't show the intercom's video (it needs re-encoding), using libx264");
+  }
   // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
   const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0);
   const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0) : NaN;
@@ -117,7 +120,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     enableNotifications: c.enableNotifications ?? true,
     reconnectDelayMs: num('reconnectDelay', DEFAULT_RECONNECT_DELAY_S, (n) => n >= 1) * 1000,
     maxReconnectDelayMs: positive(c.maxReconnectDelay, 300) * 1000,
-    leaseMode: c.leaseRefreshMode === 'inplace' ? 'inplace' : 'reconnect',
+    leaseMode: c.leaseRefreshMode === 'reconnect' ? 'reconnect' : 'inplace',
     leaseRefreshMs: positive(c.leaseRefreshMinutes, 2) * 60_000,
     leaseRecycleMs: positive(c.leaseRecycleMinutes, 50) * 60_000,
     ringWindowMs: ringWindow * 1000,
@@ -127,9 +130,11 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     doctorMode: (['switch', 'always'] as const).find((m) => m === c.doctorMode) ?? 'off',
     doctorModeDelayMs: num('doctorModeDelaySeconds', 2, (n) => n >= 0 && n <= 30) * 1000,
     camera: c.camera === true,
-    talkBack: c.talkBack === true,
+    talkBack: c.talkBack !== false,
     videoQuality: c.videoQuality === 'hd' ? 'hd' : 'sd',
-    videoCodec: (c.videoCodec ?? '').trim() || 'libx264',
+    // 'copy' can't work: the intercom's stream needs new timestamps and its picture restored to 4:3,
+    // both done by ffmpeg filters, which need re-encoding.
+    videoCodec: ['', 'copy'].includes((c.videoCodec ?? '').trim()) ? 'libx264' : String(c.videoCodec).trim(),
     ffmpegPath: (c.ffmpegPath ?? '').trim(),
     snapshotImage: (c.snapshotImage ?? '').trim(),
     mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),
@@ -163,9 +168,6 @@ export function settingsWarnings(s: Settings): string[] {
   }
   if (s.answerMode === 'answer-on-view' && !s.camera) {
     w.push("answerMode 'answer-on-view' needs the doorbell camera (camera: true); without it nothing answers the ring.");
-  }
-  if (s.talkBack && !s.camera) {
-    w.push('talkBack only works with the doorbell camera (camera: true).');
   }
   if (s.camera && s.doorbellTriggerUrl) {
     w.push('The doorbell camera rings in HomeKit by itself; with doorbellTriggerUrl set as well, each ring gives two notifications. Clear the trigger URL once the camera works.');

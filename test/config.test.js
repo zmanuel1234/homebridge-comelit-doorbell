@@ -4,7 +4,7 @@ const { resolveSettings, settingsWarnings } = require('../dist/config');
 
 test('defaults', () => {
   const s = resolveSettings({ platform: 'ComelitIntercom', host: 'h', token: 't' });
-  assert.strictEqual(s.leaseMode, 'reconnect');
+  assert.strictEqual(s.leaseMode, 'inplace', 'in-place renewal is the default since 2.1.0');
   assert.strictEqual(s.leaseRefreshMs, 120_000);
   assert.strictEqual(s.leaseRecycleMs, 3_000_000);
   assert.strictEqual(s.ringWindowMs, 90_000);
@@ -22,13 +22,14 @@ test('defaults', () => {
   assert.strictEqual(s.liveViewWaitMs, 8_000);
   assert.strictEqual(s.lastVisitorMs, 300_000);
   assert.strictEqual(s.camera, false);
-  assert.strictEqual(s.talkBack, false);
+  assert.strictEqual(s.talkBack, true, 'talk-back is on by default since 2.1.0');
 });
 
 test('explicit values', () => {
-  const s = resolveSettings({ platform: 'x', subaddress: 3, leaseRefreshMode: 'inplace', leaseRefreshMinutes: 2, ringWindowSeconds: 0, doorbellTriggerUrl: '', answerMode: 'handshake', reconnectDelay: 5, mediaSilenceSeconds: 8, videoRefreshSeconds: 20 });
+  const s = resolveSettings({ platform: 'x', subaddress: 3, leaseRefreshMode: 'reconnect', talkBack: false, leaseRefreshMinutes: 2, ringWindowSeconds: 0, doorbellTriggerUrl: '', answerMode: 'handshake', reconnectDelay: 5, mediaSilenceSeconds: 8, videoRefreshSeconds: 20 });
   assert.strictEqual(s.subaddress, 3);
-  assert.strictEqual(s.leaseMode, 'inplace');
+  assert.strictEqual(s.leaseMode, 'reconnect');
+  assert.strictEqual(s.talkBack, false);
   assert.strictEqual(s.ringWindowMs, 0);
   assert.strictEqual(s.doorbellTriggerUrl, '');
   assert.strictEqual(s.answerMode, 'handshake');
@@ -42,7 +43,7 @@ test('warnings for settings that do not work together', () => {
   const w = (c) => settingsWarnings(resolveSettings({ platform: 'x', ...c }));
   assert.strictEqual(w({}).length, 1 - 1);
   assert.match(w({ answerMode: 'answer-on-view' }).join(), /needs the doorbell camera/);
-  assert.match(w({ talkBack: true }).join(), /talkBack only works/);
+  assert.deepStrictEqual(w({ talkBack: true }), [], 'talk-back without the camera: no warning (on by default)');
   assert.match(w({ camera: true, answerMode: 'answer-on-view', doorbellTriggerUrl: 'http://localhost:8089/doorbell?Doorbell' }).join(), /two notifications/);
   assert.deepStrictEqual(w({ camera: true, answerMode: 'answer-on-view' }), []);
 });
@@ -82,4 +83,11 @@ test('an invalid sub-address is reported, not used', () => {
   const s = resolveSettings({ platform: 'x', subaddress: 'three' });
   assert.strictEqual(s.subaddress, undefined);
   assert.match(settingsWarnings(s).join(), /subaddress/);
+});
+
+test("videoCodec 'copy' falls back to libx264, with a warning", () => {
+  const s = resolveSettings({ platform: 'x', videoCodec: 'copy' });
+  assert.strictEqual(s.videoCodec, 'libx264');
+  assert.match(settingsWarnings(s).join(), /copy/);
+  assert.strictEqual(resolveSettings({ platform: 'x', videoCodec: 'h264_v4l2m2m' }).videoCodec, 'h264_v4l2m2m');
 });

@@ -170,7 +170,7 @@ export class CallHandler {
     if (!call) {
       return;
     }
-    this.log?.info(
+    this.log?.debug(
       `call: rx flags=0x${frame.flags.toString(16)} seq=${frame.seq} ack=${frame.ack} op=0x${(frame.opcode & 0xffff).toString(16)} body=${hex(frame.body)}`,
     );
     if (frame.body.length > 0) {
@@ -247,7 +247,7 @@ export class CallHandler {
     if (!call || !(force || this.mode === 'answer-on-open' || (this.mode === 'answer-on-view' && call.answered))) {
       return null;
     }
-    this.log?.info('call: opening the door inside the call');
+    this.log?.debug('call: opening the door inside the call');
     await this.answer(call);
     const output = Number(door.outputIndex) || 1;
     const openBody = Buffer.concat([Buffer.from([0x00, 0x2d]), logicalAddress(door.aptAddress), Buffer.from([output & 0xff])]);
@@ -256,7 +256,7 @@ export class CallHandler {
     const reply = await replyWait;
     // Inside a call the intercom only acknowledges the open (seen on a 6741W, 2026-11-08: the
     // door opened, no reply). A refusal ends the call with a cause, so no reply means accepted.
-    this.log?.info(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
+    this.log?.debug(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
     if (!call.ended && !call.media) {
       // Nobody is watching: hang up, as the app does after opening.
       await new Promise((r) => setTimeout(r, 1500));
@@ -330,7 +330,7 @@ export class CallHandler {
     if (flags & Flag.DATA) {
       call.seq = (call.seq + 1) & 0xff;
     }
-    this.log?.info(`call: tx ${what}: ${hex(frame.subarray(0, 8 + body.length))}`);
+    this.log?.debug(`call: tx ${what}: ${hex(frame.subarray(0, 8 + body.length))}`);
     await this.sendFrame(frame);
   }
 
@@ -377,7 +377,7 @@ export class MediaSession extends EventEmitter {
   private tx = { seq: Math.floor(Math.random() * 0xffff), ts: Math.floor(Math.random() * 0xffffffff), ssrc: Math.floor(Math.random() * 0xffffffff), first: true };
   private readonly onChannel = (name: string, handle: number) => {
     if (name === 'RTPC') {
-      this.log?.info(`call: intercom opened media channel ${handle}`);
+      this.log?.debug(`call: intercom opened media channel ${handle}`);
       this.route(handle);
     }
   };
@@ -404,7 +404,7 @@ export class MediaSession extends EventEmitter {
     for (const h of [this.audioHandle, this.videoHandle, (this.videoHandle + 1) & 0xffff]) {
       this.route(h);
     }
-    this.log?.info(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
+    this.log?.debug(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
 
     // The intercom usually sends its own audio request right after the answer, before ours:
     // only wait for it if it hasn't come yet.
@@ -413,7 +413,7 @@ export class MediaSession extends EventEmitter {
     await panelAudio;
     this.txHandle = this.call.panelAudioHandle;
     if (this.txHandle !== undefined) {
-      this.log?.info(`call: intercom takes our audio on channel ${this.txHandle}`);
+      this.log?.debug(`call: intercom takes our audio on channel ${this.txHandle}`);
     } else {
       this.log?.warn('call: the intercom sent no audio request; talk-back goes to our audio channel');
     }
@@ -435,7 +435,7 @@ export class MediaSession extends EventEmitter {
     );
     this.timers.push(
       setInterval(() => {
-        this.log?.info(`call: media received video=${this.stats.video} audio=${this.stats.audio} other=${this.stats.other} packets; talk-back sent=${this.stats.sent}`);
+        this.log?.debug(`call: media received video=${this.stats.video} audio=${this.stats.audio} other=${this.stats.other} packets; talk-back sent=${this.stats.sent}`);
       }, STATS_INTERVAL_MS),
     );
   }
@@ -464,7 +464,7 @@ export class MediaSession extends EventEmitter {
       // until then nothing can be shown. Asking for video again may bring one sooner.
       this.keyframeRetry = setTimeout(() => {
         if (this.firstSpsAt === 0 && !this.ended) {
-          this.log?.info('call: no keyframe yet; asking for video again');
+          this.log?.debug('call: no keyframe yet; asking for video again');
           void this.requestVideo().catch(() => undefined);
         }
       }, NO_KEYFRAME_RETRY_MS);
@@ -495,7 +495,7 @@ export class MediaSession extends EventEmitter {
       const sps = parseSps(unit);
       const size = sps ? `${sps.width}x${sps.height}, profile ${sps.profile}, level ${sps.level / 10}` : 'size unknown';
       this.videoSize = sps ? `${sps.width}x${sps.height}` : undefined;
-      this.log?.info(
+      this.log?.debug(
         `call: video ${size}; first keyframe ${((now - this.startedAt) / 1000).toFixed(1)} s after the media request, ` +
           `${((now - this.firstVideoAt) / 1000).toFixed(1)} s after the first video packet`,
       );
@@ -503,7 +503,7 @@ export class MediaSession extends EventEmitter {
       this.keyframeAt.push(now);
       if (this.keyframeAt.length === 3) {
         const [a, , c] = this.keyframeAt;
-        this.log?.info(`call: a keyframe every ${((c - a) / 2000).toFixed(1)} s`);
+        this.log?.debug(`call: a keyframe every ${((c - a) / 2000).toFixed(1)} s`);
       }
     }
   }
@@ -547,7 +547,7 @@ export class MediaSession extends EventEmitter {
     this.timers = [];
     clearTimeout(this.keyframeRetry);
     this.client.off('channel', this.onChannel);
-    this.log?.info(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets; talk-back sent=${this.stats.sent}`);
+    this.log?.debug(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets; talk-back sent=${this.stats.sent}`);
     if (!this.call.ended) {
       await this.voiceStatus(0).catch(() => undefined);
       if (this.audioHandle !== undefined) {
