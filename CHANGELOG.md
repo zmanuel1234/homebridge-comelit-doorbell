@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- README: tested hardware and known limits say what is tested with 2.1.0-beta.19, and which ffmpeg versions the video is checked with (7.0.2 on the Homebridge Raspberry Pi image, and 8.0). No changes to the plugin.
+
 ## 2.1.0-beta.19 (2026-11-08)
 
 ### Fixed
