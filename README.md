@@ -30,7 +30,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 
 | Model | Model id | Firmware | Works |
 |---|---|---|---|
-| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera: answering from the live view, live video (640x240, shown as 4:3) and intercom audio, talk-back, unlocking during the call (2.1.0-beta.16/17) |
+| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera (2.1.0-beta.19): answering from the live view, the intercom's audio, talk-back, unlocking during the call; live video (640x240, shown as 4:3) checked by replaying recorded calls, live on the Pi still to confirm |
 
 Other ViP devices may work. You'll find the model id and firmware on the intercom's web page, under **Device info**. Please open an issue with them, whether it works or not.
 
@@ -40,7 +40,7 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 - The intercom on your local network, ideally with a fixed IP address
 - **A Comelit user of its own for Homebridge.** If Homebridge shares a user with a phone, the intercom delivers each call to only one of them.
 - For a HomeKit doorbell notification, one of:
-  - the plugin's own **doorbell camera** (experimental), which needs ffmpeg with the `libfdk_aac` encoder. The Homebridge Raspberry Pi image has it (`/usr/local/bin/ffmpeg`), and so does the ffmpeg-for-homebridge package.
+  - the plugin's own **doorbell camera** (experimental), which needs ffmpeg with the `libfdk_aac` encoder. The Homebridge Raspberry Pi image has it (`/usr/local/bin/ffmpeg`, ffmpeg 7.0), and so does the ffmpeg-for-homebridge package (ffmpeg 7.0 or 8.0, depending on its version). Video is checked with ffmpeg 7.0.2 and 8.0.
   - a still-image doorbell camera from [homebridge-camera-ffmpeg](https://github.com/homebridge-plugins/homebridge-camera-ffmpeg) (step 4 below)
 
 ## Setup
@@ -193,9 +193,9 @@ With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 - **It rings by itself.** You no longer need the homebridge-camera-ffmpeg doorbell, and you can clear the trigger URL.
 - **Live video needs a call.** The intercom only sends video and audio inside a call, so set **Answer the ring** to `answer-on-view`. Opening the live view during a ring then answers it, like pressing Answer in the Comelit app, and the other devices stop ringing. Outside a call, the camera shows a still picture.
 - **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
-- **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it.
+- **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it. Checked with ffmpeg 7.0.2 (Homebridge Raspberry Pi image) and 8.0.
 
-The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio, talk-back and unlocking during the call work on a 6741W. The `call:` lines in the log count the video and audio packets received.
+The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). The intercom's audio, talk-back and unlocking during the call work on a 6741W. Live video works when the recorded calls are replayed through ffmpeg 7.0.2 and 8.0; on the Pi itself it is still to be confirmed with 2.1.0-beta.19. The `call:` lines in the log count the video and audio packets received.
 
 What a call looks like:
 
@@ -268,7 +268,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 ## Known limits
 
 - Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, or `answer-on-view` from the camera's live view. Both are experimental.
-- The doorbell camera is experimental, tested on one 6741W: live video, the intercom's audio, talk-back and unlocking during the call.
+- The doorbell camera is experimental, tested on one 6741W: the intercom's audio, talk-back and unlocking during the call. Live video is checked with recordings, and still to be confirmed live on the Pi.
 - Only tested on one model and firmware (see above).
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 
