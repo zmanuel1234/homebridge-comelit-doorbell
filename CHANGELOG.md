@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0-beta.28 (2026-11-09)
+
+Towards the stable 2.1.0: the HomeKit experience during a ring.
+
+### Changed
+
+- **Visitor's picture in the ring notification** (`ringPreview`) is **on by default** and no longer a test; its setting moved to the doorbell camera section. On the 6741W video before an answer works (tested with beta.27), but the first picture comes about 3 s after the ring, while HomeKit asks for the notification's picture after 0.2–2 s, so it got the previous visitor's picture. A picture request in the first 4.5 s after a ring now waits for this ring's picture (or for the preview to stop without one). The ring itself still goes out at once. The log line `Ring preview: …` says which picture HomeKit got and how long it waited.
+- **Unlocking during a ring without opening the live view** (`answerMode: answer-on-view`): the plugin answers the call, opens the door and hangs up, as doctor mode does. So a visitor can be let in from the notification, the Apple Watch, Control Centre or Siri. Before, the intercom refused the open as *busy* unless the live view was open.
+- **A cleaner visitor's picture** (notification, camera tile and still view): saved at near-best JPEG quality instead of ffmpeg's low default. Measured on a 6741W frame: noticeably less blocky, about 60 KB instead of 33 KB. The intercom's small 640x240 picture remains the limit.
+
+### Added
+
+- **The lock shows No Response** in Home when the intercom has been unreachable for more than 30 s (a normal reconnect takes a second or two and doesn't show). A tap then gives Home's "No Response" instead of quietly going back to Locked. It clears as soon as the connection is back.
+
+Tests: 100 in all.
+
 ## 2.1.0-beta.27 (2026-11-09)
 
 A test build for the visitor's picture in the ring notification. Everything else is as in beta.26.

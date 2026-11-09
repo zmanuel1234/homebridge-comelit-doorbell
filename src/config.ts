@@ -153,7 +153,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     ffmpegPath: (c.ffmpegPath ?? '').trim(),
     snapshotImage: (c.snapshotImage ?? '').trim(),
     mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),
-    ringPreview: bool('ringPreview', false),
+    ringPreview: bool('ringPreview', true),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
     mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1) * 1000,
     mediaSilenceMs: pos('mediaSilenceSeconds', 5, 1) * 1000,

@@ -20,7 +20,7 @@ function fakeApi() {
     addService(t) { return (this.s[t] = new Svc()); }
     removeService() {}
   }
-  class HapStatusError extends Error {}
+  class HapStatusError extends Error { constructor(status) { super(String(status)); this.hapStatus = status; } }
   const registered = new Set();
   const api = {
     registered,
@@ -30,7 +30,7 @@ function fakeApi() {
       Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n' },
       uuid: { generate: (s) => `uuid:${s}` },
       HapStatusError,
-      HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412 },
+      HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412, SERVICE_COMMUNICATION_FAILURE: -70402 },
     },
     on() {},
     platformAccessory: Acc,
@@ -238,4 +238,26 @@ test('restored accessories with two cameras in another order are not rebuilt; th
   const renamed = { ...config, doors: [{ ...deviceConfig.doors[0], name: 'Front door' }] };
   p.discoverAccessories(renamed);
   assert.strictEqual(lockA.context.door.name, 'Front door');
+});
+
+test('the lock shows No Response after 30 s without the intercom, and recovers (beta.28)', () => {
+  const { p } = platform({ ringWindowSeconds: 0 });
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  const lock = [...p.lockAccessories.values()][0];
+  const current = lock.service.getCharacteristic(p.Characteristic.LockCurrentState);
+  const target = lock.service.getCharacteristic(p.Characteristic.LockTargetState);
+  const noResponse = (e) => e.hapStatus === -70402;
+  // within the grace period: normal
+  assert.strictEqual(p.unreachable(), false);
+  assert.strictEqual(current.get(), 1);
+  // unreachable for longer than 30 s
+  p.downSince = Date.now() - 31_000;
+  assert.throws(() => current.get(), noResponse);
+  assert.throws(() => target.get(), noResponse);
+  assert.throws(() => target.set(0), noResponse);
+  // back: refresh() pushes the state again
+  p.downSince = undefined;
+  lock.refresh();
+  assert.strictEqual(current.get(), 1);
+  assert.strictEqual(current.value, 1);
 });

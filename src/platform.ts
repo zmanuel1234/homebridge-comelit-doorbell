@@ -18,6 +18,9 @@ import { registerPush, sendPushKeepalive } from './push';
 import { KEEPALIVE_INTERVAL_MS, PLATFORM_NAME, PLUGIN_NAME, UUID_SEED } from './settings';
 import { VipEventListener } from './vipListener';
 
+/** How long the intercom must be unreachable before the lock shows No Response. */
+export const UNREACHABLE_AFTER_MS = 30_000;
+
 export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   readonly Service: typeof Service;
   readonly Characteristic: typeof Characteristic;
@@ -40,6 +43,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   /** Doors and cameras the accessories were last built from, to skip rebuilding them on every reconnect. */
   private builtFrom?: string;
   private lastRingAt = 0;
+  /** Since when the intercom is not connected (from startup until the first connection); undefined while connected. */
+  private downSince: number | undefined = Date.now();
   /** Door opens on their way, so a planned reconnect waits for them. */
   private opening = 0;
   private camera?: DoorbellCamera;
@@ -99,6 +104,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.builtFrom = undefined;
       this.log.warn(`Restoring the cached accessories failed: ${(e as Error).message}`);
     }
+  }
+
+  /**
+   * The intercom has been unreachable for more than UNREACHABLE_AFTER_MS: the lock then shows
+   * No Response in Home. The grace period hides normal reconnects (a second or two).
+   */
+  unreachable(): boolean {
+    return this.downSince !== undefined && Date.now() - this.downSince > UNREACHABLE_AFTER_MS;
   }
 
   /** Whether HomeKit may unlock now: within the ring window, or always if the window is 0. */
@@ -235,7 +248,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       call.attach(client);
       call.enablePreview(
         s.ringPreview && s.camera
-          ? { hd: s.videoQuality === 'hd', onVideo: (c, unit) => this.camera?.previewVideo(c, unit) }
+          ? { hd: s.videoQuality === 'hd', onVideo: (c, unit) => this.camera?.previewVideo(c, unit), onDone: () => this.camera?.previewDone() }
           : undefined,
       );
       this.callHandler = call;
@@ -251,6 +264,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.startKeepalive(deviceConfig);
     this.discoverAccessories(deviceConfig);
     this.failures = 0;
+    const wasUnreachable = this.unreachable();
+    this.downSince = undefined;
+    if (wasUnreachable) {
+      for (const lock of this.lockAccessories.values()) {
+        lock.refresh();
+      }
+    }
     this.log.info('Comelit Intercom ready');
   }
 
@@ -291,6 +311,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     } else {
       this.log.warn('Device disconnected — scheduling reconnect');
     }
+    this.downSince ??= Date.now();
     this.stopKeepalive();
     this.vipListener?.stop().catch(() => undefined);
     this.vipListener = undefined;
@@ -308,6 +329,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (this.shuttingDown) {
       return;
     }
+    this.downSince ??= Date.now();
     const failed = why === true;
     const delay = reconnectDelay(this.settings, why === 'planned' ? -1 : failed ? this.failures : 0);
     if (failed) {

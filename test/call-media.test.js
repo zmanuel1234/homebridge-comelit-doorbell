@@ -81,9 +81,17 @@ test('answer-on-view: viewing answers the ring and requests audio and video', as
   assert.deepStrictEqual(client.closed.sort(), [0x2001, 0x2002, 0x2003]);
 });
 
-test('answer-on-view: unlocking without viewing opens the normal way', async () => {
-  const { call } = setup('answer-on-view');
+test('answer-on-view: unlocking during a ring without viewing answers, opens and hangs up (beta.28)', async () => {
+  const { call, sent } = setup('answer-on-view');
   await ring(call);
+  const result = await call.openInCall({ aptAddress: 'SB100001', outputIndex: 1 });
+  assert.ok(result && result.confirmed);
+  // echo, capabilities, answer, open, hang up; no media
+  assert.deepStrictEqual(ops(sent), ['1', '3', 'c', '2d', 'e']);
+});
+
+test('answer-on-view: unlocking with no call opens the normal way', async () => {
+  const { call } = setup('answer-on-view');
   assert.strictEqual(await call.openInCall({ aptAddress: 'SB100001', outputIndex: 1 }), null);
 });
 

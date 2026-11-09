@@ -158,6 +158,11 @@ export class KeyframeCache {
     }
   }
 
+  /** When the visitor's picture was taken (ms since epoch), 0 if there is none. */
+  visitorAt(): number {
+    return this.visitorFrame?.at ?? 0;
+  }
+
   /** The last call's first keyframe, if younger than maxAgeMs. */
   visitor(maxAgeMs = Infinity): Buffer | undefined {
     const v = this.visitorFrame;
