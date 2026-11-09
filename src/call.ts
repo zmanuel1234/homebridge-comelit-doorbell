@@ -44,6 +44,8 @@ export const DEFAULT_MEDIA_TIMING: MediaTiming = { startTimeoutMs: 10_000, silen
 const STATS_INTERVAL_MS = 5_000;
 /** If the video has no SPS this long after it starts, ask for video again (it may bring a keyframe). */
 const NO_KEYFRAME_RETRY_MS = 1_500;
+/** After a call's channels are closed, its late packets are dropped quietly this long. */
+const LATE_PACKETS_MS = 5_000;
 export const SD_RESOLUTION: [number, number] = [320, 240];
 export const HD_RESOLUTION: [number, number] = [800, 480];
 
@@ -545,9 +547,16 @@ export class MediaSession extends EventEmitter {
         await this.client.closeHandle(name, h);
       }
     }
-    for (const h of this.mediaHandles) {
-      this.client.setBinaryHandler(h);
-    }
+    // The intercom keeps sending for a moment after the close: stay quiet a little longer.
+    const handles = [...this.mediaHandles];
+    const release = setTimeout(() => {
+      for (const h of handles) {
+        if (this.client.binaryHandlerFor(h) === this.drop) {
+          this.client.setBinaryHandler(h);
+        }
+      }
+    }, LATE_PACKETS_MS);
+    release.unref?.();
     this.emit('end', reason);
   }
 }

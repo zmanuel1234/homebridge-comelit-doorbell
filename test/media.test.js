@@ -135,3 +135,18 @@ test('media capture keeps the last 10 calls', async () => {
   c.close();
   fs.rmSync(dir, { recursive: true });
 });
+
+test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle it', () => {
+  const { parseSps } = require('../dist/media');
+  const { videoArgs, LIVE_INPUT } = require('../dist/camera');
+  // SPS from a real call (2026-11-08); its timing says 1,200,000 fps.
+  const s = parseSps(Buffer.from('000000016742001fe90140fd00b1021280', 'hex'));
+  assert.deepStrictEqual([s.width, s.height, s.profile], [640, 240, 66]);
+  const v = videoArgs({ width: 1280, height: 720, fps: 16, bitrate: 299, pt: 99, ssrc: 5, srtp: Buffer.alloc(30), address: 'a', port: 1, mtu: 1316, codec: 'libx264' });
+  // arrival time instead of the SPS's timing, and showing from the first keyframe
+  const i = v.indexOf(LIVE_INPUT[0]);
+  assert.deepStrictEqual(v.slice(i, i + LIVE_INPUT.length), LIVE_INPUT);
+  assert.ok(LIVE_INPUT.includes('-use_wallclock_as_timestamps') && LIVE_INPUT.includes('+showall'));
+  // 640x240 is stretched back to 4:3 before fitting the Home app's size
+  assert.match(v[v.indexOf('-vf') + 1], /^scale=w=iw:h='if\(gt\(iw\/ih,2\),2\*ih,ih\)',setsar=1,scale=1280:720/);
+});

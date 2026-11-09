@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0-beta.17 (2026-11-08)
+
+From the third real test, with the new diagnostics and a recording of the call: **talk-back works** (your voice is heard at the panel), and the picture was almost frozen. Replaying the recording through the plugin's ffmpeg command reproduced and explained it.
+
+### Fixed
+
+- **Frozen live video.** The 6741W's video says it runs at 1,200,000 frames per second, so ffmpeg gave the frames timestamps microseconds apart and passed only 2 frames per call to the Home app. ffmpeg now uses the arrival time of each frame: the recorded call gives about 16 frames per second.
+- **The picture started late.** ffmpeg showed nothing until the intercom's second keyframe, 3–4 s in. It now starts at the first one: about 0.6 s after the video starts, instead of 4.6 s, on the recording.
+- **Squashed picture.** The 6741W sends 640x240, a 4:3 picture at half height. Pictures wider than 2:1 are now stretched back to 4:3.
+- The `diag: frame … on unknown channel` lines after a view closed were still there: closing a media channel dropped its handler at once. Late packets are now ignored for 5 s after the close.
+
+### Added
+
+- Test with the real SPS (640x240) and the new ffmpeg input options (67 in all).
+- README: talk-back tested; the 6741W sends 640x240 whatever `videoQuality` is; when the picture appears; troubleshooting for a frozen picture.
+
 ## 2.1.0-beta.16 (2026-11-08)
 
 From the second real test: in two of three calls the live view stayed blank for the few seconds it was open, although video was arriving, the picture with `hd` looked about the same as with `sd`, and it was unclear whether talk-back sent anything. This version logs enough to answer these from the log alone, and tries one fix.

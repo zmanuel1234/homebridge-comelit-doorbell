@@ -376,16 +376,24 @@ export class IconaBridgeClient extends EventEmitter {
     await this.send(encodeChannelClose(++this.sequenceCounter, channel.serverChannelId));
   }
 
-  /** Closes a channel by handle and forgets it (used for media channels). */
+  /**
+   * Closes a channel by handle and forgets it (used for media channels). Its binary handler is
+   * left to the caller, since the intercom may still send a few packets after the close.
+   */
   async closeHandle(name: string | undefined, handle: number): Promise<void> {
-    this.binaryHandlers.delete(handle);
     if (name) {
       this.channels.delete(name);
     }
     await this.send(encodeCloseChannel(handle)).catch(() => undefined);
   }
 
+  /** The handler for a channel, if any (to tell whose it is). */
+  binaryHandlerFor(handle: number): ((body: Buffer) => void) | undefined {
+    return this.binaryHandlers.get(handle);
+  }
+
   /** Routes raw frames on `handle` to `handler` (or stops routing them with undefined). */
+
   setBinaryHandler(handle: number, handler?: (body: Buffer) => void): void {
     if (handler) {
       this.binaryHandlers.set(handle, handler);

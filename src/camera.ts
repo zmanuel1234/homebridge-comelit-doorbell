@@ -173,6 +173,14 @@ export function resolveFfmpeg(configured: string, nodeModules = path.join(__dirn
   return candidates.find((c) => existsSync(c)) ?? 'ffmpeg';
 }
 
+/**
+ * The intercom's video, read from stdin. Measured on a 6741W recording (2026-11-08):
+ * - its SPS declares 1,200,000 fps, so frames got timestamps microseconds apart and ffmpeg
+ *   output only 2 frames per call (a frozen picture): use the arrival time instead;
+ * - ffmpeg showed nothing until the second keyframe, 3-4 s later: `showall` starts at the first.
+ */
+export const LIVE_INPUT = ['-use_wallclock_as_timestamps', '1', '-flags2', '+showall', '-f', 'h264', '-framerate', '16', '-i', 'pipe:0'];
+
 export function videoArgs(o: { width: number; height: number; fps: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; mtu: number; codec: string }): string[] {
   const encode =
     o.codec === 'copy'
@@ -183,13 +191,17 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
           '-pix_fmt', 'yuv420p',
           '-color_range', 'mpeg',
           '-r', String(o.fps),
-          '-vf', `scale=${o.width}:${o.height}:force_original_aspect_ratio=decrease,pad=${o.width}:${o.height}:(ow-iw)/2:(oh-ih)/2`,
+          // The 6741W sends 640x240: a 4:3 picture squeezed to half height. Restore the height for
+          // pictures wider than 2:1, then fit the Home app's size.
+          '-vf',
+          "scale=w=iw:h='if(gt(iw/ih,2),2*ih,ih)',setsar=1," +
+            `scale=${o.width}:${o.height}:force_original_aspect_ratio=decrease,pad=${o.width}:${o.height}:(ow-iw)/2:(oh-ih)/2`,
           '-b:v', `${o.bitrate}k`,
         ];
   return [
     '-hide_banner', '-loglevel', 'error',
     '-fflags', '+genpts+nobuffer', '-flags', 'low_delay', '-probesize', '32768', '-analyzeduration', '0',
-    '-f', 'h264', '-framerate', '16', '-i', 'pipe:0',
+    ...LIVE_INPUT,
     '-an', '-sn', '-dn',
     ...encode,
     '-payload_type', String(o.pt),
@@ -464,8 +476,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     if (!media) {
       // No call: loop the still image instead of the intercom's video.
       const still = await this.placeholderPath();
-      const idx = vargs.indexOf('-f');
-      vargs.splice(idx, 6, '-re', '-loop', '1', '-framerate', '1', '-i', still);
+      const idx = vargs.indexOf(LIVE_INPUT[0]);
+      vargs.splice(idx, LIVE_INPUT.length, '-re', '-loop', '1', '-framerate', '1', '-i', still);
       active.video = this.spawnProcess('video', vargs);
       this.watchProgress(active);
     } else {

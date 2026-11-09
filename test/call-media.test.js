@@ -15,7 +15,8 @@ function fakeClient() {
   c.handlers = new Map();
   c.media = [];
   c.openChannel = async (name, _type, _extra, _trailing, wire = name) => { const h = next++; c.opened.push([name, wire, h]); return { serverChannelId: h }; };
-  c.closeHandle = async (_name, h) => { c.closed.push(h); c.handlers.delete(h); };
+  c.closeHandle = async (_name, h) => { c.closed.push(h); };
+  c.binaryHandlerFor = (h) => c.handlers.get(h);
   c.setBinaryHandler = (h, fn) => (fn ? c.handlers.set(h, fn) : c.handlers.delete(h));
   c.sendOnHandle = async (h, data) => c.media.push([h, data]);
   return c;
@@ -181,6 +182,10 @@ test('video without a keyframe asks for video again; the SPS is logged with its 
   await session.sendAudio(Buffer.alloc(160));
   await session.end('done');
   assert.ok(log.lines.some((l) => /talk-back sent=1/.test(l)));
-  // after the end, late packets on the media channels are dropped without a diagnostic
-  assert.strictEqual(client.handlers.size, 0);
+  // after the end, late packets on the media channels are dropped quietly (released after 5 s)
+  assert.ok(client.handlers.size > 0);
+  for (const fn of client.handlers.values()) {
+    fn(Buffer.alloc(20));
+  }
+  assert.ok(!log.lines.some((l) => /unknown channel/.test(l)));
 });
