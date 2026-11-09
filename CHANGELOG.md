@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0-beta.18 (2026-11-08)
+
+### Fixed
+
+- **The last visitor's picture was replaced by the idle picture when you opened the camera.** After a call, the camera's tile showed the last visitor, but opening the camera outside a call streamed the idle picture, and the tile then showed that. Within `lastVisitorMinutes`, the live view outside a call now shows the last visitor too.
+- The last visitor's picture was squashed (640x240). It is now shown as 4:3, like the live video.
+
 ## 2.1.0-beta.17 (2026-11-08)
 
 From the third real test, with the new diagnostics and a recording of the call: **talk-back works** (your voice is heard at the panel), and the picture was almost frozen. Replaying the recording through the plugin's ffmpeg command reproduced and explained it.

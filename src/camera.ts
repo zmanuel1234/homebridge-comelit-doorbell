@@ -179,6 +179,9 @@ export function resolveFfmpeg(configured: string, nodeModules = path.join(__dirn
  *   output only 2 frames per call (a frozen picture): use the arrival time instead;
  * - ffmpeg showed nothing until the second keyframe, 3-4 s later: `showall` starts at the first.
  */
+/** Pictures wider than 2:1 (the 6741W's 640x240) are 4:3 at half height: restore the height. */
+export const RESTORE_ASPECT = "scale=w=iw:h='if(gt(iw/ih,2),2*ih,ih)',setsar=1";
+
 export const LIVE_INPUT = ['-use_wallclock_as_timestamps', '1', '-flags2', '+showall', '-f', 'h264', '-framerate', '16', '-i', 'pipe:0'];
 
 export function videoArgs(o: { width: number; height: number; fps: number; bitrate: number; pt: number; ssrc: number; srtp: Buffer; address: string; port: number; mtu: number; codec: string }): string[] {
@@ -194,7 +197,7 @@ export function videoArgs(o: { width: number; height: number; fps: number; bitra
           // The 6741W sends 640x240: a 4:3 picture squeezed to half height. Restore the height for
           // pictures wider than 2:1, then fit the Home app's size.
           '-vf',
-          "scale=w=iw:h='if(gt(iw/ih,2),2*ih,ih)',setsar=1," +
+          `${RESTORE_ASPECT},` +
             `scale=${o.width}:${o.height}:force_original_aspect_ratio=decrease,pad=${o.width}:${o.height}:(ow-iw)/2:(oh-ih)/2`,
           '-b:v', `${o.bitrate}k`,
         ];
@@ -308,15 +311,21 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private async snapshot(request: SnapshotRequest): Promise<Buffer> {
+    return (await this.lastVisitor(request.width)) ?? this.placeholderImage();
+  }
+
+  /** The last visitor's picture from the last call, if it is recent enough (lastVisitorMinutes). */
+  private async lastVisitor(width: number): Promise<Buffer | undefined> {
     const keyframe = this.settings.lastVisitorMs > 0 ? this.keyframes.keyframe(this.settings.lastVisitorMs) : undefined;
-    if (keyframe) {
-      try {
-        return await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `scale=${request.width}:-2`, '-f', 'image2', '-'], keyframe);
-      } catch (e) {
-        this.log.warn(`Doorbell camera: could not make a picture from the video (${(e as Error).message}); showing the idle picture`);
-      }
+    if (!keyframe) {
+      return undefined;
     }
-    return this.placeholderImage();
+    try {
+      return await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', `${RESTORE_ASPECT},scale=${width}:-2`, '-f', 'image2', '-'], keyframe);
+    } catch (e) {
+      this.log.warn(`Doorbell camera: could not make a picture from the video (${(e as Error).message}); showing the idle picture`);
+      return undefined;
+    }
   }
 
   private async placeholderImage(): Promise<Buffer> {
@@ -474,8 +483,15 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     vargs.unshift('-progress', 'pipe:1');
     active.stats.live = Boolean(media);
     if (!media) {
-      // No call: loop the still image instead of the intercom's video.
-      const still = await this.placeholderPath();
+      // No call: loop a still picture. The last visitor's, if recent, so that looking at the
+      // camera after a call shows the same picture as its tile (not the idle one).
+      const visitor = await this.lastVisitor(v.width);
+      let still = await this.placeholderPath();
+      if (visitor) {
+        still = path.join(os.tmpdir(), `comelit-last-visitor-${process.pid}.jpg`);
+        await fs.writeFile(still, visitor);
+        active.stats.request += ', showing the last visitor';
+      }
       const idx = vargs.indexOf(LIVE_INPUT[0]);
       vargs.splice(idx, LIVE_INPUT.length, '-re', '-loop', '1', '-framerate', '1', '-i', still);
       active.video = this.spawnProcess('video', vargs);
