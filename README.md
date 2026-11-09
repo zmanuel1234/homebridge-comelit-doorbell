@@ -30,7 +30,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 
 | Model | Model id | Firmware | Works |
 |---|---|---|---|
-| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera: answering from the live view, live video and intercom audio, unlocking during the call (2.1.0-beta.14, `sd`) |
+| 6741W / 6701W Mini hands-free Wi-Fi | `MSVU` | 2.1.0 | Rings, ring sensor, doorbell notification, door release; doorbell camera: answering from the live view, live video (640x240, shown as 4:3) and intercom audio, talk-back, unlocking during the call (2.1.0-beta.16/17) |
 
 Other ViP devices may work. You'll find the model id and firmware on the intercom's web page, under **Device info**. Please open an issue with them, whether it works or not.
 
@@ -149,7 +149,7 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 |---|---|---|
 | Doorbell camera with live video (`camera`) | `false` | Adds the doorbell camera. See [below](#doorbell-camera-experimental). |
 | Talk back from the Home app (`talkBack`) | `false` | Sends the Home app's microphone to the intercom's speaker during a live view |
-| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for up to 800x480 (the intercom sends the largest picture it has, up to that) |
+| Video quality (`videoQuality`) | `sd` | `sd` asks for 320x240, `hd` for up to 800x480. A 6741W sends 640x240 either way (its camera's format), which the plugin shows as 4:3. |
 | Video encoder (`videoCodec`) | `libx264` | ffmpeg encoder for HomeKit. `copy` passes the intercom's H.264 through (less CPU, may not play everywhere). |
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
@@ -195,11 +195,12 @@ With **Doorbell camera** on, the plugin adds a video doorbell to HomeKit:
 - **Talk-back** (optional) sends the Home app's microphone to the intercom's speaker.
 - **ffmpeg is required**, with the `libfdk_aac` encoder for HomeKit audio. The one bundled with homebridge-camera-ffmpeg (ffmpeg-for-homebridge) has it.
 
-The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio and unlocking during the call work on a 6741W; talk-back and `hd` are not tested yet. The `call:` lines in the log count the video and audio packets received.
+The media setup follows what the Comelit app does for an outgoing call (two RTPC channels, audio and video requests, a voice-status message). Live video, the intercom's audio, talk-back and unlocking during the call work on a 6741W. The `call:` lines in the log count the video and audio packets received.
 
 What a call looks like:
 
-- The live view takes a few seconds to show a picture: answering and setting up the media take about 2 s, then the video can only start at the intercom's next keyframe. Keep the view open; it may stay blank for a few seconds first.
+- The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s).
+- The picture is the intercom's own: 640x240 on a 6741W, shown as 4:3, so it is softer than a modern camera.
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
 - Inside a call the intercom doesn't send a separate answer to the door open; the plugin takes "no refusal" as opened.
@@ -227,6 +228,7 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
+| The live view shows a frozen or almost still picture | Fixed in 2.1.0-beta.17. The summary line's `frames sent to the Home app` should grow by about 16 per second. |
 | The live view stays blank for several seconds | The video can only start at a keyframe. The log shows `call: video …; first keyframe … s after …` and `call: a keyframe every … s`; please share those lines in an issue if it takes long. |
 | Talk-back: the visitor doesn't hear you | Look for `talk-back: sound from the Home app microphone is arriving` (the Home app sends your voice) and `talk-back sent=…` above zero in `call: media received` (it goes to the intercom). |
 | The live view closes by itself shortly after unlocking | Expected: the intercom ends the call about 10–15 s after the door opens. |
@@ -266,7 +268,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 ## Known limits
 
 - Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, or `answer-on-view` from the camera's live view. Both are experimental.
-- The doorbell camera is experimental. Live video and unlocking during the call are tested on one 6741W; talk-back and `hd` video are not tested yet.
+- The doorbell camera is experimental, tested on one 6741W: live video, the intercom's audio, talk-back and unlocking during the call.
 - Only tested on one model and firmware (see above).
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 
