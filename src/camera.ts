@@ -422,7 +422,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     if (this.settings.ringPreview && this.ringAt && asked - this.ringAt < 60_000) {
       const which = !visitor ? 'no picture, gave the idle one' : this.keyframes.visitorAt() >= this.ringAt ? "gave this ring's picture" : 'gave an earlier visitor\'s picture';
       const waited = waiting ? ` after waiting ${((Date.now() - asked) / 1000).toFixed(1)} s` : '';
-      this.log.info(`Ring preview (test): HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; ${which}${waited}`);
+      this.log.info(`Ring preview: HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; ${which}${waited}`);
     }
     return visitor ?? this.placeholderImage();
   }

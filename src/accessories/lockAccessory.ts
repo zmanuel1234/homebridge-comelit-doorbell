@@ -28,19 +28,45 @@ export class LockAccessory {
       .setCharacteristic(Characteristic.Model, 'ViP door relay')
       .setCharacteristic(Characteristic.SerialNumber, `door-${door.index}`);
     this.service = accessory.getService(Service.LockMechanism) || accessory.addService(Service.LockMechanism, door.name);
-    this.service.getCharacteristic(Characteristic.LockCurrentState).onGet(() => this.lockState);
+    this.service.getCharacteristic(Characteristic.LockCurrentState).onGet(() => {
+      this.checkReachable();
+      return this.lockState;
+    });
     this.service
       .getCharacteristic(Characteristic.LockTargetState)
-      .onGet(() =>
-        this.lockState === Characteristic.LockCurrentState.UNSECURED ? Characteristic.LockTargetState.UNSECURED : Characteristic.LockTargetState.SECURED,
-      )
+      .onGet(() => {
+        this.checkReachable();
+        return this.lockState === Characteristic.LockCurrentState.UNSECURED ? Characteristic.LockTargetState.UNSECURED : Characteristic.LockTargetState.SECURED;
+      })
       .onSet((value) => this.onTarget(value));
+  }
+
+  /** Home shows No Response while the intercom has been unreachable for a while. */
+  private checkReachable(): void {
+    if (this.platform.unreachable()) {
+      const { hap } = this.platform.api;
+      throw new hap.HapStatusError(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+  }
+
+  /** The intercom is back: tell Home the lock's state again (clears No Response). */
+  refresh(): void {
+    const { Characteristic } = this.platform;
+    this.service.updateCharacteristic(Characteristic.LockCurrentState, this.lockState);
+    this.service.updateCharacteristic(
+      Characteristic.LockTargetState,
+      this.lockState === Characteristic.LockCurrentState.UNSECURED ? Characteristic.LockTargetState.UNSECURED : Characteristic.LockTargetState.SECURED,
+    );
   }
 
   private onTarget(value: CharacteristicValue): void {
     const { Characteristic } = this.platform;
     if (value !== Characteristic.LockTargetState.UNSECURED) {
       return;
+    }
+    if (this.platform.unreachable()) {
+      this.platform.log.warn('Open refused: the intercom is not connected');
+      this.checkReachable();
     }
     if (!this.platform.isUnlockAllowed()) {
       const now = Date.now();

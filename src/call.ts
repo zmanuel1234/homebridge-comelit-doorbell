@@ -263,17 +263,14 @@ export class CallHandler {
   }
 
   /**
-   * Opens `door` inside the ringing call, answering it first. Used in `answer-on-open` mode,
-   * and in `answer-on-view` mode once the call is answered. Returns null when there is
-   * nothing to answer, so the caller opens the normal way.
-   */
-  /**
-   * Opens the door inside the ringing call: answers it first if needed. `force` (doctor mode)
-   * does so whatever the answer mode is.
+   * Opens `door` inside the ringing call, answering it first if needed, and hangs up afterwards
+   * if nobody is watching. In `answer-on-open` and `answer-on-view` mode (so a ring can be let
+   * in from the lock without opening the live view); `force` (doctor mode) whatever the mode.
+   * Returns null when there is no call, so the caller opens the normal way.
    */
   async openInCall(door: Door, force = false): Promise<OpenResult | null> {
     const call = this.activeCall();
-    if (!call || !(force || this.mode === 'answer-on-open' || (this.mode === 'answer-on-view' && call.answered))) {
+    if (!call || !(force || this.mode === 'answer-on-open' || this.mode === 'answer-on-view')) {
       return null;
     }
     this.log?.debug('call: opening the door inside the call');
@@ -718,7 +715,7 @@ export class RingPreview {
           ? 'video came, but no keyframe'
           : 'no video before answering';
       this.log?.info(
-        `Ring preview (test): ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
+        `Ring preview: ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
           `${this.size ?? 'size unknown'}, ${this.packets} packets; stopped: ${reason}`,
       );
       this.options.onDone?.(this.call);

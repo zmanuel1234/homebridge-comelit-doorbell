@@ -166,7 +166,7 @@
             ]
           }
         ],
-        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up. Answer when viewing the camera: opening the doorbell camera's live view answers the ring (needs the doorbell camera); unlocking then opens inside that call."
+        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up. Answer when viewing the camera: opening the doorbell camera's live view answers the ring (needs the doorbell camera); unlocking during a ring opens inside the call, answering it first (and hanging up afterwards) if the live view isn't open."
       },
       "camera": {
         "title": "Doorbell camera with live video (experimental)",
@@ -274,10 +274,10 @@
         "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 calls. Empty: nothing is saved."
       },
       "ringPreview": {
-        "title": "Visitor's picture in the ring notification (test)",
+        "title": "Visitor's picture in the ring notification",
         "type": "boolean",
-        "default": false,
-        "description": "Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is there; HomeKit's picture request waits up to 4.5 s after the ring for it. Doesn't answer the call. Logs 'Ring preview (test): …' with the result. Needs the doorbell camera."
+        "default": true,
+        "description": "On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is there. Doesn't answer the call. Needs the doorbell camera."
       }
     },
     "required": [
@@ -345,7 +345,8 @@
         "ffmpegPath",
         "doorVolume",
         "snapshotImage",
-        "lastVisitorMinutes"
+        "lastVisitorMinutes",
+        "ringPreview"
       ]
     },
     {
@@ -358,8 +359,7 @@
         "mediaSilenceSeconds",
         "videoRefreshSeconds",
         "liveViewWaitSeconds",
-        "mediaCaptureDir",
-        "ringPreview"
+        "mediaCaptureDir"
       ]
     }
   ]

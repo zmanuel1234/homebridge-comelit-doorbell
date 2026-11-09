@@ -33,13 +33,16 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Feature | Works | Notes |
 |---|---|---|
 | Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
-| Door release from HomeKit after a ring | ✅ | Refused outside the ring window; refused as *busy* during an unanswered ring unless answered |
+| Door release from HomeKit after a ring | ✅ | Refused outside the ring window. During a ring the plugin answers first (`answer-on-view`, `answer-on-open`) |
+| Unlocking during a ring without opening the live view | ❓ | New in 2.1.0-beta.28: answers, opens, hangs up, as doctor mode does (tested) |
+| Visitor's picture in the ring notification | ✅ / ❓ | Video before answering works (first picture about 3 s after the ring); whether iOS waits for it for the banner is being tested |
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, ~15 frames per second |
 | Sound from the door | ✅ | Turned up 12 dB by default; no delay |
 | Talk-back | ✅ | |
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
-| Last visitor's picture | ✅ | Taken at the start of the call |
+| Last visitor's picture | ✅ | Taken at the ring or the start of the call; kept across restarts |
+| Lock shows No Response when the intercom is unreachable | ❓ | New in 2.1.0-beta.28 |
 | Doctor mode (always, or with its switch) | ✅ | |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
@@ -105,7 +108,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 
 | Accessory | HomeKit type | Notes |
 |---|---|---|
-| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. After a tap the lock shows Unlocked for 3 seconds, then Locked again. Outside a call the intercom confirms the open; inside a call it doesn't reply, so Unlocked there means the open was sent and not refused (the log says which). Extra taps while an open is on its way are ignored. If the intercom refuses, it goes straight back to Locked and the log says why. |
+| One lock per door | Lock | Read from the intercom's door list, with the names set on the intercom. **Unlock** opens the door. After a tap the lock shows Unlocked for 3 seconds, then Locked again. Outside a call the intercom confirms the open; inside a call it doesn't reply, so Unlocked there means the open was sent and not refused (the log says which). Extra taps while an open is on its way are ignored. If the intercom refuses, it goes straight back to Locked and the log says why. If the intercom has been unreachable for more than 30 s, the lock shows **No Response** in Home until the connection is back. |
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
 | Doctor mode switch (named **Name** + `Doctor Mode`), only with **Doctor mode** set to *With a HomeKit switch* | Switch | While on, every ring opens the door. Keeps its state across restarts. See [doctor mode](#doctor-mode). |
@@ -169,7 +172,8 @@ The intercom only routes rings to a registration for a few minutes, so the plugi
 | ffmpeg path (`ffmpegPath`) | auto | Empty: ffmpeg-for-homebridge (on its own or inside homebridge-camera-ffmpeg), then `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image), then `ffmpeg` from the path |
 | Picture when there is no call (`snapshotImage`) | built-in picture | A JPEG shown when no call is in progress. Empty, or a file that doesn't exist: the picture that comes with the plugin (`assets/doorbell-idle.jpg`). A missing file is named in the log once. |
 | Turn up the sound from the door by (`doorVolume`) | `12` | dB of gain on the intercom's audio (its microphone is quiet). 12 dB is about 4 times as loud; loud sounds are limited so they don't distort. `0`: as the intercom sends it. |
-| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken when a live view of the call starts (or at the ring, with the ring preview test on), while the visitor waits at the panel. It is saved in Homebridge's storage folder (`comelit-last-visitor.h264`), so it survives a restart. `0`: always the idle picture. |
+| Show the last visitor for (`lastVisitorMinutes`) | `5` | After a call, the camera's picture, and its live view outside a call, show the last visitor this long, then the idle picture. The picture is taken at the ring (with **Visitor's picture in the ring notification** on), or when a live view of the call starts, while the visitor waits at the panel. It is saved in Homebridge's storage folder (`comelit-last-visitor.h264`), so it survives a restart. `0`: always the idle picture. |
+| Visitor's picture in the ring notification (`ringPreview`) | `true` | On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. The log line `Ring preview: …` says whether it worked, and which picture HomeKit got. Needs the doorbell camera, and **Show the last visitor for** above 0. |
 
 ### Experimental: media timing and troubleshooting
 
@@ -182,7 +186,6 @@ For tuning the doorbell camera's live view after real tests. The defaults follow
 | Repeat the video request every (`videoRefreshSeconds`) | `15` | The intercom stops sending video about 35 s after a request |
 | Live view: wait for the intercom's video at most (`liveViewWaitSeconds`) | `8` | When the live view opens, wait this long for the intercom's media, then show the picture (the Home app gives up on slow streams) |
 | Save each call's video and audio to (`mediaCaptureDir`) | empty | For troubleshooting only. A folder where each call's raw media is saved, once however many devices watch it: the intercom's video (`.h264`) and audio (`.alaw`), and your talk-back (`-talkback.alaw`). The last 10 calls are kept. About 3–5 MB per minute. |
-| Visitor's picture in the ring notification (test) (`ringPreview`) | off | Experimental. On a ring, asks the intercom for video before anyone answers, so the notification can show who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. The log says whether it works (`Ring preview (test): …`), when HomeKit asked for the picture, and whether it got this ring's picture or an earlier one. Needs the doorbell camera, and **Show the last visitor for** above 0. |
 
 ## How ring and unlock work
 
@@ -199,7 +202,7 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 | `off` | The plugin never takes part in the call. Unlocking during a ring is refused as busy. |
 | `handshake` | The plugin replies to the call without answering it, for testing. Phones keep ringing. |
 | `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices should stop ringing. |
-| `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Needs the doorbell camera. |
+| `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Unlocking during a ring **without** the live view (from the notification, the Watch, Control Centre or Siri) answers the call, opens the door and hangs up. Needs the doorbell camera. |
 
 Every message of the call is logged with the prefix `call:` at debug level: turn on **debug mode** for the child bridge to see them.
 
@@ -305,7 +308,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 
 ## Known limits
 
-- Unlocking from HomeKit **during** a ring needs the call to be answered: `answerMode: answer-on-open`, `answer-on-view` from the camera's live view, or doctor mode. All are experimental.
+- Unlocking from HomeKit **during** a ring needs the call to be answered, which the plugin does itself with `answerMode: answer-on-open` or `answer-on-view`, and in doctor mode. With `answerMode: off` or `handshake`, the intercom refuses an open during a ring as *busy*.
 - The doorbell camera is experimental, tested on one 6741W with a Raspberry Pi: live video, the intercom's audio, talk-back and unlocking during the call.
 - Only tested on one model and firmware (see above).
 - Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
