@@ -38,7 +38,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked about 6 s after the tap (it waits for a refusal that doesn't come) |
 | Visitor's picture in the ring notification | ✅ | Video before answering works; the first picture comes about 3 s after the ring, and HomeKit's picture requests wait for it (none timed out) |
 | Doorbell camera: answering by opening the live view | ✅ | |
-| Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, ~15 frames per second |
+| Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, about 15 frames per second from the intercom, sent to the Home app at 16 |
 | Sound from the door | ✅ | Turned up 12 dB by default; no delay |
 | Talk-back | ✅ | |
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
@@ -259,12 +259,12 @@ The platform name stays `ComelitIntercom`, so your config block works unchanged,
 
 Your config keeps working. What changes:
 
+- **Node.js 20, 22 or 24** is required (2.0.x allowed 18). The Homebridge UI shows the version on its status page, or run `node -v`.
 - **Registration refresh mode** defaults to `inplace` (no gap in which rings are missed). Set `leaseRefreshMode: reconnect` to keep the old behavior.
 - **Doorbell camera trigger URL** has no default any more (see step 3 above).
-- **Talk-back** is on by default for the doorbell camera.
 - New: the doorbell camera with live video and talk-back, the visitor's picture in the ring notification, unlocking during a ring without the video, doctor mode, No Response on the lock, door volume, and a reconnect back-off. All are in the config editor; see the [changelog](CHANGELOG.md) for the full list.
 - The settings screen is regrouped, and the normal log is shorter (protocol details need debug mode). No setting was renamed or removed.
-- **If you used the doorbell camera in an early 2.1.0 pre-release**, the Home app may keep asking for 1280x720 (the live view summary says `asked 1280x720`): it cached the camera's old list of sizes. To refresh it, set **Talk back from the Home app** off, restart the child bridge, open the Home app once, then turn it back on and restart again. Changing talk-back adds or removes a service, which makes the Home app read the camera again; checked on a 6741W setup on 2026-11-09 (1280x720 → 640x360).
+- **If you ran an early 2.1.0 pre-release with the doorbell camera**, the Home app may keep asking for 1280x720 (the live view summary says `asked 1280x720`): it cached the camera's old list of sizes. To refresh it, set **Talk back from the Home app** off, restart the child bridge, open the Home app once, then turn it back on and restart again. Changing talk-back adds or removes a service, which makes the Home app read the camera again; checked on a 6741W setup on 2026-11-09 (1280x720 → 640x360).
 
 ## Troubleshooting
 
@@ -349,9 +349,9 @@ CI runs the checks on Node 24 (the required `check` job) and the build and tests
 | `client.ts` | TCP connection, channels, and the registration lease |
 | `ctp.ts` | CTP frames on the CTPP channel: building, parsing, ACK/FIN words |
 | `vipListener.ts` | Rings and other intercom messages; acknowledgements; answers to door opens |
-| `call.ts` | Experimental: taking part in a ringing call (`answerMode`), and its media |
+| `call.ts` | Taking part in a ringing call (`answerMode`), the ring preview, and the call's media |
 | `media.ts` | RTP, H.264 depacketizing, keyframes |
-| `camera.ts` | Experimental doorbell camera: HomeKit streaming through ffmpeg, talk-back |
+| `camera.ts` | Doorbell camera: HomeKit streaming through ffmpeg, talk-back, the visitor's picture |
 | `door.ts` | Door release, waiting for the intercom's answer |
 | `platform.ts` | Homebridge platform: connection lifecycle, accessories, ring window |
 | `config.ts` | Settings and their defaults, the reconnect back-off |
