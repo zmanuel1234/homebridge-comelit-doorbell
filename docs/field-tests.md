@@ -45,3 +45,11 @@ The log (2.1.0 with beta.31's debug line) confirms it: for the ring at 16:48:02,
 So the visitor's picture can be in the banner from the start. In the two earlier rounds the phone was busy in the foreground (Control Centre during a call; the Home app open), and the banner showed a black square; whether that is typical will show over more ordinary rings.
 
 Earlier plan: with the phone **locked** (Lock Screen notifications stay until cleared), ring and take a screenshot as the notification appears and again about 5 s later; or look at an Apple Watch a few seconds after the ring. Earlier plan: set the Home app's banners to *Persistent* (Settings → Notifications → Home), ring, and take a screenshot as the banner appears and again about 5 s later; compare with the log's `HomeKit asked for a … picture` lines and the saved `ring-*.jpg` (with `mediaCaptureDir` set). If the picture never fills in, the alternative is to fetch the picture before telling HomeKit about the ring (about 3 s later banner, with the visitor in it).
+
+### The saved notification pictures (2026-11-10, 16:56)
+
+Five `ring-*.jpg` from the day, measured: three are normal 640x480 pictures of the street (about 50 KB, average brightness 126–130); **two are completely black** (2,020 bytes, every pixel 0). The live-call recordings of the same days never start black (first keyframes 23–32 KB).
+
+So the black squares in the banners at 16:11 and 16:28 were most likely black pictures from the plugin, not iOS showing the banner early: at the start of a ring the intercom sometimes sends an empty, black first keyframe while its camera gets ready, and the ring preview took it as the visitor's picture. A black 640x240 keyframe is about 1 KB; a very dim real one at least 3 KB.
+
+Fixed in 2.1.1-beta.1: keyframes under 2 KB are skipped, and the picture requests wait for the next real keyframe (up to 7 s after the ring).
