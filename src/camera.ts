@@ -346,6 +346,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       this.pictureWait?.resolve();
       void this.saveVisitor(frame);
     };
+    this.keyframes.onEmptyKeyframe = (bytes) =>
+      this.log.debug(`Doorbell camera: skipped an empty (black) keyframe of ${bytes} bytes; the next one becomes the visitor's picture`);
   }
 
   /** Where the last visitor's picture is saved (as H.264), if anywhere. */

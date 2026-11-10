@@ -320,3 +320,17 @@ test('the extended wait still ends: no real keyframe gives the earlier picture, 
   assert.strictEqual((await cam.snapshot({ width: 640, height: 480 })).toString(), 'idle');
   assert.ok(Date.now() - t < 500);
 });
+
+test('after an empty keyframe the wait really runs to 7 s after the ring, beyond the usual 4.5 s (2.1.1)', async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  cam.previewStarted();
+  cam.previewEmptyKeyframe();
+  let got;
+  const asking = cam.snapshot({ width: 640, height: 480 }).then((b) => (got = b.toString()));
+  await new Promise((r) => setTimeout(r, 5000)); // past the usual 4.5 s
+  assert.strictEqual(got, undefined, 'still waiting 5 s after the ring');
+  feed(cam, {});
+  await asking;
+  assert.strictEqual(got, 'visitor');
+});
