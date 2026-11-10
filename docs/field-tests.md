@@ -35,4 +35,11 @@ Second round (16:28, Persistent banners already on, Home app open in the foregro
 
 So the plugin's picture of the ring reaches the Home app within seconds; the banner is shown before it, and whether the banner swaps it in is still unknown.
 
-Next test: with the phone **locked** (Lock Screen notifications stay until cleared), ring and take a screenshot as the notification appears and again about 5 s later; or look at an Apple Watch a few seconds after the ring. Earlier plan: set the Home app's banners to *Persistent* (Settings → Notifications → Home), ring, and take a screenshot as the banner appears and again about 5 s later; compare with the log's `HomeKit asked for a … picture` lines and the saved `ring-*.jpg` (with `mediaCaptureDir` set). If the picture never fills in, the alternative is to fetch the picture before telling HomeKit about the ring (about 3 s later banner, with the visitor in it).
+Third round (16:48, at the door, camera app open, then the Lock Screen):
+
+6. **Ring banner, as it appeared:** a real picture from the intercom (the panel's eye-level street view), not a black square; the person ringing stood to the side, out of frame.
+7. **Lock Screen:** the doorbell notification with the same picture. A separate *"Someone was seen"* notification came from another camera's person detection.
+
+So the visitor's picture can be in the banner from the start. In the two earlier rounds the phone was busy in the foreground (Control Centre during a call; the Home app open), and the banner showed a black square; whether that is typical will show over more ordinary rings.
+
+Earlier plan: with the phone **locked** (Lock Screen notifications stay until cleared), ring and take a screenshot as the notification appears and again about 5 s later; or look at an Apple Watch a few seconds after the ring. Earlier plan: set the Home app's banners to *Persistent* (Settings → Notifications → Home), ring, and take a screenshot as the banner appears and again about 5 s later; compare with the log's `HomeKit asked for a … picture` lines and the saved `ring-*.jpg` (with `mediaCaptureDir` set). If the picture never fills in, the alternative is to fetch the picture before telling HomeKit about the ring (about 3 s later banner, with the visitor in it).
