@@ -273,7 +273,7 @@
         "title": "Save each call's video and audio to (folder)",
         "type": "string",
         "placeholder": "/var/lib/homebridge/comelit-capture",
-        "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 calls. Empty: nothing is saved."
+        "description": "For troubleshooting only. Saves the intercom's raw video (.h264) and audio (.alaw), and your talk-back audio, for the last 10 calls, and the picture each ring's notification got (.jpg, last 10 rings). Empty: nothing is saved."
       },
       "ringPreview": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },

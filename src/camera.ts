@@ -101,11 +101,7 @@ export class MediaCapture {
   readonly base: string;
 
   constructor(dir: string) {
-    // Local time, like the Homebridge log: call-20261108-181624
-    const d = new Date();
-    const n = (v: number) => String(v).padStart(2, '0');
-    const stamp = `${d.getFullYear()}${n(d.getMonth() + 1)}${n(d.getDate())}-${n(d.getHours())}${n(d.getMinutes())}${n(d.getSeconds())}`;
-    this.base = path.join(dir, `call-${stamp}`);
+    this.base = path.join(dir, `call-${localStamp(new Date())}`);
     this.video = this.open('.h264');
     this.audio = this.open('.alaw');
     this.talk = this.open('-talkback.alaw');
@@ -124,12 +120,20 @@ export class MediaCapture {
     }
   }
 
-  static async prepare(dir: string): Promise<void> {
+  /** Makes the folder and keeps the last 9 recordings starting with `prefix` (call-, ring-), to add one. */
+  static async prepare(dir: string, prefix = 'call-'): Promise<void> {
     await fs.mkdir(dir, { recursive: true });
-    const old = (await fs.readdir(dir)).filter((f) => f.startsWith('call-')).sort();
-    const keep = new Set(old.map((f) => f.slice(0, 20)).filter((v, i, a) => a.indexOf(v) === i).slice(-9));
-    await Promise.all(old.filter((f) => !keep.has(f.slice(0, 20))).map((f) => fs.unlink(path.join(dir, f)).catch(() => undefined)));
+    const len = prefix.length + 15; // prefix + 20261108-181624
+    const old = (await fs.readdir(dir)).filter((f) => f.startsWith(prefix)).sort();
+    const keep = new Set(old.map((f) => f.slice(0, len)).filter((v, i, a) => a.indexOf(v) === i).slice(-9));
+    await Promise.all(old.filter((f) => !keep.has(f.slice(0, len))).map((f) => fs.unlink(path.join(dir, f)).catch(() => undefined)));
   }
+}
+
+/** Local time, like the Homebridge log: 20261108-181624. */
+export function localStamp(d: Date): string {
+  const n = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}${n(d.getMonth() + 1)}${n(d.getDate())}-${n(d.getHours())}${n(d.getMinutes())}${n(d.getSeconds())}`;
 }
 
 /** Finds a free UDP port. */
@@ -442,12 +446,35 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       await waiting.promise;
     }
     const visitor = await this.lastVisitor(request.width);
-    if (this.settings.ringPreview && this.ringAt && asked - this.ringAt < 60_000) {
-      const which = !visitor ? 'no picture, gave the idle one' : this.keyframes.visitorAt() >= this.ringAt ? "gave this ring's picture" : 'gave an earlier visitor\'s picture';
+    const picture = visitor ?? (await this.placeholderImage());
+    if (this.ringAt && asked - this.ringAt < 60_000) {
+      const which = !visitor ? 'the idle picture' : this.keyframes.visitorAt() >= this.ringAt ? "this ring's picture" : "an earlier visitor's picture";
       const waited = waiting ? ` after waiting ${((Date.now() - asked) / 1000).toFixed(1)} s` : '';
-      this.log.debug(`Ring preview: HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; ${which}${waited}`);
+      if (this.settings.ringPreview) {
+        this.log.debug(`Ring preview: HomeKit asked for the picture ${((asked - this.ringAt) / 1000).toFixed(1)} s after the ring; gave ${which}${waited}`);
+      }
+      if (this.settings.mediaCaptureDir && this.savedRingAt !== this.ringAt) {
+        this.savedRingAt = this.ringAt;
+        void this.saveRingPicture(this.ringAt, picture, which);
+      }
     }
-    return visitor ?? this.placeholderImage();
+    return picture;
+  }
+
+  /** The ring whose notification picture is already saved (one per ring). */
+  private savedRingAt = 0;
+
+  /** Troubleshooting (mediaCaptureDir): keeps the first picture HomeKit got after a ring, as sent. */
+  private async saveRingPicture(ringAt: number, picture: Buffer, which: string): Promise<void> {
+    const dir = this.settings.mediaCaptureDir;
+    const file = path.join(dir, `ring-${localStamp(new Date(ringAt))}.jpg`);
+    try {
+      await MediaCapture.prepare(dir, 'ring-');
+      await fs.writeFile(file, picture);
+      this.log.info(`Doorbell camera: saved the notification picture (${which}) to ${file}`);
+    } catch (e) {
+      this.log.warn(`Doorbell camera: can't save the notification picture to ${dir}: ${(e as Error).message}`);
+    }
   }
 
   /** The last visitor's picture from the last call, if it is recent enough (lastVisitorMinutes). */

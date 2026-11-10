@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0-beta.30 (2026-11-10)
+
+### Added
+
+- **The notification picture is kept for troubleshooting**: with **Save each call's video and audio to** (`mediaCaptureDir`) set, the first picture HomeKit gets after each ring is saved there exactly as sent, as `ring-<time of the ring>.jpg` (last 10 rings kept, like the call recordings). The log says where, and whether it was this ring's picture, an earlier visitor's or the idle one. No new setting.
+
+Tests: 108 in all.
+
 ## 2.1.0-beta.29 (2026-11-09)
 
 Clean-up for the stable 2.1.0: the log and the settings screen. No change to how the plugin works.
