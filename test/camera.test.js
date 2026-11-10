@@ -241,3 +241,40 @@ test('the wait ends 1.5 s after the ring if no preview starts (beta.29)', async 
   const waited = Date.now() - t;
   assert.ok(waited >= 1400 && waited < 2500, `waited ${waited} ms`);
 });
+
+test("with mediaCaptureDir, each ring's notification picture is saved once, last 10 kept (beta.30)", async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-rings-'));
+  for (let i = 0; i < 12; i++) fs.writeFileSync(path.join(dir, `ring-20250101-0000${String(i).padStart(2, '0')}.jpg`), 'old');
+  fs.writeFileSync(path.join(dir, 'call-20250101-000000.h264'), 'call');
+  const cam = pictureCamera({ mediaCaptureDir: dir, ringPreview: false });
+  cam.ring();
+  const first = await cam.snapshot({ width: 640, height: 480 });
+  await cam.snapshot({ width: 640, height: 480 });
+  let files;
+  for (let i = 0; i < 100; i++) {
+    files = fs.readdirSync(dir).filter((f) => f.startsWith('ring-')).sort();
+    if (files.some((f) => !f.startsWith('ring-2025'))) break;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  assert.strictEqual(files.length, 10, files.join(' '));
+  const saved = files.filter((f) => !f.startsWith('ring-2025'));
+  assert.strictEqual(saved.length, 1, 'one picture per ring');
+  assert.deepStrictEqual(fs.readFileSync(path.join(dir, saved[0])), first);
+  assert.ok(fs.existsSync(path.join(dir, 'call-20250101-000000.h264')), 'call recordings untouched');
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('without mediaCaptureDir nothing is saved, and pictures outside a ring are not saved (beta.30)', async () => {
+  const cam = pictureCamera({ ringPreview: false });
+  let saved = 0;
+  cam.saveRingPicture = async () => { saved++; };
+  cam.ring();
+  await cam.snapshot({ width: 640, height: 480 });
+  const withDir = pictureCamera({ ringPreview: false, mediaCaptureDir: '/tmp/x' });
+  withDir.saveRingPicture = async () => { saved++; };
+  await withDir.snapshot({ width: 640, height: 480 });
+  assert.strictEqual(saved, 0);
+});
