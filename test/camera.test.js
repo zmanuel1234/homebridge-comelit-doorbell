@@ -278,3 +278,14 @@ test('without mediaCaptureDir nothing is saved, and pictures outside a ring are 
   await withDir.snapshot({ width: 640, height: 480 });
   assert.strictEqual(saved, 0);
 });
+
+test('the debug log gives the size of each picture HomeKit asks for after a ring (beta.31)', async () => {
+  const cam = pictureCamera({ ringPreview: false });
+  const lines = [];
+  cam.log = { info() {}, warn() {}, error() {}, debug: (m) => lines.push(m) };
+  await cam.snapshot({ width: 1280, height: 720 });
+  assert.deepStrictEqual(lines, [], 'nothing outside a ring');
+  cam.ring();
+  await cam.snapshot({ width: 640, height: 360 });
+  assert.ok(lines.some((l) => /HomeKit asked for a 640x360 picture 0\.\d s after the ring; gave the idle picture/.test(l)), lines.join('\n'));
+});
