@@ -35,15 +35,15 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 |---|---|---|
 | Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
 | Door release from HomeKit after a ring | ✅ | Refused outside the ring window. During a ring the plugin answers first (`answer-on-view`, `answer-on-open`) |
-| Unlocking during a ring without opening the live view | ❓ | New in 2.1.0-beta.28: answers, opens and hangs up, the same steps as doctor mode (which is tested) |
-| Visitor's picture in the ring notification | ✅ / ❓ | Video before answering works (first picture about 3 s after the ring); whether iOS waits for it for the banner is being tested |
+| Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked about 6 s after the tap (it waits for a refusal that doesn't come) |
+| Visitor's picture in the ring notification | ✅ | Video before answering works; the first picture comes about 3 s after the ring, and HomeKit's picture requests wait for it (none timed out) |
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, ~15 frames per second |
 | Sound from the door | ✅ | Turned up 12 dB by default; no delay |
 | Talk-back | ✅ | |
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
 | Last visitor's picture | ✅ | Taken at the ring or the start of the call; kept across restarts |
-| Lock shows No Response when the intercom is unreachable | ❓ | New in 2.1.0-beta.28 |
+| Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |
 | Doctor mode (always, or with its switch) | ✅ | |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
@@ -241,7 +241,7 @@ The media setup follows what the Comelit app does for an outgoing call (two RTPC
 What a call looks like:
 
 - The picture appears about 2–3 s after you open the live view (answering and setting up the media take about 2 s). It starts clean, from the intercom's first keyframe.
-- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480. A Home app that knew the camera from an earlier beta may still ask for 1280x720; the plugin then enlarges the picture, which works but is less sharp. See [updating from 2.0.x](#updating-from-20x) for how to refresh it.
+- The picture is the intercom's own: 640x240 on a 6741W, shown as 640x480 (4:3), so it is softer than a modern camera. The camera offers the Home app at most 640x480. A Home app that knew the camera from an early 2.1.0 pre-release may still ask for 1280x720; the plugin then enlarges the picture, which works but is less sharp. See [updating from 2.0.x](#updating-from-20x) for how to refresh it.
 - The intercom's microphone is quiet; the plugin turns it up by **Turn up the sound from the door by** (12 dB).
 - The Home app starts live views muted: tap the speaker icon to hear the door.
 - After the door opens, the intercom ends the call by itself after about 10–15 s, and the live view closes. That is the intercom's behavior, as in the Comelit app.
@@ -262,9 +262,9 @@ Your config keeps working. What changes:
 - **Registration refresh mode** defaults to `inplace` (no gap in which rings are missed). Set `leaseRefreshMode: reconnect` to keep the old behavior.
 - **Doorbell camera trigger URL** has no default any more (see step 3 above).
 - **Talk-back** is on by default for the doorbell camera.
-- The log is quieter: protocol details (`call:`, `diag:`, renewals) need debug mode.
-- New: the doorbell camera with live video and talk-back, the visitor's picture in the ring notification, unlocking during a ring without the video, doctor mode, door volume, and a reconnect back-off. All are in the config editor.
-- **If you used the doorbell camera in a 2.1.0 beta before beta.22**, the Home app may keep asking for 1280x720 (the live view summary says `asked 1280x720`): it cached the camera's old list of sizes. To refresh it, set **Talk back from the Home app** off, restart the child bridge, open the Home app once, then turn it back on and restart again. Changing talk-back adds or removes a service, which makes the Home app read the camera again; checked on a 6741W setup on 2026-11-09 (1280x720 → 640x360).
+- New: the doorbell camera with live video and talk-back, the visitor's picture in the ring notification, unlocking during a ring without the video, doctor mode, No Response on the lock, door volume, and a reconnect back-off. All are in the config editor; see the [changelog](CHANGELOG.md) for the full list.
+- The settings screen is regrouped, and the normal log is shorter (protocol details need debug mode). No setting was renamed or removed.
+- **If you used the doorbell camera in an early 2.1.0 pre-release**, the Home app may keep asking for 1280x720 (the live view summary says `asked 1280x720`): it cached the camera's old list of sizes. To refresh it, set **Talk back from the Home app** off, restart the child bridge, open the Home app once, then turn it back on and restart again. Changing talk-back adds or removes a service, which makes the Home app read the camera again; checked on a 6741W setup on 2026-11-09 (1280x720 → 640x360).
 
 ## Troubleshooting
 
