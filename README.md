@@ -38,7 +38,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked about 6 s after the tap (it waits for a refusal that doesn't come) |
 | Visitor's picture in the ring notification | ✅ | Video before answering works; the first picture comes about 3 s after the ring, and HomeKit's picture requests wait for it (none timed out) |
 | Doorbell camera: answering by opening the live view | ✅ | |
-| Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, about 15 frames per second from the intercom, sent to the Home app at 16 |
+| Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, about 15–16 frames per second |
 | Sound from the door | ✅ | Turned up 12 dB by default; no delay |
 | Talk-back | ✅ | |
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
@@ -284,7 +284,7 @@ The normal log is short: the settings at startup, rings, door opens, doctor mode
 | `Doorbell camera trigger failed` in the log | camera-ffmpeg isn't reachable at the URL. Fix the URL, or set it to an empty string. |
 | `Authentication failed` / `Token Not Found` | The token doesn't belong to an active user. Download a fresh backup and copy the token again. |
 | Two doorbell notifications per ring | The doorbell camera and a camera-ffmpeg doorbell (trigger URL) both ring. Clear **Doorbell camera trigger URL**, or hide the camera-ffmpeg camera. The log warns about this at startup. |
-| The live view shows a frozen, almost still or grey picture | Shouldn't happen since 2.1.0 (tested with ffmpeg 7.0.2 and 8.0). The summary line's `frames sent to the Home app` should grow by about 16 per second. |
+| The live view shows a frozen, almost still or grey picture | Shouldn't happen since 2.1.0 (tested with ffmpeg 7.0.2 and 8.0). The summary line's `frames sent to the Home app` should grow by about 15–16 per second. |
 | The live view stays blank for several seconds | The video can only start at the intercom's first keyframe. The live view's summary line shows `first picture …` and `first keyframe …`; please share it in an issue if it takes long. |
 | Talk-back: the visitor doesn't hear you | In the live view's summary line, `microphone data` above zero means the Home app sent your voice, and `talk-back sent` above zero means it went on to the intercom. If both are zero, check the Home app's microphone permission (iPhone **Settings → Home → Microphone**). |
 | The live view closes by itself shortly after unlocking | Expected: the intercom ends the call about 10–15 s after the door opens. |

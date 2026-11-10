@@ -8,7 +8,7 @@ The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, te
 
 - **A HomeKit video doorbell.** Turn on **Doorbell camera with live video** and set **Answer the ring** to `answer-on-view`: rings show on all your Apple devices, and opening the camera's live view answers the call with the intercom's video and the door's sound. Closing the view hangs up.
 - **Talk-back** from the Home app's microphone to the door (on by default with the camera).
-- **The visitor's picture in the ring notification** (`ringPreview`, on by default): the plugin gets the picture from the intercom during the ring, without answering, and HomeKit waits for it (about 3 s after the ring on a 6741W). It needs the doorbell camera, and **Answer the ring** (or doctor mode) not `off`, since the plugin must follow the call.
+- **The visitor's picture in the ring notification** (`ringPreview`, on by default): the plugin gets the picture from the intercom during the ring, without answering, and HomeKit waits for it (about 3 s after the ring on a 6741W). It needs the doorbell camera, and **Answer the ring** (or doctor mode) not `off`, since the plugin must follow the call, and **Show the last visitor for** above 0.
 - **Open the door during a ring** from the live view, the lock, Control Centre, the Apple Watch or Siri. With `answer-on-view`, unlocking without the live view answers the call, opens and hangs up, as `answer-on-open` already did. Opening is still allowed only within **Unlock allowed for** (90 s) of a ring.
 - **Doctor mode**: every ring opens the door after a short delay, always or while a HomeKit switch is on.
 - **The last visitor's picture** on the camera tile, kept across restarts for **Show the last visitor for** (5 minutes by default).
@@ -24,10 +24,9 @@ The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, te
 - **Doorbell camera trigger URL** (`doorbellTriggerUrl`) has no default any more. If you used it with homebridge-camera-ffmpeg's default port, set it explicitly; with the plugin's own doorbell camera you don't need it.
 - **A short normal log**: rings, door opens, doctor mode, one summary per live view, and problems. The rest (the connection's steps, renewals, `call:` and `diag:` lines) needs the child bridge's debug mode. The log prefixes `zman-call` and `zman-diag` are now `call:` and `diag:`.
 - **The settings screen** is regrouped: Intercom, Doorbell camera and answering, and Door first; Picture and sound, Advanced and Troubleshooting folded away. No setting was renamed or removed, so your JSON keeps working.
-- **Invalid settings**, and numbers below the config editor's minimum, are replaced by their default and reported once at startup. `true`/`false` written as text are accepted: `"false"` now really turns a setting off (2.0.x read any text as on).
+- **Invalid settings**, and numbers below the config editor's minimum, are replaced by their default and reported once at startup. `true`/`false` written as text are accepted: `"false"` now really turns a setting off (2.0.x read it as on).
 - In `reconnect` mode, a planned refresh reconnects after about 2 s instead of the reconnect delay.
 - Rewritten in TypeScript; two intercoms in one Homebridge no longer share settings; the accessory model shown in the Home app is `ViP door relay` / `ViP doorbell`.
-- README: how to make the Home app forget an old list of camera sizes (still asking for 1280x720), for those who ran an early pre-release.
 
 ### Fixed
 
