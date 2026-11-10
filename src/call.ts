@@ -20,7 +20,7 @@ import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
-import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, nalType, parseRtp, parseSps } from './media';
+import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
@@ -94,6 +94,8 @@ export interface RingPreviewOptions {
   onVideo: (call: object, unit: Buffer) => void;
   /** The preview has started (its channels are being opened). */
   onStart?: (call: object) => void;
+  /** The intercom sent an empty (black) keyframe: the real picture will come with the next one. */
+  onEmptyKeyframe?: (call: object) => void;
   /** The preview has stopped, with or without a picture. */
   onDone?: (call: object) => void;
 }
@@ -650,6 +652,10 @@ export class RingPreview {
   private startedAt = 0;
   private firstVideoAt = 0;
   private keyframeAt = 0;
+  private keyframeBytes = 0;
+  private runBytes = 0;
+  private lastType = -1;
+  private readonly emptyKeyframes: number[] = [];
   private size?: string;
   private packets = 0;
   private timer?: NodeJS.Timeout;
@@ -707,12 +713,23 @@ export class RingPreview {
         this.size = sps ? `${sps.width}x${sps.height}` : 'size unknown';
       }
       this.options.onVideo(this.call, unit);
-      if (type === 5 && this.keyframeAt === 0) {
-        this.keyframeAt = Date.now();
-        clearTimeout(this.timer);
-        // A little more, so the keyframe's last slices and the next frame arrive.
-        this.timer = setTimeout(() => void this.stop('got a picture'), PREVIEW_AFTER_KEYFRAME_MS);
+      if (type === 5) {
+        // Slices of one keyframe come back to back; its size tells a real picture from an empty one.
+        this.runBytes = this.lastType === 5 ? this.runBytes + unit.length : unit.length;
+      } else if (this.lastType === 5 && this.keyframeAt === 0) {
+        if (this.runBytes >= MIN_PICTURE_BYTES) {
+          this.keyframeAt = Date.now();
+          this.keyframeBytes = this.runBytes;
+          clearTimeout(this.timer);
+          // A little more, so the frames after the keyframe arrive too.
+          this.timer = setTimeout(() => void this.stop('got a picture'), PREVIEW_AFTER_KEYFRAME_MS);
+        } else {
+          // The camera wasn't ready: an empty (black) keyframe. Wait for the next one.
+          this.emptyKeyframes.push(this.runBytes);
+          this.options.onEmptyKeyframe?.(this.call);
+        }
       }
+      this.lastType = type;
     }
   }
 
@@ -724,14 +741,18 @@ export class RingPreview {
       const t = (at: number) => (at ? `${((at - this.startedAt) / 1000).toFixed(1)} s` : 'never');
       const result = this.keyframeAt
         ? 'video before answering works'
-        : this.packets
-          ? 'video came, but no keyframe'
-          : 'no video before answering';
+        : this.emptyKeyframes.length
+          ? "video came, but the camera's picture was empty (black)"
+          : this.packets
+            ? 'video came, but no keyframe'
+            : 'no video before answering';
+      const empty = this.emptyKeyframes.length ? `, empty keyframes before it: ${this.emptyKeyframes.map((b) => `${b} bytes`).join(', ')}` : '';
       // Normal level only when the intercom gave no picture (not when the call was answered or ended first).
       const failed = !this.keyframeAt && /^(no keyframe|setup failed)/.test(reason);
       (failed ? this.log?.info : this.log?.debug)?.call(
         this.log,
-        `Ring preview: ${result}; first video ${t(this.firstVideoAt)}, first keyframe ${t(this.keyframeAt)}, ` +
+        `Ring preview: ${result}; first video ${t(this.firstVideoAt)}, first picture ${t(this.keyframeAt)}` +
+          `${this.keyframeBytes ? ` (${this.keyframeBytes} bytes)` : ''}${empty}, ` +
           `${this.size ?? 'size unknown'}, ${this.packets} packets; stopped: ${reason}`,
       );
       this.options.onDone?.(this.call);

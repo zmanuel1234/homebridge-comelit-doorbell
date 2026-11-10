@@ -136,7 +136,7 @@ test('media that already ended when the view starts gives the still picture (bet
 test("ring preview video becomes the visitor's picture (test build)", () => {
   const cam = camera({ ringPreview: true });
   const callObj = {};
-  for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  for (const u of [[0x67, 1], [0x68, 2], [0x65, ...Array(2100).fill(3)], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
   const v = cam.keyframes.visitor(60_000);
   assert.ok(v && v.includes(0x65));
 });
@@ -153,7 +153,7 @@ test("the last visitor's picture survives a restart, and expires with lastVisito
   const file = path.join(dir, 'comelit-last-visitor.h264');
   const first = make();
   const callObj = {};
-  for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) first.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  for (const u of [[0x67, 1], [0x68, 2], [0x65, ...Array(2100).fill(3)], [0x41, 4]]) first.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
   for (let i = 0; i < 100 && !fs.existsSync(file); i++) await new Promise((r) => setTimeout(r, 5));
   assert.ok(fs.existsSync(file), 'saved');
   const restarted = make();
@@ -176,7 +176,7 @@ function pictureCamera(config) {
   cam.getCall = () => ({ previewOn: true });
   return cam;
 }
-const feed = (cam, callObj) => { for (const u of [[0x67, 1], [0x68, 2], [0x65, 3], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u])); };
+const feed = (cam, callObj) => { for (const u of [[0x67, 1], [0x68, 2], [0x65, ...Array(2100).fill(3)], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u])); };
 
 test("a picture asked for right after a ring waits for the ring preview's picture (beta.28)", async () => {
   const cam = pictureCamera();
@@ -290,4 +290,33 @@ test('the debug log gives the size of each picture HomeKit asks for after a ring
   cam.ring();
   await cam.snapshot({ width: 640, height: 360 });
   assert.ok(lines.some((l) => /HomeKit asked for a 640x360 picture 0\.\d s after the ring; gave the idle picture/.test(l)), lines.join('\n'));
+});
+
+test('after an empty first keyframe, picture requests wait for the next real one, up to 7 s after the ring (2.1.1)', async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  cam.previewStarted();
+  const callObj = {};
+  for (const u of [[0x67, 1], [0x68, 2], [0x65, ...Array(900).fill(0)], [0x41, 4]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  cam.previewEmptyKeyframe();
+  let got;
+  const t = Date.now();
+  const asking = cam.snapshot({ width: 640, height: 480 }).then((b) => (got = b.toString()));
+  await new Promise((r) => setTimeout(r, 50));
+  assert.strictEqual(got, undefined, 'no black picture: still waiting');
+  for (const u of [[0x65, ...Array(2100).fill(5)], [0x41, 6]]) cam.previewVideo(callObj, Buffer.from([0, 0, 0, 1, ...u]));
+  await asking;
+  assert.strictEqual(got, 'visitor');
+  assert.ok(Date.now() - t < 1000);
+});
+
+test('the extended wait still ends: no real keyframe gives the earlier picture, not a black one (2.1.1)', async () => {
+  const cam = pictureCamera();
+  cam.ring();
+  cam.previewStarted();
+  cam.previewEmptyKeyframe();
+  const t = Date.now();
+  cam.pictureWait.resolve(); // as the 7 s timer would
+  assert.strictEqual((await cam.snapshot({ width: 640, height: 480 })).toString(), 'idle');
+  assert.ok(Date.now() - t < 500);
 });

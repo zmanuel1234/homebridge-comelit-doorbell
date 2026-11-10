@@ -250,7 +250,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       call.attach(client);
       call.enablePreview(
         s.ringPreview && s.camera
-          ? { hd: s.videoQuality === 'hd', onVideo: (c, unit) => this.camera?.previewVideo(c, unit), onStart: () => this.camera?.previewStarted(), onDone: () => this.camera?.previewDone() }
+          ? {
+            hd: s.videoQuality === 'hd',
+            onVideo: (c, unit) => this.camera?.previewVideo(c, unit),
+            onStart: () => this.camera?.previewStarted(),
+            onEmptyKeyframe: () => this.camera?.previewEmptyKeyframe(),
+            onDone: () => this.camera?.previewDone(),
+          }
           : undefined,
       );
       this.callHandler = call;
