@@ -256,7 +256,9 @@ test("with mediaCaptureDir, each ring's notification picture is saved once, last
   let files;
   for (let i = 0; i < 100; i++) {
     files = fs.readdirSync(dir).filter((f) => f.startsWith('ring-')).sort();
-    if (files.some((f) => !f.startsWith('ring-2025'))) break;
+    // wait until the new picture is written completely, not just created
+    const fresh = files.find((f) => !f.startsWith('ring-2025'));
+    if (fresh && fs.statSync(path.join(dir, fresh)).size === first.length) break;
     await new Promise((r) => setTimeout(r, 5));
   }
   assert.strictEqual(files.length, 10, files.join(' '));
