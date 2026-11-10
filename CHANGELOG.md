@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.1.0 (2026-11-10)
+
+The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, tested on a Comelit 6741W). Everything below is compared with 2.0.4; the pre-release entries further down give the details.
+
+### Added
+
+- **A HomeKit video doorbell.** Turn on **Doorbell camera with live video** and set **Answer the ring** to `answer-on-view`: rings show on all your Apple devices, and opening the camera's live view answers the call with the intercom's video and the door's sound. Closing the view hangs up.
+- **Talk-back** from the Home app's microphone to the door (on by default with the camera).
+- **The visitor's picture in the ring notification** (`ringPreview`, on by default): the plugin gets the picture from the intercom during the ring, without answering, and HomeKit waits for it (about 3 s after the ring on a 6741W). It needs the doorbell camera, and **Answer the ring** (or doctor mode) not `off`, since the plugin must follow the call, and **Show the last visitor for** above 0.
+- **Open the door during a ring** from the live view, the lock, Control Centre, the Apple Watch or Siri. With `answer-on-view`, unlocking without the live view answers the call, opens and hangs up, as `answer-on-open` already did. Opening is still allowed only within **Unlock allowed for** (90 s) of a ring.
+- **Doctor mode**: every ring opens the door after a short delay, always or while a HomeKit switch is on.
+- **The last visitor's picture** on the camera tile, kept across restarts for **Show the last visitor for** (5 minutes by default).
+- **No Response** on the lock when the intercom has been unreachable for more than 30 s.
+- **Door volume** for the sound from the door (+12 dB by default), and a choice of video quality.
+- **A reconnect back-off** up to **Longest reconnect wait** (5 minutes) when the intercom can't be reached.
+- **Troubleshooting**: one summary line per live view, and **Save each call's video and audio to** (`mediaCaptureDir`) keeps the raw media of the last 10 calls and the picture each ring's notification got.
+
+### Changed (check these when updating)
+
+- **Node.js 20, 22 or 24 is required** (2.0.x allowed Node.js 18).
+- **Registration refresh mode** defaults to `inplace`: no gap in which rings are missed. Set `leaseRefreshMode: reconnect` for the old behaviour.
+- **Doorbell camera trigger URL** (`doorbellTriggerUrl`) has no default any more. If you used it with homebridge-camera-ffmpeg's default port, set it explicitly; with the plugin's own doorbell camera you don't need it.
+- **A short normal log**: rings, door opens, doctor mode, one summary per live view, and problems. The rest (the connection's steps, renewals, `call:` and `diag:` lines) needs the child bridge's debug mode. The log prefixes `zman-call` and `zman-diag` are now `call:` and `diag:`.
+- **The settings screen** is regrouped: Intercom, Doorbell camera and answering, and Door first; Picture and sound, Advanced and Troubleshooting folded away. No setting was renamed or removed, so your JSON keeps working.
+- **Invalid settings**, and numbers below the config editor's minimum, are replaced by their default and reported once at startup. `true`/`false` written as text are accepted: `"false"` now really turns a setting off (2.0.x read it as on).
+- In `reconnect` mode, a planned refresh reconnects after about 2 s instead of the reconnect delay.
+- Rewritten in TypeScript; two intercoms in one Homebridge no longer share settings; the accessory model shown in the Home app is `ViP door relay` / `ViP doorbell`.
+
+### Fixed
+
+- **Rings could stop silently**: unacknowledged messages during a call (the intercom kept repeating them), a ring arriving while registering being taken as the registration's answer, a dropped connection during setup never reconnecting, and half-open channels taking the next channel's answer.
+- **Unlock**: the unlock window could fail open on an invalid setting; several quick taps sent several opens; with **Listen for rings** off, opens waited 10 s for nothing.
+- **Accessories** answer HomeKit from startup, before the first connection, and a shutdown during the connection setup no longer leaves a connection open.
+
+### Known limits
+
+See [Known limits](README.md#known-limits): tested on one 6741W; RTSP cameras listed by the intercom are placeholders; a door output of `0` is sent as `1` inside a call; the gate output is untested.
+
 ## 2.1.0-beta.31 (2026-11-10)
 
 ### Changed
