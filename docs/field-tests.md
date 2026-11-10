@@ -28,4 +28,11 @@ Findings:
 - **Not yet known:** whether the banner's picture fills in once the plugin's picture arrives. Notification Centre can't show it, because iOS folds the ring into a Home summary whose picture comes from another camera.
 - **Noise:** the Comelit lock relocks 3 s after each open, which adds *"Entrance Lock locked"* to Home's notifications. Lock notifications can be turned off for it in the Home app.
 
-Next test: set the Home app's banners to *Persistent* (Settings → Notifications → Home), ring, and take a screenshot as the banner appears and again about 5 s later; compare with the log's `HomeKit asked for a … picture` lines and the saved `ring-*.jpg` (with `mediaCaptureDir` set). If the picture never fills in, the alternative is to fetch the picture before telling HomeKit about the ring (about 3 s later banner, with the visitor in it).
+Second round (16:28, Persistent banners already on, Home app open in the foreground):
+
+4. **Ring banner, as it appeared:** again a black square where the picture goes.
+5. **A few seconds later:** the banner was gone (with the Home app in the foreground, iOS doesn't keep it), but the Comelit camera's tile in the Home app showed the person at the door, updated about 1 s earlier.
+
+So the plugin's picture of the ring reaches the Home app within seconds; the banner is shown before it, and whether the banner swaps it in is still unknown.
+
+Next test: with the phone **locked** (Lock Screen notifications stay until cleared), ring and take a screenshot as the notification appears and again about 5 s later; or look at an Apple Watch a few seconds after the ring. Earlier plan: set the Home app's banners to *Persistent* (Settings → Notifications → Home), ring, and take a screenshot as the banner appears and again about 5 s later; compare with the log's `HomeKit asked for a … picture` lines and the saved `ring-*.jpg` (with `mediaCaptureDir` set). If the picture never fills in, the alternative is to fetch the picture before telling HomeKit about the ring (about 3 s later banner, with the visitor in it).
