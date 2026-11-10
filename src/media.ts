@@ -122,10 +122,19 @@ export function nalType(unit: Buffer): number {
  * Keeps the latest SPS, PPS and keyframe, so a snapshot or a new viewer can start from a
  * decodable picture.
  */
+/**
+ * A keyframe smaller than this (its slices, without SPS/PPS) is an empty, black picture: the
+ * intercom sometimes sends one at the start of a ring, before its camera is ready. Measured: a
+ * black 640x240 keyframe is about 1 KB, a very dim real one at least 3 KB, the 6741W's real
+ * ones 23-32 KB.
+ */
+export const MIN_PICTURE_BYTES = 2_000;
+
 export class KeyframeCache {
   private sps?: Buffer;
   private pps?: Buffer;
   private idr?: Buffer[];
+  private idrBytes = 0;
   private lastType = -1;
   /** When the latest keyframe arrived (ms since epoch). */
   private at = 0;
@@ -138,6 +147,8 @@ export class KeyframeCache {
   private wantVisitor = false;
   /** Called when a call's first keyframe becomes the visitor's picture (to save it). */
   onVisitor?: (frame: Buffer, at: number) => void;
+  /** Called when a call's keyframe is empty (black) and so is not taken as the visitor's picture. */
+  onEmptyKeyframe?: (bytes: number) => void;
 
   /** Restores a visitor's picture saved before a restart (kept only if no newer one). */
   restoreVisitor(frame: Buffer, at: number): void {
@@ -154,6 +165,7 @@ export class KeyframeCache {
       // The previous call's keyframe must not start this call's video: its frames refer to
       // their own keyframe, and decoding them on top of another gives a garbled picture.
       this.idr = undefined;
+      this.idrBytes = 0;
       this.at = 0;
     }
   }
@@ -172,9 +184,12 @@ export class KeyframeCache {
   push(unit: Buffer): void {
     const type = nalType(unit);
     if (this.wantVisitor && this.lastType === 5 && type !== 5) {
-      // The first keyframe of the call is complete (its slices came back to back).
+      // The call's first real keyframe is complete (its slices came back to back). An empty
+      // (black) one is skipped: the next keyframe becomes the picture instead.
       const frame = this.keyframe();
-      if (frame) {
+      if (frame && this.idrBytes < MIN_PICTURE_BYTES) {
+        this.onEmptyKeyframe?.(this.idrBytes);
+      } else if (frame) {
         this.visitorFrame = { frame, at: this.at };
         this.wantVisitor = false;
         this.onVisitor?.(frame, this.at);
@@ -186,7 +201,9 @@ export class KeyframeCache {
       this.pps = unit;
     } else if (type === 5) {
       // Slices of one keyframe arrive back to back; a new run starts a new keyframe.
-      this.idr = this.lastType === 5 && this.idr ? [...this.idr, unit] : [unit];
+      const more = this.lastType === 5 && this.idr;
+      this.idr = more ? [...this.idr!, unit] : [unit];
+      this.idrBytes = (more ? this.idrBytes : 0) + unit.length;
       this.at = Date.now();
     }
     this.lastType = type;

@@ -279,6 +279,11 @@ const VISITOR_FILE = 'comelit-last-visitor.h264';
 const SNAPSHOT_QUALITY = ['-q:v', '2'];
 /** How long after a ring a picture request waits for the ring preview's picture. */
 const PREVIEW_PICTURE_WAIT_MS = 4_500;
+/**
+ * After an empty (black) first keyframe, picture requests wait for the next keyframe (the 6741W
+ * sends one every 2.7-3 s) up to this long after the ring; HomeKit warns after 8 s.
+ */
+const PREVIEW_EMPTY_WAIT_MS = 7_000;
 /** If no ring preview has started this long after a ring, picture requests stop waiting. */
 const PREVIEW_START_MS = 1_500;
 
@@ -341,6 +346,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       this.pictureWait?.resolve();
       void this.saveVisitor(frame);
     };
+    this.keyframes.onEmptyKeyframe = (bytes) =>
+      this.log.debug(`Doorbell camera: skipped an empty (black) keyframe of ${bytes} bytes; the next one becomes the visitor's picture`);
   }
 
   /** Where the last visitor's picture is saved (as H.264), if anywhere. */
@@ -383,16 +390,24 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     // and only until PREVIEW_START_MS if none starts (calls diverted, a failed setup).
     if (this.settings.ringPreview && this.settings.lastVisitorMs > 0 && this.getCall()?.previewOn) {
       this.pictureWait?.resolve();
+      this.emptyNoted = false;
       let resolve!: () => void;
       const promise = new Promise<void>((r) => (resolve = r));
       const timers = [setTimeout(resolve, PREVIEW_PICTURE_WAIT_MS), setTimeout(() => !wait.started && resolve(), PREVIEW_START_MS)];
       timers.forEach((t) => t.unref?.());
+      const ringAt = this.ringAt;
       const wait = {
         promise,
         started: false,
         resolve: () => {
           timers.forEach((t) => clearTimeout(t));
           resolve();
+        },
+        /** The first keyframe was empty: wait for the next one, up to PREVIEW_EMPTY_WAIT_MS after the ring. */
+        extend: () => {
+          clearTimeout(timers[0]);
+          timers[0] = setTimeout(resolve, Math.max(0, ringAt + PREVIEW_EMPTY_WAIT_MS - Date.now()));
+          timers[0].unref?.();
         },
       };
       this.pictureWait = wait;
@@ -405,6 +420,16 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     this.controller.ringDoorbell();
   }
 
+  /** The ring preview got an empty (black) keyframe: keep waiting for the next, real one. */
+  previewEmptyKeyframe(): void {
+    if (this.pictureWait && !this.emptyNoted) {
+      this.emptyNoted = true;
+      this.pictureWait.extend();
+    }
+  }
+  /** The current ring's wait was already extended. */
+  private emptyNoted = false;
+
   /** The ring preview has started: keep waiting for its picture. */
   previewStarted(): void {
     if (this.pictureWait) {
@@ -415,7 +440,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   /** When the doorbell last rang. */
   private ringAt = 0;
   /** Set from a ring until the ring preview's picture arrives, the preview stops, or PREVIEW_PICTURE_WAIT_MS. */
-  private pictureWait?: { promise: Promise<void>; resolve: () => void; started: boolean };
+  private pictureWait?: { promise: Promise<void>; resolve: () => void; extend: () => void; started: boolean };
 
   /** The ring preview stopped: stop waiting for its picture (it may have none). */
   previewDone(): void {

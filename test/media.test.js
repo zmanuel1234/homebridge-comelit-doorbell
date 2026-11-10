@@ -164,7 +164,8 @@ test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle
 test('the last visitor picture is the call\'s first keyframe, not its last', () => {
   const { KeyframeCache } = require('../dist/media');
   const k = new KeyframeCache();
-  const u = (type, tag) => Buffer.from([0, 0, 0, 1, type, tag]);
+  // keyframes (type 5) of a realistic size: a few bytes would be an empty (black) picture
+  const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
   const call = {};
   k.newCall(call);
   for (const [t, tag] of [[7, 1], [8, 1], [5, 1], [1, 1], [1, 2], [7, 2], [8, 2], [5, 2], [1, 3]]) {
@@ -186,7 +187,8 @@ test('the last visitor picture is the call\'s first keyframe, not its last', () 
 test("a new call doesn't start from the previous call's keyframe", () => {
   const { KeyframeCache } = require('../dist/media');
   const k = new KeyframeCache();
-  const u = (type, tag) => Buffer.from([0, 0, 0, 1, type, tag]);
+  // keyframes (type 5) of a realistic size: a few bytes would be an empty (black) picture
+  const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
   k.newCall({});
   for (const [t, tag] of [[7, 1], [8, 1], [5, 1], [1, 1]]) {
     k.push(u(t, tag));
@@ -195,4 +197,20 @@ test("a new call doesn't start from the previous call's keyframe", () => {
   k.newCall({}); // the next ring, seconds later
   assert.strictEqual(k.keyframe(10_000), undefined, 'not the old call\'s keyframe');
   assert.strictEqual(k.visitor().at(-1), 1, 'the last visitor picture is kept');
+});
+
+test('an empty (black) keyframe is not taken as the visitor picture; the next real one is (2.1.1)', () => {
+  const { KeyframeCache, MIN_PICTURE_BYTES } = require('../dist/media');
+  const k = new KeyframeCache();
+  const empty = [];
+  k.onEmptyKeyframe = (b) => empty.push(b);
+  const unit = (type, size, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(size), Buffer.from([tag])]);
+  k.newCall({});
+  for (const u of [unit(7, 0, 1), unit(8, 0, 1), unit(5, 1000, 1), unit(1, 0, 1)]) k.push(u);
+  assert.strictEqual(k.visitor(), undefined, 'a 1 KB keyframe is no picture');
+  assert.strictEqual(empty.length, 1);
+  assert.ok(empty[0] < MIN_PICTURE_BYTES);
+  for (const u of [unit(5, 1500, 2), unit(5, 1500, 3), unit(1, 0, 2)]) k.push(u); // two slices: 3 KB
+  assert.strictEqual(k.visitor().at(-1), 3, 'the next real keyframe, all its slices');
+  assert.strictEqual(empty.length, 1);
 });

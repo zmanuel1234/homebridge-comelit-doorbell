@@ -292,8 +292,9 @@ test('ring preview: asks for video during the ring without answering, takes the 
   assert.deepStrictEqual(client.opened.map((o) => o[1]), ['UDPM', 'RTPC']);
   assert.strictEqual(call.busy(), true, 'a planned reconnect waits for the preview');
   client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: 1, timestamp: 0, ssrc: 2 }, Buffer.from([0x67, 1])));
-  client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: 2, timestamp: 0, ssrc: 2 }, Buffer.from([0x65, 9])));
-  assert.strictEqual(units.length, 2);
+  client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: 2, timestamp: 0, ssrc: 2 }, Buffer.concat([Buffer.from([0x65]), Buffer.alloc(2100, 9)])));
+  client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: 3, timestamp: 1, ssrc: 2 }, Buffer.from([0x41, 1])));
+  assert.strictEqual(units.length, 3);
   await until(() => client.closed.length === 2);
   assert.deepStrictEqual(client.closed.sort(), [0x2001, 0x2002]);
   assert.strictEqual(call.busy(), false);
@@ -349,4 +350,23 @@ test('previewOn: only with calls followed and the preview set', () => {
   assert.strictEqual(b.previewOn, false);
   b.enablePreview({ hd: false, onVideo: () => undefined });
   assert.strictEqual(b.previewOn, true);
+});
+
+test('ring preview: an empty (black) first keyframe is skipped, the next real one stops the preview (2.1.1)', async () => {
+  const { call, client } = setup('answer-on-view');
+  let empty = 0;
+  call.enablePreview({ hd: false, onVideo: () => undefined, onEmptyKeyframe: () => empty++ });
+  await ring(call);
+  await until(() => client.handlers.get(0x2003));
+  const send = (seq, payload) => client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: seq, timestamp: seq, ssrc: 2 }, payload));
+  send(1, Buffer.from([0x67, 1]));
+  send(2, Buffer.concat([Buffer.from([0x65]), Buffer.alloc(1000)])); // black: about 1 KB
+  send(3, Buffer.from([0x41, 1]));
+  await new Promise((r) => setTimeout(r, 700));
+  assert.strictEqual(empty, 1);
+  assert.deepStrictEqual(client.closed, [], 'still waiting for a real picture');
+  send(4, Buffer.concat([Buffer.from([0x65]), Buffer.alloc(3000, 7)]));
+  send(5, Buffer.from([0x41, 2]));
+  await until(() => client.closed.length === 2);
+  assert.strictEqual(client.closed.length, 2, 'stopped after the real picture');
 });

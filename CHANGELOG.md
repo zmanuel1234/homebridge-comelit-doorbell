@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.1-beta.1 (2026-11-10)
+
+### Fixed
+
+- **A black picture in the ring notification.** At the start of a ring, the intercom sometimes sends an empty, black first keyframe while its camera is still getting ready; the plugin took it as the visitor's picture, so the notification (and the camera tile) showed a black square. Seen twice on 2026-11-10: the saved `ring-*.jpg` were completely black, 2 KB, while the other rings' pictures were normal, 50 KB. A keyframe smaller than 2 KB is now treated as empty: the plugin waits for the next one (the 6741W sends one every 2.7–3 s), and picture requests made just after the ring then wait up to 7 s after it instead of 4.5 s (HomeKit warns only after 8 s). If no real picture comes by then, HomeKit gets the earlier visitor's picture, never a black one.
+- Debug log: the ring preview's line gives the size of the picture's keyframe and of any empty keyframes before it, and a skipped empty keyframe is logged.
+
+Tests: 114 in all.
+
 ## 2.1.0 (2026-11-10)
 
 The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, tested on a Comelit 6741W). Everything below is compared with 2.0.4; the pre-release entries further down give the details.
