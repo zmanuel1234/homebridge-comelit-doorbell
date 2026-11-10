@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0-beta.31 (2026-11-10)
+
+### Changed
+
+- **Debug log: the size of each picture HomeKit asks for after a ring**, e.g. `Doorbell camera: HomeKit asked for a 640x360 picture 0.4 s after the ring; gave this ring's picture after waiting 3.0 s (saved)`. HomeKit asks several times per ring (the home hub for the notification, and your devices); the size shows which request is which, and `(saved)` marks the one kept in `mediaCaptureDir`. Logged whether the ring preview is on or off; it replaces the `Ring preview: HomeKit asked for the picture …` line.
+
 ## 2.1.0-beta.30 (2026-11-10)
 
 ### Added
