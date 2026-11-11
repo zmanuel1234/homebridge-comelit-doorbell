@@ -132,6 +132,13 @@ export class RingSource {
   }
 }
 
+/** A time of day for the log, with tenths (16:19:53.4). */
+function time(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${Math.floor(d.getMilliseconds() / 100)}`;
+}
+
 /** Builds an FLV stream: H.264 video and A-law sound, with our timestamps (ms). */
 export class FlvWriter {
   constructor(private readonly write: (b: Buffer) => void, withAudio: boolean) {
@@ -214,6 +221,13 @@ export class RingFeeder {
   private lastVideoMs = 0;
   private timer?: NodeJS.Timeout;
   private done = false;
+  /** For the log: the intercom's sound written, dropped as late, and silence put between its pieces. */
+  readonly soundStats = { packets: 0, late: 0, gapBytes: 0 };
+
+  /** How long the recording is: the last frame's time (s). */
+  get seconds(): number {
+    return this.lastVideoMs / 1000;
+  }
 
   constructor(
     private readonly source: RingSource,
@@ -303,14 +317,19 @@ export class RingFeeder {
   private sound(a: Timed): void {
     const pos = Math.round((a.at - this.base) * ALAW_BYTES_PER_MS);
     if (pos > this.audioWritten + AUDIO_GAP_MS * ALAW_BYTES_PER_MS) {
+      if (this.soundStats.packets > 0) {
+        this.soundStats.gapBytes += pos - this.audioWritten;
+      }
       this.silence(pos - this.audioWritten);
     } else if (this.audioWritten > pos + AUDIO_LATE_MS * ALAW_BYTES_PER_MS) {
       // Late (a Wi-Fi stall): its place is already silence; appending it would put all the
       // sound after it behind the picture.
+      this.soundStats.late++;
       return;
     }
     this.flv.audio(a.data, this.audioWritten / ALAW_BYTES_PER_MS);
     this.audioWritten += a.data.length;
+    this.soundStats.packets++;
   }
 
   private tick(): void {
@@ -637,6 +656,7 @@ export class RingRecorder implements CameraRecordingDelegate {
 
   async *handleRecordingStreamRequest(streamId: number, signal?: AbortSignal): AsyncGenerator<RecordingPacket> {
     const configuration = this.configuration;
+    const askedAt = Date.now();
     const source = await this.waitForSource(signal);
     if (!configuration || !source || signal?.aborted) {
       this.log.debug(`Doorbell camera: recording ${streamId}: no ring to record`);
@@ -645,6 +665,14 @@ export class RingRecorder implements CameraRecordingDelegate {
     // A second request for the same ring (the hub asks again while motion is on) starts from
     // the latest keyframe, so the ring isn't recorded twice.
     const from = source.requests++ === 0 ? 0 : source.latestKeyframe;
+    // For the log: when the hub asked, and when the recording starts, after the ring.
+    const ringAt = (source.call as { born?: number }).born;
+    const startAt = source.units[from]?.at ?? Date.now();
+    const sinceRing = (t: number) => (ringAt ? `${((t - ringAt) / 1000).toFixed(1)} s after the ring` : time(t));
+    this.log.debug(
+      `Doorbell camera: recording ${streamId}: HomeKit asked ${sinceRing(askedAt)}; the recording starts at ${time(startAt)} (${sinceRing(startAt)}, the first picture)` +
+        `${from ? ', from the latest keyframe (a second request for this ring)' : ''}`,
+    );
     const withAudio = this.audioActive();
     const proc = this.spawnProcess('recording', recordingArgs(configuration, withAudio, this.gainDb));
     const queue: { type: 'init' | 'fragment'; data: Buffer }[] = [];
@@ -698,6 +726,9 @@ export class RingRecorder implements CameraRecordingDelegate {
             yield { data: p.data, isLast: false };
           } else {
             if (held) {
+              if (fragments === 0) {
+                this.log.debug(`Doorbell camera: recording ${streamId}: first piece to HomeKit at ${time(Date.now())}, ${((Date.now() - startAt) / 1000).toFixed(1)} s after the recording starts`);
+              }
               yield { data: held, isLast: false };
               fragments++;
             }
@@ -715,7 +746,14 @@ export class RingRecorder implements CameraRecordingDelegate {
       }
       // Logged before the last one: HomeKit stops reading once it has it.
       fragments++;
-      this.log.debug(`Doorbell camera: recording ${streamId}: sent the ring to HomeKit, ${fragments} fragment(s)${withAudio ? ', with sound' : ''}`);
+      const snd = feeder.soundStats;
+      this.log.debug(
+        `Doorbell camera: recording ${streamId}: sent the ring to HomeKit, ${fragments} fragment(s), ${feeder.seconds.toFixed(1)} s, ending at ${time(Date.now())}` +
+          (withAudio
+            ? `, with sound: ${snd.packets} pieces of the intercom's sound, ${(snd.gapBytes / ALAW_BYTES_PER_MS / 1000).toFixed(1)} s of gaps filled with silence, ` +
+              `${snd.late} dropped as late (${(snd.late * 0.02).toFixed(1)} s)`
+            : ', without sound'),
+      );
       this.ended.add(streamId);
       yield { data: held, isLast: true };
     } finally {

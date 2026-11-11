@@ -464,8 +464,9 @@ test('camera: with recording, HomeKit gets a motion sensor and recording managem
 // every 3 s) and A-law sound, fed at their real pace, into HomeKit fragments: each starts with a
 // keyframe and lasts at most the fragment length, and the sound is as long as the picture.
 const encoders = spawnSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8' }).stdout ?? '';
-const ffmpegOk = encoders.includes('libx264');
-test('recording with ffmpeg: fragments start with a keyframe and are no longer than 4 s, with sound in step', { skip: !ffmpegOk && 'no ffmpeg with libx264', timeout: 30_000 }, async () => {
+const ffprobeOk = spawnSync('ffprobe', ['-version']).status === 0;
+const ffmpegOk = encoders.includes('libx264') && ffprobeOk;
+test('recording with ffmpeg: fragments start with a keyframe and are no longer than 4 s, with sound in step', { skip: !ffmpegOk && 'no ffmpeg with libx264, or no ffprobe', timeout: 30_000 }, async () => {
   const seconds = 9;
   const h264 = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `testsrc=size=640x240:rate=16:duration=${seconds}`,
     '-c:v', 'libx264', '-g', '48', '-bsf:v', 'h264_mp4toannexb', '-f', 'h264', 'pipe:1'], { maxBuffer: 64 << 20 }).stdout;
@@ -560,4 +561,31 @@ test('camera: Record audio in the Home app reaches the recorder (beta.1-3 read i
   audio.setValue(0);
   assert.strictEqual(cam.recorder.audioActive(), false);
   cam.shutdown();
+});
+
+test('recorder log (debug): when HomeKit asked, when the first piece went, and the sound kept, gap-filled and dropped (2.3.0-beta.5)', async () => {
+  const lines = [];
+  const log = { ...quietLog(), debug: (m) => lines.push(m) };
+  const procs = [];
+  const r = new RingRecorder(log, () => undefined, () => true, () => { const p = fakeProcess(); p.on('error', () => undefined); procs.push(p); return p; });
+  r.updateRecordingActive(true);
+  r.updateRecordingConfiguration(configuration());
+  const call = { born: Date.now() - 3000 };
+  ring(r, call);
+  const reading = readAll(r.handleRecordingStreamRequest(7));
+  await tick();
+  r.onCallAudio(call, Buffer.alloc(160, 1));
+  r.onCallVideo(call, p);
+  await tick();
+  fmp4(procs[0]);
+  procs[0].stdout.emit('data', Buffer.concat([box('moof'), box('mdat', 32)]));
+  r.onCallEnded(call);
+  await tick();
+  procs[0].emit('close', 0);
+  await reading;
+  r.shutdown();
+  const text = lines.join('\n');
+  assert.match(text, /recording 7: HomeKit asked 3\.\d s after the ring; the recording starts at [\d:.]+ \(3\.\d s after the ring, the first picture\)/);
+  assert.match(text, /recording 7: first piece to HomeKit at [\d:.]+, \d+\.\d s after the recording starts/);
+  assert.match(text, /recording 7: sent the ring to HomeKit, 3 fragment\(s\), \d+\.\d s, ending at [\d:.]+, with sound: 1 pieces of the intercom's sound, \d+\.\d s of gaps filled with silence, 0 dropped as late/);
 });
