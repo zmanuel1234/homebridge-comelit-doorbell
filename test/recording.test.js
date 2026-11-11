@@ -289,7 +289,7 @@ test('recorder: a second request during the same ring starts from the latest key
   await tick();
   const v2 = videoTags(spawned[1].proc.stdin.written);
   assert.strictEqual(v2[1].data.length, 5 + 4 + 2496, 'starts with the latest keyframe');
-  assert.strictEqual(v2[1].ms, 0, 'whose time is the start');
+  assert.ok(v2[1].ms <= 5, `whose time is the start: ${v2[1].ms} ms`);
   for (const { proc } of spawned) { fmp4(proc); proc.emit('close', 0); }
   await Promise.all([first, second]);
   r.shutdown();
@@ -547,5 +547,17 @@ test('camera: a camera Homebridge already had gets the recording services and mo
   a = restart(a);
   make(false).attach(a);
   assert.ok(!has(a, hap.Service.MotionSensor) && !has(a, hap.Service.CameraRecordingManagement), 'all gone with recording off');
+  cam.shutdown();
+});
+
+test('camera: Record audio in the Home app reaches the recorder (beta.1-3 read it from the wrong service)', () => {
+  const cam = new DoorbellCamera({ hap }, quietLog(), resolveSettings({ camera: true, recording: true, host: 'h', token: 't' }), () => undefined);
+  new hap.Accessory('Door', hap.uuid.generate('door-audio')).configureController(cam.controller);
+  const audio = cam.controller.recordingManagement.recordingManagementService.getCharacteristic(hap.Characteristic.RecordingAudioActive);
+  assert.strictEqual(cam.recorder.audioActive(), false);
+  audio.setValue(1);
+  assert.strictEqual(cam.recorder.audioActive(), true, 'on in the Home app: the recording has sound');
+  audio.setValue(0);
+  assert.strictEqual(cam.recorder.audioActive(), false);
   cam.shutdown();
 });

@@ -354,7 +354,9 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       this.recorder = new RingRecorder(
         log,
         (on) => this.motionService?.updateCharacteristic(hap.Characteristic.MotionDetected, on),
-        () => this.controller.recordingManagement?.operatingModeService.getCharacteristic(hap.Characteristic.RecordingAudioActive).value === 1,
+        // Record audio, in the camera's Recording Options: on the recording management service
+        // (1 or true), not the operating mode one.
+        () => Boolean(this.controller.recordingManagement?.recordingManagementService.getCharacteristic(hap.Characteristic.RecordingAudioActive).value),
         spawnFfmpeg(this.ffmpeg, log),
         () => new hap.HDSProtocolError(hap.HDSProtocolSpecificErrorReason.NOT_ALLOWED),
         settings.doorVolumeDb,
