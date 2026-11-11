@@ -46,7 +46,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |
 | Doctor mode (always, or with its switch) | ✅ | |
 | Next Visitor switch | ❓ | New in 2.2.0: the same open as doctor mode; covered by the plugin's tests |
-| Recording rings (HomeKit Secure Video) | ❓ | New in 2.3.0-beta.1: tested with the intercom's recorded video, not yet with a real ring and a home hub |
+| Recording rings (HomeKit Secure Video) | ❓ | New in 2.3.0-beta.1 (beta.2 fixes Recording Options not appearing): tested with the intercom's recorded video, not yet with a real ring and a home hub |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
@@ -281,7 +281,7 @@ What you need:
 4. In the Home app, open the camera's settings, **Recording Options**, and choose **Stream & Allow Recording** (when home, when away, or both). Leave the activity detection on; the plugin's motion sensor is the only activity.
 5. ffmpeg with the `libfdk_aac` encoder when the Home app records sound (the bundled ffmpeg-for-homebridge has it); without sound, any ffmpeg with `libx264` will do.
 
-With the setting on, the log says `Doorbell camera: HomeKit Secure Video recording on` when the Home app turns recording on, and `Doorbell camera: recording the ring` at each ring. With debug mode on, a line says how many pieces (fragments) went to HomeKit, or `no ring to record` when the hub asked and there was none. Changing this setting changes the camera's services, so the Home app may take a minute to show the recording options.
+With the setting on, the startup line `Doorbell camera: ffmpeg …` ends with `recording rings (HomeKit Secure Video)`, the log says `Doorbell camera: HomeKit Secure Video recording on` when the Home app turns recording on, and `Doorbell camera: recording the ring` at each ring. With debug mode on, a line says how many pieces (fragments) went to HomeKit, or `no ring to record` when the hub asked and there was none. Changing this setting changes the camera's services, so the Home app may take a minute to show the recording options; if they don't appear, close the Home app fully and reopen it.
 
 ## Migrating from homebridge-comelit-intercom
 
