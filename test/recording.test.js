@@ -3,7 +3,22 @@ const assert = require('node:assert');
 const { EventEmitter } = require('events');
 const { spawnSync, spawn } = require('child_process');
 const hap = require('@homebridge/hap-nodejs');
-const { Mp4Splitter, RingRecorder, RingSource, recordingArgs } = require('../dist/recording');
+const { FlvWriter, Mp4Splitter, RingFeeder, RingRecorder, RingSource, recordingArgs, spawnFfmpeg } = require('../dist/recording');
+
+/** The tags of an FLV stream: type (8 sound, 9 video), time in ms, and the data. */
+function flvTags(buffers) {
+  const b = Buffer.concat(buffers);
+  const tags = [];
+  for (let i = 13; i + 11 <= b.length;) {
+    const size = b.readUIntBE(i + 1, 3);
+    const ms = b.readUIntBE(i + 4, 3) | (b[i + 7] << 24);
+    tags.push({ type: b[i], ms, data: b.subarray(i + 11, i + 11 + size) });
+    i += 11 + size + 4;
+  }
+  return tags;
+}
+const videoTags = (buffers) => flvTags(buffers).filter((t) => t.type === 9);
+const soundBytes = (buffers) => flvTags(buffers).filter((t) => t.type === 8).reduce((n, t) => n + t.data.length - 1, 0);
 const { DoorbellCamera } = require('../dist/camera');
 const { callHandlerMode, resolveSettings, settingsWarnings } = require('../dist/config');
 const { quietLog } = require('./helpers');
@@ -27,8 +42,9 @@ const configuration = (audio = {}) => ({
 const nal = (...bytes) => Buffer.from([0, 0, 0, 1, ...bytes]);
 const sps = nal(0x67, 1, 2);
 const pps = nal(0x68, 3);
-const idr = (size) => Buffer.concat([nal(0x65), Buffer.alloc(size - 5, 7)]);
-const p = nal(0x41, 1);
+// Slices that start a frame (first_mb_in_slice 0: the top bit of the byte after the header).
+const idr = (size) => Buffer.concat([nal(0x65, 0x88), Buffer.alloc(size - 6, 7)]);
+const p = nal(0x41, 0x81);
 
 function fakeProcess() {
   const proc = new EventEmitter();
@@ -65,7 +81,7 @@ function recorder({ active = true, audio = false, spawn } = {}) {
   return { r, motion, spawned };
 }
 
-const tick = () => new Promise((r) => setImmediate(r));
+const tick = () => new Promise((r) => setTimeout(r, 30)); // a feeder tick (20 ms) and more
 
 test('Mp4Splitter: the init is everything up to moov, each fragment ends with its mdat, in any chunk sizes', () => {
   const stream = Buffer.concat([box('ftyp', 24), box('moov', 40), box('moof', 20), box('mdat', 100), box('styp'), box('moof', 20), box('mdat', 50)]);
@@ -104,14 +120,19 @@ test('recordingArgs: follows HomeKit\'s configuration, with keyframes inside the
   assert.strictEqual(args.at(-1), 'pipe:1');
 });
 
-test('recordingArgs: a silent sound track when HomeKit records sound, AAC-LC or AAC-ELD at its sample rate', () => {
-  const lc = recordingArgs(configuration(), true);
-  assert.ok(lc.join(' ').includes('anullsrc=channel_layout=mono:sample_rate=16000'));
+test('recordingArgs: video and the intercom\'s sound from one FLV input, the sound turned up like the live view, in AAC-LC or AAC-ELD at HomeKit\'s rate', () => {
+  const lc = recordingArgs(configuration(), true, 12);
+  const j = lc.join(' ');
+  assert.ok(j.includes('-f flv -i pipe:0'));
+  assert.ok(j.includes('-map 0:v -map 0:a'));
+  assert.ok(j.includes('-af volume=12dB,alimiter=limit=0.9,aresample=16000'));
   assert.strictEqual(lc[lc.indexOf('-profile:a') + 1], 'aac_low');
-  assert.ok(lc.includes('-shortest') && !lc.includes('-an'));
+  assert.ok(!lc.includes('-an') && !j.includes('anullsrc'));
   const eld = recordingArgs(configuration({ type: 1, samplerate: 3 }), true);
   assert.strictEqual(eld[eld.indexOf('-profile:a') + 1], 'aac_eld');
-  assert.ok(eld.join(' ').includes('sample_rate=32000'));
+  assert.ok(eld.join(' ').includes('-af aresample=32000'));
+  assert.match(lc[lc.indexOf('-vf') + 1], /^setpts=PTS-STARTPTS,/, 'frames keep the times they arrived with');
+  assert.ok(!recordingArgs(configuration(), false).includes('0:a'));
 });
 
 test('recorder: off in the Home app, a ring changes nothing', () => {
@@ -217,13 +238,20 @@ test('recorder: the hub\'s request gets the ring from its first picture, then fr
   const reading = readAll(r.handleRecordingStreamRequest(1));
   await tick();
   const { proc, args } = spawned[0];
-  assert.ok(args.includes('libfdk_aac'), 'sound track with HomeKit audio on');
-  assert.deepStrictEqual(proc.stdin.written, [sps, pps, idr(3000), p], 'the ring so far, from its keyframe');
-  r.onCallVideo(call, nal(0x41, 2));
-  assert.strictEqual(proc.stdin.written.length, 5, 'and the video as it comes');
+  assert.ok(args.includes('libfdk_aac'), 'sound with HomeKit audio on');
+  const v = videoTags(proc.stdin.written);
+  assert.deepStrictEqual(v.map((t) => [t.data[0], t.data[1]]), [[0x17, 0], [0x17, 1]], 'the decoder setup (SPS, PPS), then the keyframe');
+  r.onCallVideo(call, nal(0x41, 0x80));
+  r.onCallVideo(call, nal(0x41, 0x80));
+  r.onCallVideo(call, nal(0x41, 0x80));
+  r.onCallAudio(call, Buffer.alloc(160, 1));
+  await tick();
+  assert.deepStrictEqual(videoTags(proc.stdin.written).slice(2).map((t) => t.data[0]), [0x27, 0x27, 0x27], 'and the frames as they come (a frame is written when the next one starts)');
+  assert.ok(flvTags(proc.stdin.written).some((t) => t.type === 8 && t.data.length === 161 && t.data[1] === 1), 'and the intercom\'s sound');
   fmp4(proc);
   await tick();
   r.onCallEnded(call);
+  await tick();
   assert.strictEqual(proc.stdin.ended, true, 'the end of the call ends ffmpeg\'s input');
   proc.emit('exit', 0);
   proc.emit('close', 0);
@@ -239,7 +267,7 @@ test('recorder: a request that comes just after a short ring still gets it, once
   const reading = readAll(r.handleRecordingStreamRequest(1));
   await tick();
   const { proc } = spawned[0];
-  assert.strictEqual(proc.stdin.written.length, 4);
+  assert.strictEqual(videoTags(proc.stdin.written).length, 3, 'the decoder setup, the keyframe and the frame after it');
   assert.strictEqual(proc.stdin.ended, true);
   fmp4(proc);
   proc.emit('close', 0);
@@ -259,7 +287,9 @@ test('recorder: a second request during the same ring starts from the latest key
   for (const u of [sps, pps, idr(2500), p]) r.onCallVideo('call', u);
   const second = readAll(r.handleRecordingStreamRequest(2));
   await tick();
-  assert.deepStrictEqual(spawned[1].proc.stdin.written, [sps, pps, idr(2500), p]);
+  const v2 = videoTags(spawned[1].proc.stdin.written);
+  assert.strictEqual(v2[1].data.length, 5 + 4 + 2496, 'starts with the latest keyframe');
+  assert.strictEqual(v2[1].ms, 0, 'whose time is the start');
   for (const { proc } of spawned) { fmp4(proc); proc.emit('close', 0); }
   await Promise.all([first, second]);
   r.shutdown();
@@ -303,17 +333,97 @@ test('recorder: aborted by hap while waiting for ffmpeg\'s output, the request e
   r.shutdown();
 });
 
-test('RingSource: replays what it has to a late follower, then ends it', () => {
-  const s = new RingSource('call', [sps]);
-  s.push(pps);
-  const got = [];
+test('RingFeeder: frames are stamped with when they arrived, also when the request comes late; a split keyframe is one frame', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 1_000_000 });
+  const s = new RingSource('call', [sps, pps, nal(0x65, 0x80, 1), nal(0x65, 0x00, 2)]); // a keyframe in two slices
+  t.mock.timers.tick(125);
+  s.push(nal(0x41, 0x80));
+  t.mock.timers.tick(125);
+  s.push(nal(0x41, 0x80));
+  t.mock.timers.tick(2000); // the request comes 2 s later
+  const out = [];
   let ended = false;
-  s.follow((u) => got.push(u), () => (ended = true));
-  s.push(p);
+  new RingFeeder(s, 0, (b) => out.push(b), false, () => (ended = true));
+  t.mock.timers.tick(100);
+  s.push(nal(0x41, 0x80)); // live
   s.end();
-  s.push(idr(10));
-  assert.deepStrictEqual(got, [sps, pps, p]);
+  t.mock.timers.tick(40);
   assert.strictEqual(ended, true);
+  const v = videoTags(out);
+  assert.deepStrictEqual(v.map((x) => [x.data[0], x.ms]), [[0x17, 0], [0x17, 0], [0x27, 125], [0x27, 250], [0x27, 2350]]);
+  assert.strictEqual(v[1].data.length, 5 + (4 + 3) * 2, 'the keyframe\'s two slices, in one frame');
+  assert.deepStrictEqual(flvTags(out).filter((x) => x.type === 8), [], 'no sound without HomeKit audio');
+});
+
+test('RingFeeder: the sound keeps time with the picture: silence until the call\'s sound starts, and in its gaps', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 2_000_000 });
+  const s = new RingSource('call', [sps, pps, idr(3000)]);
+  const out = [];
+  const f = new RingFeeder(s, 0, (b) => out.push(b), true, () => undefined);
+  const step = (sound) => { s.push(p); if (sound) s.pushAudio(sound); t.mock.timers.tick(20); }; // the picture keeps coming
+  for (let i = 0; i < 100; i++) step(); // 2 s of ringing without sound
+  assert.ok(Math.abs(soundBytes(out) - (2000 - 200) * 8) <= 160, `silence up to 200 ms behind: ${soundBytes(out)}`);
+  assert.ok(flvTags(out).filter((x) => x.type === 8).every((x) => x.data[0] === 0x70 && x.data.subarray(1).every((b) => b === 0xd5)), 'A-law silence');
+  for (let i = 0; i < 50; i++) step(Buffer.alloc(160, 1)); // 1 s of the call's sound
+  assert.ok(Math.abs(soundBytes(out) - 3000 * 8) <= 2 * 160, `the sound starts where it belongs in time: ${soundBytes(out)}`);
+  const first = flvTags(out).find((x) => x.type === 8 && x.data[1] === 1);
+  assert.ok(Math.abs(first.ms - 2000) <= 20, `stamped at 2 s: ${first.ms}`);
+  for (let i = 0; i < 50; i++) step(); // 1 s gap
+  step(Buffer.alloc(160, 2));
+  assert.ok(Math.abs(soundBytes(out) - 4000 * 8 - 160) <= 2 * 160, `after a gap, too: ${soundBytes(out)}`);
+  f.stop();
+  s.end();
+});
+
+test('RingFeeder: ffmpeg finds the sound at once, even after a large buffered keyframe', () => {
+  const s = new RingSource('call', [sps, pps, idr(34_000)]);
+  const out = [];
+  const f = new RingFeeder(s, 0, (b) => out.push(b), true, () => undefined);
+  const tags = flvTags(out);
+  assert.strictEqual(tags[0].type, 8, 'a piece of silence before any video');
+  f.stop();
+  s.end();
+});
+
+test('RingFeeder: sound delayed by a Wi-Fi stall is dropped, not appended late (picture and sound stay together)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 3_000_000 });
+  const s = new RingSource('call', [sps, pps, idr(3000)]);
+  const out = [];
+  const f = new RingFeeder(s, 0, (b) => out.push(b), true, () => undefined);
+  const step = (sound) => { s.push(p); if (sound) s.pushAudio(sound); t.mock.timers.tick(20); };
+  for (let i = 0; i < 50; i++) step(Buffer.alloc(160, 1)); // 1 s of sound
+  for (let i = 0; i < 50; i++) step(); // a 1 s stall
+  for (let i = 0; i < 50; i++) s.pushAudio(Buffer.alloc(160, 3)); // the stalled second arrives at once
+  for (let i = 0; i < 50; i++) step(Buffer.alloc(160, 1)); // and on as normal
+  const ahead = soundBytes(out) / 8 - 3000;
+  assert.ok(ahead <= 100, `the sound is at most 100 ms off the picture after the stall: ${ahead} ms`);
+  f.stop();
+  s.end();
+});
+
+test('RingFeeder: when the picture stops before the ring ends, the sound stops with it (the last fragment stays short)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 4_000_000 });
+  const s = new RingSource('call', [sps, pps, idr(3000)]);
+  const out = [];
+  let ended = false;
+  new RingFeeder(s, 0, (b) => out.push(b), true, () => (ended = true));
+  for (let i = 0; i < 50; i++) { s.push(p); s.pushAudio(Buffer.alloc(160, 1)); t.mock.timers.tick(20); }
+  for (let i = 0; i < 300; i++) { s.pushAudio(Buffer.alloc(160, 1)); t.mock.timers.tick(20); } // no more picture: the ring ends 5 s later
+  assert.ok(ended);
+  const sound = soundBytes(out) / 8;
+  // At most 250 ms past the last frame (it may run that far ahead while waiting for the picture),
+  // which the keyframe interval (3.75 s for 4 s fragments) leaves room for.
+  assert.ok(sound <= 1000 + 250 + 20, `the sound ends with the last frame (1 s): ${sound} ms`);
+});
+
+test('FlvWriter: an FLV header for video (and sound), and tags with 32-bit times', () => {
+  const out = [];
+  const w = new FlvWriter((b) => out.push(b), true);
+  assert.deepStrictEqual([...out[0].subarray(0, 5)], [0x46, 0x4c, 0x56, 1, 5]);
+  w.audio(Buffer.alloc(8, 0xd5), 0x1234567);
+  const [tag] = flvTags(out);
+  assert.strictEqual(tag.ms, 0x1234567);
+  assert.strictEqual(new FlvWriter((b) => out.push(b), false) && out.at(-1)[4], 1);
 });
 
 test('settings: recording follows calls even with answering off, and warns without the camera or rings', () => {
@@ -350,30 +460,71 @@ test('camera: with recording, HomeKit gets a motion sensor and recording managem
   off.shutdown();
 });
 
-// The real thing: ffmpeg turns intercom-like video (640x240, 16 fps, a keyframe every 3 s) into
-// HomeKit fragments: each starts with a keyframe and lasts at most the fragment length.
-const ffmpegOk = spawnSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8' }).stdout?.includes('libx264');
-test('recording with ffmpeg: fragments start with a keyframe and are no longer than 4 s', { skip: !ffmpegOk && 'no ffmpeg with libx264' }, async () => {
-  const source = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=640x240:rate=16:duration=13',
+// The real thing: the recorder and ffmpeg turn intercom-like video (640x240, 16 fps, a keyframe
+// every 3 s) and A-law sound, fed at their real pace, into HomeKit fragments: each starts with a
+// keyframe and lasts at most the fragment length, and the sound is as long as the picture.
+const encoders = spawnSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8' }).stdout ?? '';
+const ffmpegOk = encoders.includes('libx264');
+test('recording with ffmpeg: fragments start with a keyframe and are no longer than 4 s, with sound in step', { skip: !ffmpegOk && 'no ffmpeg with libx264', timeout: 30_000 }, async () => {
+  const seconds = 9;
+  const h264 = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `testsrc=size=640x240:rate=16:duration=${seconds}`,
     '-c:v', 'libx264', '-g', '48', '-bsf:v', 'h264_mp4toannexb', '-f', 'h264', 'pipe:1'], { maxBuffer: 64 << 20 }).stdout;
-  const proc = spawn('ffmpeg', recordingArgs(configuration(), false));
-  const splitter = new Mp4Splitter();
+  // Split into NAL units with 4-byte start codes, as the depacketizer gives them.
+  const starts = [];
+  for (let i = 0; i + 3 <= h264.length; i++) if (h264[i] === 0 && h264[i + 1] === 0 && h264[i + 2] === 1) { starts.push(i); i += 2; }
+  const units = starts.map((st, k) => {
+    const end = k + 1 < starts.length ? (h264[starts[k + 1] - 1] === 0 ? starts[k + 1] - 1 : starts[k + 1]) : h264.length;
+    return Buffer.concat([Buffer.from([0, 0, 0, 1]), h264.subarray(st + 3, end)]);
+  });
+  // The local ffmpeg may lack libfdk_aac: use its own AAC encoder for the test.
+  const spawnTest = (what, args) => {
+    const fixed = encoders.includes('libfdk_aac') ? args : args.map((a) => (a === 'libfdk_aac' ? 'aac' : a)).filter((a, i, arr) => a !== '-profile:a' && arr[i - 1] !== '-profile:a');
+    return spawnFfmpeg('ffmpeg', quietLog())(what, fixed);
+  };
+  const r = new RingRecorder(quietLog(), () => undefined, () => true, spawnTest);
+  r.updateRecordingActive(true);
+  r.updateRecordingConfiguration(configuration());
+  const call = {};
+  // Live: 16 frames a second; the sound (50 packets a second) only from 3 s on, as after answering.
+  let n = 0;
+  const started = Date.now();
+  const timer = setInterval(() => {
+    const due = Math.floor(((Date.now() - started) / 1000) * 16);
+    while (n < units.length && units.slice(0, n).filter((u) => [1, 5].includes(u[4] & 0x1f)).length < due) r.onCallVideo(call, units[n++]);
+    if (Date.now() - started > 3000) r.onCallAudio(call, Buffer.from({ length: 160 }, (_, k) => (k % 2 ? 0x2a : 0xaa))); // a loud tone
+    if (n >= units.length) { clearInterval(timer); r.onCallEnded(call); }
+  }, 20);
   const packets = [];
-  proc.stdout.on('data', (d) => packets.push(...splitter.push(d)));
-  proc.stdin.end(source);
-  await new Promise((r) => proc.on('exit', r));
-  assert.strictEqual(packets[0].type, 'init');
+  for await (const packet of r.handleRecordingStreamRequest(1)) packets.push(packet);
+  r.shutdown();
+  assert.ok(packets.at(-1).isLast);
+  const init = packets[0].data;
   const fragments = packets.slice(1);
-  assert.ok(fragments.length >= 3, `${fragments.length} fragments`);
+  assert.ok(fragments.length >= 2, `${fragments.length} fragments`);
   for (const f of fragments) {
     // Each fragment on its own, after the init, as the hub sees it.
     const probe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'packet=duration_time,flags', '-of', 'csv=p=0', '-i', 'pipe:0'],
-      { input: Buffer.concat([packets[0].data, f.data]), encoding: 'utf8' });
+      { input: Buffer.concat([init, f.data]), encoding: 'utf8' });
     const rows = probe.stdout.trim().split('\n').map((l) => l.split(','));
     assert.match(rows[0][1], /K/, 'starts with a keyframe');
-    const seconds = rows.reduce((t, r) => t + Number(r[0]), 0);
-    assert.ok(seconds <= 4.0, `${seconds.toFixed(3)} s`);
+    const s = rows.reduce((t, row) => t + Number(row[0]), 0);
+    assert.ok(s <= 4.0, `${s.toFixed(3)} s`);
   }
+  // How long each track is: the end of its last packet.
+  const end = (stream) => {
+    const rows = spawnSync('ffprobe', ['-v', 'error', '-select_streams', stream, '-show_entries', 'packet=pts_time,duration_time', '-of', 'csv=p=0', '-i', 'pipe:0'],
+      { input: Buffer.concat(packets.map((x) => x.data)), encoding: 'utf8', maxBuffer: 16 << 20 }).stdout.trim().split('\n').map((l) => l.split(',').map(Number));
+    return Math.max(...rows.map(([pts, d]) => pts + (d || 0)));
+  };
+  const video = end('v');
+  const audio = end('a');
+  assert.ok(Math.abs(video - (seconds - 0.25)) < 1.2, `picture ${video} s for ${seconds} s of video`);
+  assert.ok(Math.abs(audio - video) < 0.5, `sound ${audio} s, picture ${video} s`);
+  // Silent until the call's sound starts at 3 s, loud after.
+  const loudness = (at) => Number(/mean_volume: (-?[\d.]+) dB/.exec(spawnSync('ffmpeg', ['-hide_banner', '-ss', String(at), '-t', '0.5', '-i', 'pipe:0', '-map', '0:a', '-af', 'volumedetect', '-f', 'null', '-'],
+    { input: Buffer.concat(packets.map((x) => x.data)), encoding: 'utf8', maxBuffer: 16 << 20 }).stderr)[1]);
+  assert.ok(loudness(1.5) < -60, `silent at 1.5 s: ${loudness(1.5)} dB`);
+  assert.ok(loudness(4.5) > -30, `the sound at 4.5 s: ${loudness(4.5)} dB`);
 });
 
 test('camera: a camera Homebridge already had gets the recording services and motion sensor, and loses them when recording is turned off', () => {

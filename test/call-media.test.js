@@ -372,12 +372,18 @@ test('ring preview: an empty (black) first keyframe is skipped, the next real on
 });
 
 test('recording: the preview keeps running after the picture while a ring is recorded, and the listener hears the video and the end (2.3.0)', async () => {
-  const { call, client } = setup('handshake');
+  const { call, client, sent } = setup('handshake');
   const heard = [];
-  call.setCallListener({ video: (c, u) => heard.push(['video', u.length]), ended: () => heard.push(['ended']) });
+  call.setCallListener({ video: (c, u) => heard.push(['video', u.length]), audio: (c, a) => heard.push(['audio', a.length]), ended: () => heard.push(['ended']) });
   call.enablePreview({ hd: false, onVideo: () => undefined, keepRunning: () => true });
   await ring(call);
   await until(() => client.handlers.get(0x2003));
+  // Recording: a sound channel too, before the video's, and a sound request without answering.
+  assert.deepStrictEqual(client.opened.map((o) => o[0]), ['UDPM', 'RTPC-audio', 'RTPC-video']);
+  await until(() => sent.some((f) => parseFrame(f).body.subarray(0, 4).equals(Buffer.from('00111802', 'hex'))));
+  assert.ok(!ops(sent).includes('c') && !ops(sent).includes('70'), 'not answered, no voice status');
+  client.handlers.get(0x2002)(buildRtp({ marker: false, payloadType: 8, sequence: 1, timestamp: 1, ssrc: 3 }, Buffer.alloc(160, 0xd5)));
+  assert.deepStrictEqual(heard, [['audio', 160]], 'the intercom\'s sound during the ring goes to the listener');
   const send = (seq, payload) => client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: seq, timestamp: seq, ssrc: 2 }, payload));
   send(1, Buffer.from([0x67, 1]));
   send(2, Buffer.concat([Buffer.from([0x65]), Buffer.alloc(3000, 7)]));
@@ -387,7 +393,7 @@ test('recording: the preview keeps running after the picture while a ring is rec
   send(4, Buffer.from([0x41, 2]));
   assert.strictEqual(heard.filter((h) => h[0] === 'video').length, 4);
   await release(call);
-  await until(() => client.closed.length === 2);
+  await until(() => client.closed.length === 3);
   assert.deepStrictEqual(heard.at(-1), ['ended']);
 });
 
@@ -403,6 +409,48 @@ test('recording: the preview stops once the intercom stops sending video (2.3.0)
   await new Promise((r) => setTimeout(r, 3500));
   assert.deepStrictEqual(client.closed, [], 'not yet');
   await new Promise((r) => setTimeout(r, 1000));
-  assert.strictEqual(client.closed.length, 2, '4 s without video: channels closed');
+  assert.strictEqual(client.closed.length, 3, '4 s without video: channels closed');
   assert.strictEqual(call.busy(), false);
+});
+
+test('doctor mode / Next Visitor: turned off while the call is being answered, the call is hung up instead of opening (2.3.0)', async () => {
+  const { call, sent } = setup('handshake');
+  await ring(call);
+  const door = { name: 'Entrance', index: 0, outputIndex: 1, aptAddress: 'SB100001' };
+  let wanted = true;
+  const opening = call.openInCall(door, true, () => wanted);
+  wanted = false; // the switch goes off while answering
+  assert.strictEqual(await opening, null);
+  const o = ops(sent);
+  assert.ok(o.includes('c') && !o.includes('2d'), `answered, not opened: ${o.join(' ')}`);
+  assert.strictEqual(o.at(-1), 'e', 'hung up');
+});
+
+test('recording: answering stops the preview\'s sound first, and the intercom\'s reply to it is not taken as the call\'s talk-back channel (2.3.0 review)', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  call.enablePreview({ hd: false, onVideo: () => undefined, keepRunning: () => true });
+  await ring(call);
+  await until(() => client.handlers.get(0x2003));
+  const asked = () => sent.some((f) => parseFrame(f).body.subarray(0, 4).equals(Buffer.from('00111802', 'hex')));
+  for (let i = 0; i < 4 && !asked(); i++) await until(asked); // after the video request's 2 s wait
+  assert.ok(asked(), 'the preview asked for sound');
+  await new Promise((r) => setTimeout(r, 20)); // the fake intercom replies with its own sound request
+  const c = call.activeCall();
+  assert.strictEqual(c.panelAudioHandle, undefined, 'a reply during the ring is not for the call');
+  await call.answer(c);
+  const bodies = sent.map((f) => parseFrame(f).body.toString('hex'));
+  const stop = bodies.findIndex((b) => b.startsWith('00119802'));
+  const answer = bodies.findIndex((b) => b.startsWith('000c'));
+  assert.ok(stop >= 0 && stop < answer, `sound stop, then answer: ${bodies.join(' ')}`);
+});
+
+test('doctor mode / Next Visitor: turned off while a live view is answering, the live view keeps the call (2.3.0 review)', async () => {
+  const { call, sent } = setup('answer-on-view');
+  await ring(call);
+  const c = call.activeCall();
+  c.mediaStarting = new Promise(() => undefined); // a live view is starting
+  const door = { name: 'Entrance', index: 0, outputIndex: 1, aptAddress: 'SB100001' };
+  assert.strictEqual(await call.openInCall(door, true, () => false), null);
+  assert.ok(!ops(sent).includes('e'), 'not hung up');
+  assert.ok(!ops(sent).includes('2d'), 'not opened');
 });

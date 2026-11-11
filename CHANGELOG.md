@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.3.0-beta.3 (2026-11-11)
+
+### Added
+
+- **Sound in ring recordings**, when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. Where there is no sound (the ring before anyone answers, or the moment between the ring and the call), the clip is silent, and picture and sound stay together.
+- **An experiment: sound during the ring.** While recording, the ring preview also asks the intercom for its sound, without answering. With debug mode on, the `Ring preview:` line says `sound before answering: N packets` or `none`. If the 6741W sends it, rings get sound before anyone answers too.
+
+### Changed
+
+- **Recording timing:** each frame and piece of sound now keeps the time it arrived from the intercom (they go to ffmpeg together as one FLV stream). Before, frames were counted at 16 a second, but the intercom's rate varies (8 a second in some saved calls, 16 in others): at 8 a second, a clip played twice as fast.
+- **Doctor mode and Next Visitor: turning the switch off now cancels the open up to the moment the door is actually opened**, about 1 s later than before (the plugin answers the call first). If the plugin had already answered the call for the open, it hangs up; a live view showing the call keeps it.
+
+### Fixed
+
+- Debug log: the line with the number of fragments sent now appears (it was written after the last fragment, and HomeKit stops reading at that point). `recording N closed by HomeKit (reason 3)`, logged after every recording, was misleading: it is hap-nodejs closing the stream itself 12 s after the end, because the hub doesn't confirm it; it now reads `recording N closed`.
+
+Tests: 167 in all, including a real ffmpeg run fed at the intercom's pace that checks the sound is silent before the call and present after, and as long as the picture. Also checked with two saved calls (33 s and 67 s, picture and sound), with the hub's request coming at once, 3 s or 5 s late, with two 1 s Wi-Fi stalls in the sound, and with the picture stopping before the call ends: the sound stays within 0.15 s of the picture, and no piece is longer than 4 s.
+
+An independent review before release found, and this beta fixes: with sound on, a recording could fail entirely when the hub asked after the first picture (ffmpeg found no sound in the first 32 KB, which one of the intercom's keyframes can fill); sound arriving late after a Wi-Fi stall pushed all later sound behind the picture; when the picture stopped before the call ended, the sound ran on for 5 s, making the last piece too long; the preview's sound request was never stopped, and the intercom's reply to it could be taken as the call's talk-back channel; turning the switch off while a live view was answering hung up the live view's call.
+
 ## 2.3.0-beta.2 (2026-11-11)
 
 ### Fixed

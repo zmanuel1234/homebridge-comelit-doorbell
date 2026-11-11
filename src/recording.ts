@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import type { CameraRecordingConfiguration, CameraRecordingDelegate, Logging, RecordingPacket } from 'homebridge';
-import { LIVE_INPUT, RESTORE_ASPECT } from './camera';
+import { RESTORE_ASPECT } from './camera';
 import { MIN_PICTURE_BYTES, nalType } from './media';
 import { RECORDING_MAX_MS } from './settings';
 
@@ -10,19 +10,26 @@ import { RECORDING_MAX_MS } from './settings';
  * The intercom only sends video during a ring or a call, so a recording is one ring: it starts
  * at the ring's first real picture (about 3 s after the button; an empty, black first keyframe
  * is skipped) and ends when the call ends, answered or not. The camera's own motion sensor is
- * "motion detected" for that time, which is what makes the home hub record (the doorbell press
- * is offered as a trigger too, but motion is the one the Home app's recording options use).
+ * "motion detected" for that time, which is what makes the home hub record. (Hubs also ask for
+ * a recording at the doorbell press itself; that request waits for the first picture.)
  *
  * When the hub asks for the recording, ffmpeg re-encodes the intercom's video to fragmented
  * MP4, with a keyframe at every fragment boundary (the intercom's own come every 2.7-7 s), and
- * the fragments are passed on as they come. Sound: a silent track when HomeKit records audio
- * (the intercom's sound follows in a later version).
+ * the fragments are passed on as they come. With sound on in the Home app, the intercom's sound
+ * goes in too: during the call, and during the ring if the intercom sends it then; the gaps are
+ * filled with silence.
+ *
+ * Timing: video and sound go to ffmpeg together as one FLV stream, each frame and each piece of
+ * sound stamped with when it arrived from the intercom (so a request that comes late gets the
+ * ring with its real timing, at once). The sound is continuous: gaps (before the call is
+ * answered, or between the ring and the call) are filled with silence, so picture and sound
+ * stay together.
  */
 
 /** How long a recording request waits for a ring's first picture. */
 const SOURCE_WAIT_MS = 10_000;
-/** How many video units a ring keeps for a recording that starts late (about 2 min). */
-const MAX_BUFFERED_UNITS = 4_000;
+/** How many video units a ring keeps (3 min at up to 33 a second; the intercom sends 8-17). */
+const MAX_BUFFERED_UNITS = 6_000;
 /** No video for this long ends the ring's recording (the intercom stopped sending). */
 export const SOURCE_SILENCE_MS = 5_000;
 /** An ended ring can still be fetched by a hub request this long after it ends. */
@@ -30,34 +37,60 @@ const LATE_REQUEST_MS = 15_000;
 /** Motion stays on at least this long, so a short ring isn't missed by the hub. */
 const MIN_MOTION_MS = 5_000;
 
-/** One ring's video, from its first real picture until the call ends or the video stops. */
+/** How many sound packets a ring keeps (20 ms each: about 3 min). */
+const MAX_BUFFERED_AUDIO = 10_000;
+/** A-law: 8000 samples a second, one byte each. */
+const ALAW_BYTES_PER_MS = 8;
+/** A-law's silence. */
+const ALAW_SILENCE = 0xd5;
+/** How far the sound may fall behind before silence fills in (late packets still fit). */
+const AUDIO_SLACK_MS = 200;
+/** A gap in the sound longer than this is filled with silence before the next packet. */
+const AUDIO_GAP_MS = 60;
+/** Sound arriving more than this late (its place already filled with silence) is dropped. */
+const AUDIO_LATE_MS = 100;
+/** The sound never runs further ahead of the latest frame than this (it waits for the picture). */
+const AUDIO_AHEAD_MS = 250;
+/** How often the recording writes what has come in to ffmpeg. */
+const FEED_TICK_MS = 20;
+/** The most sound in one FLV tag (100 ms). */
+const MAX_AUDIO_TAG = 800;
+
+/** Something received at a moment (ms since 1970). */
+interface Timed {
+  data: Buffer;
+  at: number;
+}
+
+/** One ring's video and sound, from its first real picture until the call ends or the video stops. */
 export class RingSource {
-  readonly units: Buffer[] = [];
+  readonly units: Timed[] = [];
+  readonly audio: Timed[] = [];
   ended = false;
   endedAt = 0;
   /** How many recording requests this ring has had. */
   requests = 0;
   /** Where each keyframe group (SPS) starts in `units`. */
   private readonly keyStarts: number[] = [];
-  private readonly listeners = new Set<{ unit: (u: Buffer) => void; end: () => void }>();
   private readonly capTimer: NodeJS.Timeout;
   private silenceTimer?: NodeJS.Timeout;
 
   constructor(readonly call: object, first: Buffer[], private readonly onEnd: (s: RingSource) => void = () => undefined) {
+    const now = Date.now();
     for (const u of first) {
-      this.keep(u);
+      this.keep(u, now);
     }
     this.capTimer = setTimeout(() => this.end(), RECORDING_MAX_MS);
     this.capTimer.unref?.();
     this.armSilence();
   }
 
-  private keep(unit: Buffer): void {
+  private keep(unit: Buffer, at: number): void {
     if (this.units.length < MAX_BUFFERED_UNITS) {
       if (nalType(unit) === 7) {
         this.keyStarts.push(this.units.length);
       }
-      this.units.push(unit);
+      this.units.push({ data: unit, at });
     }
   }
 
@@ -71,10 +104,14 @@ export class RingSource {
     if (this.ended) {
       return;
     }
-    this.keep(unit);
+    this.keep(unit, Date.now());
     this.armSilence();
-    for (const l of this.listeners) {
-      l.unit(unit);
+  }
+
+  /** The intercom's sound (A-law, 8 kHz). */
+  pushAudio(data: Buffer): void {
+    if (!this.ended && this.audio.length < MAX_BUFFERED_AUDIO) {
+      this.audio.push({ data, at: Date.now() });
     }
   }
 
@@ -86,33 +123,233 @@ export class RingSource {
     this.endedAt = Date.now();
     clearTimeout(this.capTimer);
     clearTimeout(this.silenceTimer);
-    for (const l of [...this.listeners]) {
-      l.end();
-    }
-    this.listeners.clear();
     this.onEnd(this);
-  }
-
-  /**
-   * What is kept from `from` (a unit index), then each new unit as it comes; `end` once the
-   * ring is over.
-   */
-  follow(unit: (u: Buffer) => void, end: () => void, from = 0): () => void {
-    for (const u of this.units.slice(from)) {
-      unit(u);
-    }
-    if (this.ended) {
-      end();
-      return () => undefined;
-    }
-    const l = { unit, end };
-    this.listeners.add(l);
-    return () => this.listeners.delete(l);
   }
 
   /** Where the latest keyframe group starts, for a second request that shouldn't replay the ring. */
   get latestKeyframe(): number {
     return this.keyStarts.at(-1) ?? 0;
+  }
+}
+
+/** Builds an FLV stream: H.264 video and A-law sound, with our timestamps (ms). */
+export class FlvWriter {
+  constructor(private readonly write: (b: Buffer) => void, withAudio: boolean) {
+    const header = Buffer.from([0x46, 0x4c, 0x56, 1, withAudio ? 0x05 : 0x01, 0, 0, 0, 9, 0, 0, 0, 0]);
+    this.write(header);
+  }
+
+  private tag(type: 8 | 9, ms: number, data: Buffer): void {
+    const t = Math.max(0, Math.round(ms));
+    const h = Buffer.alloc(11);
+    h[0] = type;
+    h.writeUIntBE(data.length, 1, 3);
+    h.writeUIntBE(t & 0xffffff, 4, 3);
+    h[7] = (t >>> 24) & 0xff;
+    const size = Buffer.alloc(4);
+    size.writeUInt32BE(11 + data.length);
+    this.write(Buffer.concat([h, data, size]));
+  }
+
+  /** The SPS and PPS (without start codes), as the decoder configuration. */
+  config(sps: Buffer, pps: Buffer, ms: number): void {
+    const rec = Buffer.concat([
+      Buffer.from([1, sps[1], sps[2], sps[3], 0xff, 0xe1]),
+      u16(sps.length), sps,
+      Buffer.from([1]), u16(pps.length), pps,
+    ]);
+    this.tag(9, ms, Buffer.concat([Buffer.from([0x17, 0, 0, 0, 0]), rec]));
+  }
+
+  /** One frame: its NAL units without start codes. */
+  frame(nals: Buffer[], key: boolean, ms: number): void {
+    const body = nals.flatMap((n) => [u32(n.length), n]);
+    this.tag(9, ms, Buffer.concat([Buffer.from([key ? 0x17 : 0x27, 1, 0, 0, 0]), ...body]));
+  }
+
+  /** A-law, 8 kHz, mono. */
+  audio(alaw: Buffer, ms: number): void {
+    this.tag(8, ms, Buffer.concat([Buffer.from([0x70]), alaw]));
+  }
+}
+
+function u16(n: number): Buffer {
+  const b = Buffer.alloc(2);
+  b.writeUInt16BE(n);
+  return b;
+}
+
+function u32(n: number): Buffer {
+  const b = Buffer.alloc(4);
+  b.writeUInt32BE(n);
+  return b;
+}
+
+/** A NAL unit without its start code. */
+function payload(unit: Buffer): Buffer {
+  if (unit[0] === 0 && unit[1] === 0) {
+    return unit.subarray(unit[2] === 1 ? 3 : 4);
+  }
+  return unit;
+}
+
+/**
+ * Writes a ring to ffmpeg as FLV: the video from unit `from` (the time of that unit is 0), each
+ * frame stamped with its arrival, and with `withAudio` the sound from the same moment, as one
+ * continuous track with its gaps filled with silence. What is buffered goes at once; then what
+ * comes, as it comes.
+ */
+export class RingFeeder {
+  private readonly flv: FlvWriter;
+  private readonly base: number;
+  private nextUnit: number;
+  private nextAudio = 0;
+  /** Sound written so far, in A-law bytes (= samples; 8 per ms). */
+  private audioWritten = 0;
+  private sps?: Buffer;
+  private pps?: Buffer;
+  private configSent = false;
+  /** The frame being put together: its NAL units, whether it's a keyframe, and its time. */
+  private pending: { nals: Buffer[]; key: boolean; ms: number } | undefined;
+  private lastVideoMs = 0;
+  private timer?: NodeJS.Timeout;
+  private done = false;
+
+  constructor(
+    private readonly source: RingSource,
+    from: number,
+    write: (b: Buffer) => void,
+    private readonly withAudio: boolean,
+    private readonly end: () => void,
+  ) {
+    this.flv = new FlvWriter(write, withAudio);
+    if (withAudio) {
+      // Sound first: ffmpeg looks for the streams in its first 32 KB, which one keyframe can fill.
+      this.silence(160);
+    }
+    this.nextUnit = from;
+    this.base = source.units[from]?.at ?? Date.now();
+    while (this.nextAudio < source.audio.length && source.audio[this.nextAudio].at < this.base) {
+      this.nextAudio++;
+    }
+    this.tick();
+    if (!this.done) {
+      this.timer = setInterval(() => this.tick(), FEED_TICK_MS);
+      this.timer.unref?.();
+    }
+  }
+
+  /** Stops writing (ffmpeg is gone). */
+  stop(): void {
+    this.done = true;
+    clearInterval(this.timer);
+  }
+
+  private flushFrame(): void {
+    const f = this.pending;
+    this.pending = undefined;
+    if (!f || !f.nals.length) {
+      return;
+    }
+    if (!this.configSent) {
+      if (!f.key || !this.sps || !this.pps) {
+        return; // nothing decodable before the first keyframe with its SPS/PPS
+      }
+      this.flv.config(this.sps, this.pps, f.ms);
+      this.configSent = true;
+    }
+    this.flv.frame(f.nals, f.key, f.ms);
+    this.lastVideoMs = f.ms;
+  }
+
+  private video(unit: Buffer, at: number): void {
+    const nal = payload(unit);
+    const type = nal[0] & 0x1f;
+    const ms = at - this.base;
+    if (type === 7 || type === 8) {
+      this.flushFrame();
+      const changed = type === 7 ? !this.sps?.equals(nal) : !this.pps?.equals(nal);
+      if (type === 7) {
+        this.sps = nal;
+      } else {
+        this.pps = nal;
+      }
+      if (changed && this.configSent && this.sps && this.pps) {
+        this.flv.config(this.sps, this.pps, ms);
+      }
+      return;
+    }
+    if (type !== 1 && type !== 5) {
+      return; // SEI and others: not needed
+    }
+    // A slice with first_mb_in_slice 0 starts a new frame (the intercom may split a keyframe).
+    const firstSlice = (nal[1] & 0x80) !== 0;
+    if (firstSlice || !this.pending) {
+      this.flushFrame();
+      this.pending = { nals: [], key: type === 5, ms };
+    }
+    this.pending.nals.push(nal);
+  }
+
+  private silence(bytes: number): void {
+    for (let left = Math.round(bytes); left > 0; left -= MAX_AUDIO_TAG) {
+      const n = Math.min(left, MAX_AUDIO_TAG);
+      this.flv.audio(Buffer.alloc(n, ALAW_SILENCE), this.audioWritten / ALAW_BYTES_PER_MS);
+      this.audioWritten += n;
+    }
+  }
+
+  /** Writes one piece of the intercom's sound at its place in time. */
+  private sound(a: Timed): void {
+    const pos = Math.round((a.at - this.base) * ALAW_BYTES_PER_MS);
+    if (pos > this.audioWritten + AUDIO_GAP_MS * ALAW_BYTES_PER_MS) {
+      this.silence(pos - this.audioWritten);
+    } else if (this.audioWritten > pos + AUDIO_LATE_MS * ALAW_BYTES_PER_MS) {
+      // Late (a Wi-Fi stall): its place is already silence; appending it would put all the
+      // sound after it behind the picture.
+      return;
+    }
+    this.flv.audio(a.data, this.audioWritten / ALAW_BYTES_PER_MS);
+    this.audioWritten += a.data.length;
+  }
+
+  private tick(): void {
+    if (this.done) {
+      return;
+    }
+    const { units, audio, ended } = this.source;
+    // After the end, nothing past the last frame: the sound stops with the picture.
+    const lastAt = units.at(-1)?.at ?? this.base;
+    // Video and sound in the order they came, so ffmpeg gets both from the start.
+    for (;;) {
+      const u = units[this.nextUnit];
+      const a = this.withAudio ? audio[this.nextAudio] : undefined;
+      if (u && (!a || u.at <= a.at)) {
+        this.nextUnit++;
+        this.video(u.data, u.at);
+      } else if (a) {
+        if (!ended && a.at > lastAt + AUDIO_AHEAD_MS) {
+          break; // wait for the picture (if it doesn't come, the ring ends and this is dropped)
+        }
+        this.nextAudio++;
+        if (!ended || a.at <= lastAt) {
+          this.sound(a);
+        }
+      } else {
+        break;
+      }
+    }
+    if (this.withAudio) {
+      // No sound now (the ring before answering, or between the ring and the call): silence, a
+      // little behind, so a packet arriving a little late still fits.
+      const until = ended ? lastAt : Math.min(Date.now() - AUDIO_SLACK_MS, lastAt + AUDIO_AHEAD_MS);
+      this.silence(Math.round((until - this.base) * ALAW_BYTES_PER_MS) - this.audioWritten);
+    }
+    if (ended) {
+      this.flushFrame();
+      this.stop();
+      this.end();
+    }
   }
 }
 
@@ -171,45 +408,26 @@ export class Mp4Splitter {
   }
 }
 
-/**
- * Timestamps for a recording: by frame count, at the intercom's 16 frames per second (15-16
- * measured). Not the arrival time used for the live view: a recording may start a moment
- * after the ring, and the ring's first frames are then written to ffmpeg all at once.
- */
-export const FRAME_COUNT_TIME = 'setpts=N/(16*TB)';
-
 const PROFILES = ['baseline', 'main', 'high'];
 const LEVELS = ['3.1', '3.2', '4.0'];
 const SAMPLE_RATES = [8000, 16000, 24000, 32000, 44100, 48000];
 
-/** ffmpeg arguments for one recording, as HomeKit configured it. */
-export function recordingArgs(c: CameraRecordingConfiguration, withAudio: boolean): string[] {
+/** ffmpeg arguments for one recording, as HomeKit configured it. Its input is RingFeeder's FLV on stdin. */
+export function recordingArgs(c: CameraRecordingConfiguration, withAudio: boolean, gainDb = 0): string[] {
   const [width, height, fps] = c.videoCodec.resolution;
   // A keyframe a little before each fragment length: a keyframe exactly at the length can land
   // one frame after it (4.06 s for 4 s at 15 fps), which would make the fragment too long.
   const keyEveryS = Math.max(1, c.mediaContainerConfiguration.fragmentLength / 1000 - 0.25);
   const kbps = c.videoCodec.parameters.bitRate;
-  const audio = withAudio
-    ? (() => {
-      const rate = SAMPLE_RATES[c.audioCodec.samplerate] ?? 16000;
-      const eld = c.audioCodec.type === 1; // AudioRecordingCodecType.AAC_ELD
-      return {
-        input: ['-f', 'lavfi', '-i', `anullsrc=channel_layout=mono:sample_rate=${rate}`],
-        map: ['-map', '1:a'],
-        encode: ['-c:a', 'libfdk_aac', '-profile:a', eld ? 'aac_eld' : 'aac_low', '-ar', String(rate), '-ac', '1', '-b:a', `${c.audioCodec.bitrate || 32}k`, '-shortest'],
-      };
-    })()
-    : undefined;
+  const rate = SAMPLE_RATES[c.audioCodec.samplerate] ?? 16000;
+  const eld = c.audioCodec.type === 1; // AudioRecordingCodecType.AAC_ELD
   return [
     '-hide_banner', '-loglevel', 'error',
-    '-fflags', '+genpts', '-flags', 'low_delay', '-probesize', '32768', '-analyzeduration', '0',
-    ...LIVE_INPUT,
-    ...(audio?.input ?? []),
-    '-map', '0:v',
-    ...(audio?.map ?? []),
+    '-probesize', '32768', '-analyzeduration', '0', '-f', 'flv', '-i', 'pipe:0',
+    '-map', '0:v', ...(withAudio ? ['-map', '0:a'] : []),
     '-sn', '-dn',
     '-vf',
-    `${FRAME_COUNT_TIME},${RESTORE_ASPECT},scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
+    `setpts=PTS-STARTPTS,${RESTORE_ASPECT},scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
       `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`,
     '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
     '-pix_fmt', 'yuv420p', '-color_range', 'mpeg',
@@ -218,7 +436,12 @@ export function recordingArgs(c: CameraRecordingConfiguration, withAudio: boolea
     '-b:v', `${kbps}k`, '-maxrate', `${kbps}k`, '-bufsize', `${kbps * 2}k`,
     // Each fragment must start with a keyframe and be no longer than HomeKit's fragment length.
     '-force_key_frames', `expr:gte(t,n_forced*${keyEveryS})`, '-g', String(Math.round(fps * (keyEveryS + 0.25))), '-sc_threshold', '0',
-    ...(audio?.encode ?? ['-an']),
+    ...(withAudio
+      ? [
+        '-af', `${gainDb ? `volume=${gainDb}dB,alimiter=limit=0.9,` : ''}aresample=${rate}`,
+        '-c:a', 'libfdk_aac', '-profile:a', eld ? 'aac_eld' : 'aac_low', '-ar', String(rate), '-ac', '1', '-b:a', `${c.audioCodec.bitrate || 32}k`,
+      ]
+      : ['-an']),
     '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
     'pipe:1',
   ];
@@ -237,6 +460,8 @@ export class RingRecorder implements CameraRecordingDelegate {
   private lastSource?: RingSource;
   private readonly sourceWaiters = new Set<(s: RingSource) => void>();
   private readonly streams = new Map<number, { stop: () => void }>();
+  /** Streams whose last fragment was sent. */
+  private readonly ended = new Set<number>();
   private motionOnAt = 0;
   private motionTimer?: NodeJS.Timeout;
 
@@ -249,6 +474,8 @@ export class RingRecorder implements CameraRecordingDelegate {
     private readonly spawnProcess: Spawn,
     /** The error that tells the hub there is nothing to record (hap's HDSProtocolError). */
     private readonly nothingToRecord: () => Error = () => new Error('no ring to record'),
+    /** The door's sound turned up by this much (setting doorVolume), as in the live view. */
+    private readonly gainDb = 0,
   ) {}
 
   /** The camera was added to its accessory: clear a "motion" restored from before a restart. */
@@ -317,6 +544,13 @@ export class RingRecorder implements CameraRecordingDelegate {
       w.idrBytes += unit.length;
     }
     w.lastType = type;
+  }
+
+  /** A call's sound (A-law), from the ring preview or a live view. */
+  onCallAudio(call: object, data: Buffer): void {
+    if (this.source?.call === call) {
+      this.source.pushAudio(data);
+    }
   }
 
   /** The call is over (the intercom ended it, or it was hung up): so is its recording. */
@@ -412,7 +646,7 @@ export class RingRecorder implements CameraRecordingDelegate {
     // the latest keyframe, so the ring isn't recorded twice.
     const from = source.requests++ === 0 ? 0 : source.latestKeyframe;
     const withAudio = this.audioActive();
-    const proc = this.spawnProcess('recording', recordingArgs(configuration, withAudio));
+    const proc = this.spawnProcess('recording', recordingArgs(configuration, withAudio, this.gainDb));
     const queue: { type: 'init' | 'fragment'; data: Buffer }[] = [];
     let finished = false;
     let wake: (() => void) | undefined;
@@ -438,17 +672,21 @@ export class RingRecorder implements CameraRecordingDelegate {
     const stop = () => {
       finished = true;
       notify();
+      feeder?.stop();
       if (proc.exitCode === null && proc.signalCode === null) {
         proc.stdin.destroy();
         proc.kill('SIGKILL');
       }
     };
+    let feeder: RingFeeder | undefined;
     this.streams.set(streamId, { stop });
     signal?.addEventListener('abort', stop);
-    const unfollow = source.follow(
-      (unit) => proc.stdin.writable && proc.stdin.write(unit),
-      () => proc.stdin.end(),
+    feeder = new RingFeeder(
+      source,
       from,
+      (b) => proc.stdin.writable && proc.stdin.write(b),
+      withAudio,
+      () => proc.stdin.end(),
     );
     let fragments = 0;
     try {
@@ -475,11 +713,13 @@ export class RingRecorder implements CameraRecordingDelegate {
         // ffmpeg failed, or the request was stopped before any video was recorded.
         throw this.nothingToRecord();
       }
-      yield { data: held, isLast: true };
+      // Logged before the last one: HomeKit stops reading once it has it.
       fragments++;
-      this.log.debug(`Doorbell camera: recording ${streamId} sent ${fragments} fragment(s)`);
+      this.log.debug(`Doorbell camera: recording ${streamId}: sent the ring to HomeKit, ${fragments} fragment(s)${withAudio ? ', with sound' : ''}`);
+      this.ended.add(streamId);
+      yield { data: held, isLast: true };
     } finally {
-      unfollow();
+      feeder.stop();
       signal?.removeEventListener('abort', stop);
       stop();
       this.streams.delete(streamId);
@@ -491,8 +731,12 @@ export class RingRecorder implements CameraRecordingDelegate {
   }
 
   closeRecordingStream(streamId: number, reason: number | undefined): void {
-    if (reason !== undefined && reason !== 0) {
-      this.log.debug(`Doorbell camera: recording ${streamId} closed by HomeKit (reason ${reason})`);
+    if (this.ended.delete(streamId)) {
+      // After the last fragment, the hub usually doesn't confirm; hap-nodejs closes the stream
+      // itself 12 s later (reason 3, "cancelled"). The recording is complete.
+      this.log.debug(`Doorbell camera: recording ${streamId} closed`);
+    } else if (reason !== undefined && reason !== 0) {
+      this.log.debug(`Doorbell camera: recording ${streamId} stopped by HomeKit before its end (reason ${reason})`);
     }
     this.streams.get(streamId)?.stop();
     this.streams.delete(streamId);

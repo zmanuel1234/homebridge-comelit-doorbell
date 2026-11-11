@@ -302,7 +302,7 @@
         "title": "Record rings (HomeKit Secure Video)",
         "type": "boolean",
         "default": false,
-        "description": "Records each ring, from the intercom's first picture until it stops sending video, as a HomeKit Secure Video clip in the Home app. Needs a home hub, iCloud+, and the camera set to Stream & Allow Recording in the Home app. Beta: the clip has no sound yet."
+        "description": "Records each ring, from the intercom's first picture until it stops sending video, as a HomeKit Secure Video clip in the Home app. Needs a home hub, iCloud+, and the camera set to Stream & Allow Recording in the Home app. With Record audio on in the Home app, the clip has the door's sound during the call (beta)."
       }
     },
     "required": [

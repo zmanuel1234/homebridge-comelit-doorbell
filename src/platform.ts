@@ -297,12 +297,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
    * What hears every call's video and end for recording. It looks the camera up at each call:
    * on the first connect the camera is only made after the call handler.
    */
-  recordingListener(s: Settings): { video: (call: object, unit: Buffer) => void; ended: (call: object) => void } | undefined {
+  recordingListener(s: Settings): { video: (call: object, unit: Buffer) => void; audio: (call: object, data: Buffer) => void; ended: (call: object) => void } | undefined {
     if (!s.camera || !s.recording) {
       return undefined;
     }
     return {
       video: (c, unit) => this.camera?.recorder?.onCallVideo(c, unit),
+      audio: (c, data) => this.camera?.recorder?.onCallAudio(c, data),
       ended: (c) => this.camera?.recorder?.onCallEnded(c),
     };
   }
@@ -452,9 +453,10 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     const delay = this.settings.doctorModeDelayMs;
     this.log.info(`${label}: opening '${door.name}' in ${delay / 1000} s`);
     setTimeout(async () => {
+      // The switch that armed this open is still on (it can be turned off up to the open itself).
+      const armed = () => (doctor && this.doctorModeActive()) || (next && this.nextVisitorActive());
       try {
-        if (!((doctor && this.doctorModeActive()) || (next && this.nextVisitorActive()))) {
-          // The switch that armed this open was turned off during the delay: cancel.
+        if (!armed()) {
           this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
           return;
         }
@@ -463,7 +465,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
           this.log.info(`${label}: the call is over (answered elsewhere or hung up); not opening`);
           return;
         }
-        const result = await call.openInCall(door, true);
+        const result = await call.openInCall(door, true, armed);
+        if (!result && !armed()) {
+          // Turned off while the call was being answered: not opened.
+          this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
+          return;
+        }
         if (result) {
           this.log.info(`${label}: door '${door.name}' opened`);
           [...this.lockAccessories.values()][0]?.showOpened();
