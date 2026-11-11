@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { resolveSettings, settingsWarnings } = require('../dist/config');
+const { callHandlerMode, resolveSettings, settingsWarnings } = require('../dist/config');
 
 test('defaults', () => {
   const s = resolveSettings({ platform: 'ComelitIntercom', host: 'h', token: 't' });
@@ -134,3 +134,25 @@ test('the settings screen shows every setting exactly once, and the README docum
   assert.strictEqual(schema.schema.properties.talkBack.default, s.talkBack);
   assert.strictEqual(schema.schema.properties.camera.default, s.camera);
 });
+
+test('Next Visitor settings: defaults, text, limits (2.1.1-beta.2)', () => {
+  const d = resolveSettings({});
+  assert.strictEqual(d.nextVisitorSwitch, false);
+  assert.strictEqual(d.nextVisitorMs, 120 * 60_000);
+  const s = resolveSettings({ nextVisitorSwitch: 'true', nextVisitorMinutes: 30 });
+  assert.strictEqual(s.nextVisitorSwitch, true);
+  assert.strictEqual(s.nextVisitorMs, 30 * 60_000);
+  const bad = resolveSettings({ nextVisitorMinutes: 0.5 });
+  assert.strictEqual(bad.nextVisitorMs, 120 * 60_000);
+  assert.strictEqual(bad.invalid.length, 1);
+  assert.ok(settingsWarnings(resolveSettings({ nextVisitorSwitch: true, enableNotifications: false })).some((w) => /Next Visitor switch needs/.test(w)));
+});
+
+test('calls are followed (handshake) for doctor mode or the Next Visitor switch with answering off (review)', () => {
+  const { callHandlerMode } = require('../dist/config');
+  assert.strictEqual(callHandlerMode(resolveSettings({})), 'off');
+  assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true })), 'handshake');
+  assert.strictEqual(callHandlerMode(resolveSettings({ doctorMode: 'switch' })), 'handshake');
+  assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true, answerMode: 'answer-on-view' })), 'answer-on-view');
+});
+

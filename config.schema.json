@@ -123,13 +123,28 @@
         "description": "Like a doctor's office: when someone rings, the plugin answers the call and opens the first door after a short delay. Anyone who rings gets in. 'With a HomeKit switch' adds a switch, so you can turn it on only when you expect someone, or by an automation."
       },
       "doctorModeDelaySeconds": {
-        "condition": { "functionBody": "return model.doctorMode === 'always' || model.doctorMode === 'switch';" },
-        "title": "Doctor mode: open after (seconds)",
+        "condition": { "functionBody": "return model.doctorMode === 'always' || model.doctorMode === 'switch' || model.nextVisitorSwitch === true || model.nextVisitorSwitch === 'true';" },
+        "title": "Doctor mode and Next Visitor: open after (seconds)",
         "type": "number",
         "default": 2,
         "minimum": 0,
         "maximum": 30,
         "description": "Wait this long after the ring before opening."
+      },
+      "nextVisitorSwitch": {
+        "title": "Next Visitor switch",
+        "type": "boolean",
+        "default": false,
+        "description": "Adds a HomeKit switch that lets the next visitor in: while it is on, the next ring opens the door, then the switch turns itself off. For an expected delivery or guest."
+      },
+      "nextVisitorMinutes": {
+        "condition": { "functionBody": "return model.nextVisitorSwitch === true || model.nextVisitorSwitch === 'true';" },
+        "title": "Next Visitor: turn off after (minutes)",
+        "type": "number",
+        "default": 120,
+        "minimum": 1,
+        "maximum": 1440,
+        "description": "If nobody rings, the switch turns itself off after this long."
       },
       "registerPush": {
         "title": "Register as a push device (original behavior)",
@@ -316,7 +331,9 @@
       "items": [
         "ringWindowSeconds",
         "doctorMode",
-        "doctorModeDelaySeconds"
+        "doctorModeDelaySeconds",
+        "nextVisitorSwitch",
+        "nextVisitorMinutes"
       ]
     },
     {

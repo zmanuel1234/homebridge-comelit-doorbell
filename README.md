@@ -45,6 +45,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Last visitor's picture | ✅ | Taken at the ring or the start of the call; kept across restarts |
 | Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |
 | Doctor mode (always, or with its switch) | ✅ | |
+| Next Visitor switch | ❓ | New in 2.1.1-beta.2: the same open as doctor mode |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
@@ -113,6 +114,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. |
 | Doctor mode switch (named **Name** + `Doctor Mode`), only with **Doctor mode** set to *With a HomeKit switch* | Switch | While on, every ring opens the door. Keeps its state across restarts. See [doctor mode](#doctor-mode). |
+| Next Visitor switch (named **Name** + `Next Visitor`), only with **Next Visitor switch** on | Switch | While on, the next ring opens the door, then it turns itself off. See [next visitor](#next-visitor). |
 | Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera). |
 
 Without the doorbell camera, the plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
@@ -126,7 +128,7 @@ For the fewest taps when someone rings (with **Doorbell camera** on and **Answer
 - **Banners** (iPhone Settings → Notifications → Home): *Persistent* keeps the ring on screen until you act; *Time Sensitive* lets it through Focus modes.
 - **Opening without the video:** add the Comelit lock to Control Centre or the Lock Screen, or use the Apple Watch or Siri ("unlock" followed by the lock's name). During a ring the plugin answers, opens and hangs up by itself.
 - **Chime and TV:** a HomePod can play a chime when the doorbell rings, and an Apple TV can show the camera in a corner of the screen; both are turned on in the Home app's settings.
-- **Expected visitors:** set **Doctor mode** to *With a HomeKit switch* and turn the switch on by hand, by Siri, or from a Home automation (for example during a delivery window).
+- **Expected visitors:** turn on the **Next Visitor switch** setting, then turn the switch on by hand, by Siri, or from a Home automation: the next ring opens the door and the switch turns itself off. For an afternoon of guests, set **Doctor mode** to *With a HomeKit switch* instead, and turn it off afterwards.
 
 ## Settings
 
@@ -158,7 +160,9 @@ In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that
 |---|---|---|
 | Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. `0` allows unlocking at any time. |
 | Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
-| Doctor mode: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). |
+| Doctor mode and Next Visitor: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). |
+| Next Visitor switch (`nextVisitorSwitch`) | `false` | Adds a switch that lets the next visitor in, then turns itself off. See [next visitor](#next-visitor). |
+| Next Visitor: turn off after (`nextVisitorMinutes`) | `120` | If nobody rings, the switch turns itself off after this long (1–1440 minutes). |
 
 ### Picture and sound
 
@@ -226,6 +230,17 @@ Like the door of a doctor's office: when someone rings, the plugin answers the c
 - **With a HomeKit switch** (`"doctorMode": "switch"`): adds a **Doctor Mode** switch. Every ring opens the door only while it is on, so you can turn it on by hand or with a HomeKit automation (for example during opening hours) and off again. It starts off and keeps its state across restarts.
 
 How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones should stop ringing when it answers (not yet observed). If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Log lines start with `Doctor mode:`.
+
+### Next visitor
+
+For one expected visitor (a delivery, a cleaner, a guest), turn on the **Next Visitor switch** setting. It adds a **Next Visitor** switch to HomeKit, separate from doctor mode:
+
+- **Turn it on** by hand, by Siri, or from a Home automation. Renaming it in the Home app to something short (for example *Next Visitor*) makes it easy to say: "Hey Siri, turn on Next Visitor". The log says until when it stays on.
+- **The next ring after you turn it on opens the door**, the same way as doctor mode (answer, open, hang up, after **open after** seconds), and the switch **turns itself off**. Later rings ring normally. Turning it off during those seconds cancels the open.
+- **If nobody rings**, it turns itself off after **Next Visitor: turn off after** minutes (2 hours by default).
+- **If the open doesn't go through** (the intercom isn't reachable, or someone answered on a phone first), the switch **stays on** for the next ring.
+- With **doctor mode** also on, a ring opens the door once, and the Next Visitor switch counts as used.
+- It keeps its state and its time limit across restarts. Log lines start with `Next visitor` (`Doctor mode and Next visitor` with both on).
 
 ### Doorbell camera
 
