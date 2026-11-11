@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.0-beta.2 (2026-11-11)
+
+### Fixed
+
+- **Recording Options didn't appear in the Home app** for a doorbell camera that existed before **Record rings** was turned on (that is, for everyone updating). hap-nodejs adds the recording services to such a camera but not the motion sensor that triggers them. The plugin now makes the camera's motion sensor itself and adds it to the camera, whether the camera is new or not, and removes it again when **Record rings** is turned off.
+
+### Changed
+
+- The startup line `Doorbell camera: ffmpeg …` now ends with `recording rings (HomeKit Secure Video)` when **Record rings** is on.
+
+Tests: 158 in all, including one that restarts a camera accessory through Homebridge's cache with recording turned on and off.
+
 ## 2.3.0-beta.1 (2026-11-11)
 
 ### Added

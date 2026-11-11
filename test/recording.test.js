@@ -375,3 +375,26 @@ test('recording with ffmpeg: fragments start with a keyframe and are no longer t
     assert.ok(seconds <= 4.0, `${seconds.toFixed(3)} s`);
   }
 });
+
+test('camera: a camera Homebridge already had gets the recording services and motion sensor, and loses them when recording is turned off', () => {
+  const { PlatformAccessory } = require(require('path').join(__dirname, '../node_modules/homebridge/dist/platformAccessory.js'));
+  const make = (recording) => new DoorbellCamera({ hap }, quietLog(), resolveSettings({ camera: true, recording, host: 'h', token: 't' }), () => undefined);
+  const restart = (a) => PlatformAccessory.deserialize(JSON.parse(JSON.stringify(PlatformAccessory.serialize(a))));
+  const has = (a, s, subtype) => a.services.some((x) => x.UUID === s.UUID && (subtype === undefined || x.subtype === subtype));
+  let a = Object.assign(new PlatformAccessory('Door Camera', hap.uuid.generate('door-camera-cached')), { _associatedPlugin: 'p', _associatedPlatform: 'P' });
+  make(false).attach(a);
+  assert.ok(!has(a, hap.Service.MotionSensor));
+  a = restart(a);
+  const cam = make(true);
+  cam.attach(a);
+  assert.ok(has(a, hap.Service.MotionSensor, 'recording'), 'the motion sensor is on the accessory (hap-nodejs\'s own would not be)');
+  assert.ok(has(a, hap.Service.CameraRecordingManagement) && has(a, hap.Service.CameraOperatingMode) && has(a, hap.Service.DataStreamTransportManagement));
+  assert.ok(a.getService(hap.Service.CameraRecordingManagement).linkedServices.includes(cam.motionService));
+  a = restart(a);
+  make(true).attach(a);
+  assert.strictEqual(a.services.filter((x) => x.UUID === hap.Service.MotionSensor.UUID).length, 1, 'one motion sensor after another restart');
+  a = restart(a);
+  make(false).attach(a);
+  assert.ok(!has(a, hap.Service.MotionSensor) && !has(a, hap.Service.CameraRecordingManagement), 'all gone with recording off');
+  cam.shutdown();
+});

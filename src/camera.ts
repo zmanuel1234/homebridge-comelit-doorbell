@@ -22,8 +22,10 @@ import type {
   CameraStreamingDelegate,
   DoorbellController,
   Logging,
+  PlatformAccessory,
   PrepareStreamCallback,
   PrepareStreamRequest,
+  Service,
   SnapshotRequest,
   SnapshotRequestCallback,
   StreamingRequest,
@@ -290,8 +292,17 @@ const PREVIEW_EMPTY_WAIT_MS = 7_000;
 /** If no ring preview has started this long after a ring, picture requests stop waiting. */
 const PREVIEW_START_MS = 1_500;
 
+/** The subtype of the camera's own motion sensor (recording's trigger). */
+export const MOTION_SUBTYPE = 'recording';
+
 export class DoorbellCamera implements CameraStreamingDelegate {
   readonly controller: DoorbellController;
+  /**
+   * With recording: the camera's motion sensor, made here and added to the accessory in
+   * attach(). hap-nodejs's own (sensors: {motion: true}) is not added to a camera accessory
+   * Homebridge already had, so the Home app then offered no recording.
+   */
+  readonly motionService?: Service;
   private readonly ffmpeg: string;
   private readonly pending = new Map<string, PendingSession>();
   private readonly active = new Map<string, ActiveSession>();
@@ -342,14 +353,15 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     if (settings.recording) {
       this.recorder = new RingRecorder(
         log,
-        (on) => this.controller.motionService?.updateCharacteristic(hap.Characteristic.MotionDetected, on),
+        (on) => this.motionService?.updateCharacteristic(hap.Characteristic.MotionDetected, on),
         () => this.controller.recordingManagement?.operatingModeService.getCharacteristic(hap.Characteristic.RecordingAudioActive).value === 1,
         spawnFfmpeg(this.ffmpeg, log),
         () => new hap.HDSProtocolError(hap.HDSProtocolSpecificErrorReason.NOT_ALLOWED),
       );
       // The camera's own motion sensor: the home hub records while it shows motion, which the
       // recorder sets for a ring.
-      options.sensors = { motion: true };
+      this.motionService = new hap.Service.MotionSensor('Recording', MOTION_SUBTYPE);
+      options.sensors = { motion: this.motionService };
       options.recording = {
         delegate: this.recorder,
         options: {
@@ -373,7 +385,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       };
     }
     this.controller = new hap.DoorbellController(options);
-    this.log.info(`Doorbell camera: ffmpeg ${this.ffmpeg}${settings.talkBack ? ', talk-back on' : ''}`);
+    this.log.info(`Doorbell camera: ffmpeg ${this.ffmpeg}${settings.talkBack ? ', talk-back on' : ''}${settings.recording ? ', recording rings (HomeKit Secure Video)' : ''}`);
     // The last visitor's picture is kept on disk too, so it survives a restart.
     const storage = api.user?.storagePath?.();
     if (storage && settings.lastVisitorMs > 0) {
@@ -958,6 +970,22 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   /** Homebridge is shutting down: stop every view, so no ffmpeg is left running. */
+  /**
+   * Gives the camera's accessory its controller, and before it the recording motion sensor (or
+   * removes one left from when recording was on). Once per accessory.
+   */
+  attach(accessory: PlatformAccessory): void {
+    const old = accessory.getServiceById(this.api.hap.Service.MotionSensor, MOTION_SUBTYPE);
+    if (old && old !== this.motionService) {
+      accessory.removeService(old);
+    }
+    if (this.motionService && !accessory.services.includes(this.motionService)) {
+      accessory.addService(this.motionService);
+    }
+    accessory.configureController(this.controller);
+    this.recorder?.attached();
+  }
+
   async shutdown(): Promise<void> {
     this.pending.clear();
     this.recorder?.shutdown();

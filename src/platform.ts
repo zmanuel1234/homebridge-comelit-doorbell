@@ -555,17 +555,15 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       if (!this.camera) {
         this.camera = new DoorbellCamera(this.api, this.log, this.settings, () => this.callHandler);
       }
-      const controller = this.camera.controller;
+      const camera = this.camera;
       // A new accessory gets the controller before it is registered; a cached one, once.
       const cam = this.accessoryFor('doorbell-camera', `${this.displayName} Camera`, keep, (a) => {
-        a.configureController(controller);
+        camera.attach(a);
         this.cameraConfigured = true;
-        this.camera?.recorder?.attached();
       });
       if (!this.cameraConfigured) {
-        cam.configureController(controller);
+        camera.attach(cam);
         this.cameraConfigured = true;
-        this.camera.recorder?.attached();
       }
     }
     for (const camera of config.cameras) {
