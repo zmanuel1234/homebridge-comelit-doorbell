@@ -156,3 +156,47 @@ test('calls are followed (handshake) for doctor mode or the Next Visitor switch 
   assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true, answerMode: 'answer-on-view' })), 'answer-on-view');
 });
 
+
+test('non-numbers never become 0: the ring window keeps 90 s and is reported (2.2.0 review)', () => {
+  for (const v of [false, true, ' ', [], '0x0', '1e3', 'abc', {}]) {
+    const s = resolveSettings({ ringWindowSeconds: v });
+    assert.strictEqual(s.ringWindowMs, 90_000, JSON.stringify(v));
+    assert.strictEqual(s.invalid.length, 1, JSON.stringify(v));
+  }
+  assert.strictEqual(resolveSettings({ ringWindowSeconds: 0 }).ringWindowMs, 0, 'an explicit 0 still allows any time');
+  assert.strictEqual(resolveSettings({ ringWindowSeconds: '0' }).ringWindowMs, 0);
+  assert.strictEqual(resolveSettings({ ringWindowSeconds: ' 45 ' }).ringWindowMs, 45_000);
+});
+
+test("values above the editor's maximum are reported and replaced (2.2.0 review)", () => {
+  const s = resolveSettings({
+    reconnectDelay: 301, maxReconnectDelay: 1e7, subaddress: 16, leaseRefreshMinutes: 100000, leaseRecycleMinutes: 56,
+    ringWindowSeconds: 601, mediaStartTimeoutSeconds: 61, mediaSilenceSeconds: 61, videoRefreshSeconds: 61,
+    liveViewWaitSeconds: 21, lastVisitorMinutes: 1441,
+  });
+  assert.strictEqual(s.invalid.length, 11, s.invalid.join('\n'));
+  assert.strictEqual(s.leaseRefreshMs, 2 * 60_000);
+  assert.strictEqual(s.maxReconnectDelayMs, 300_000);
+  assert.strictEqual(s.ringWindowMs, 90_000);
+  assert.strictEqual(s.subaddress, undefined);
+  // the maximums themselves are fine
+  const ok = resolveSettings({ reconnectDelay: 300, maxReconnectDelay: 3600, leaseRefreshMinutes: 55, ringWindowSeconds: 600, lastVisitorMinutes: 1440 });
+  assert.deepStrictEqual(ok.invalid, []);
+});
+
+test('invalid choices are reported; non-text paths are reported instead of crashing (2.2.0 review)', () => {
+  const s = resolveSettings({ answerMode: 'answer-on-veiw', doctorMode: 'sometimes', leaseRefreshMode: 'x', videoQuality: '4k' });
+  assert.strictEqual(s.answerMode, 'off');
+  assert.strictEqual(s.doctorMode, 'off');
+  assert.strictEqual(s.leaseMode, 'inplace');
+  assert.strictEqual(s.videoQuality, 'sd');
+  assert.strictEqual(s.invalid.length, 4, s.invalid.join('\n'));
+  const t = resolveSettings({ ffmpegPath: 7, videoCodec: ['x'], snapshotImage: true, host: 10 });
+  assert.strictEqual(t.ffmpegPath, '');
+  assert.strictEqual(t.videoCodec, 'libx264');
+  assert.strictEqual(t.invalid.length, 4, t.invalid.join('\n'));
+  // the valid ones still work
+  const v = resolveSettings({ answerMode: 'answer-on-view', doctorMode: 'switch', leaseRefreshMode: 'reconnect', videoQuality: 'hd', ffmpegPath: ' /usr/local/bin/ffmpeg ' });
+  assert.deepStrictEqual([v.answerMode, v.doctorMode, v.leaseMode, v.videoQuality, v.ffmpegPath], ['answer-on-view', 'switch', 'reconnect', 'hd', '/usr/local/bin/ffmpeg']);
+  assert.deepStrictEqual(v.invalid, []);
+});

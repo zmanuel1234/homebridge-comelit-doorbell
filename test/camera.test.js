@@ -334,3 +334,19 @@ test('after an empty keyframe the wait really runs to 7 s after the ring, beyond
   await asking;
   assert.strictEqual(got, 'visitor');
 });
+
+test('stopping a view kills its ffmpeg; shutdown stops every view (2.2.0 review)', async () => {
+  const cam = camera();
+  cam.lastVisitor = async () => undefined;
+  cam.placeholderPath = async () => '/nonexistent.jpg';
+  const killed = [];
+  cam.spawnProcess = (what) => { const p = fakeProcess(); p.kill = (sig) => { killed.push([what, sig]); p.exitCode = 0; }; cam.spawned.push([what, p]); return p; };
+  for (const id of ['ffffffff-1', 'ffffffff-2']) {
+    pending(cam, id);
+    await cam.startStream(id, request(id));
+  }
+  assert.strictEqual(cam.active.size, 2);
+  await cam.shutdown();
+  assert.strictEqual(cam.active.size, 0);
+  assert.deepStrictEqual(killed, [['video', 'SIGKILL'], ['video', 'SIGKILL']]);
+});

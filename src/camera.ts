@@ -277,6 +277,8 @@ const VISITOR_FILE = 'comelit-last-visitor.h264';
  * +2.7 dB (PSNR) on a 6741W frame, about 60 KB instead of 33 KB at 640x480.
  */
 const SNAPSHOT_QUALITY = ['-q:v', '2'];
+/** A prepared stream that HomeKit hasn't started after this long is forgotten. */
+const PENDING_STREAM_MS = 60_000;
 /** How long after a ring a picture request waits for the ring preview's picture. */
 const PREVIEW_PICTURE_WAIT_MS = 4_500;
 /**
@@ -584,6 +586,12 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         audioSsrc: hap.CameraController.generateSynchronisationSource(),
       };
       this.pending.set(request.sessionID, session);
+      // HomeKit normally starts a prepared stream within a second; forget one it never starts.
+      setTimeout(() => {
+        if (this.pending.get(request.sessionID) === session) {
+          this.pending.delete(request.sessionID);
+        }
+      }, PENDING_STREAM_MS).unref?.();
       callback(undefined, {
         video: { port: session.videoReturnPort, ssrc: session.videoSsrc, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
         audio: { port: session.audioReturnPort, ssrc: session.audioSsrc, srtp_key: request.audio.srtp_key, srtp_salt: request.audio.srtp_salt },
@@ -911,6 +919,12 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     p.stderr.on('data', (d: Buffer) => this.log.warn(`Doorbell camera ${what}: ${d.toString().trim().slice(0, 300)}`));
     p.on('error', (e) => this.log.error(`Doorbell camera ${what}: ${e.message}`));
     return p;
+  }
+
+  /** Homebridge is shutting down: stop every view, so no ffmpeg is left running. */
+  async shutdown(): Promise<void> {
+    this.pending.clear();
+    await Promise.all([...this.active.keys()].map((id) => this.stopStream(id, 'Homebridge is shutting down')));
   }
 
   private async stopStream(sessionID: string, reason: string): Promise<void> {
