@@ -21,6 +21,8 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   answerMode?: string;
   doctorMode?: string;
   doctorModeDelaySeconds?: number | string;
+  nextVisitorSwitch?: boolean | string;
+  nextVisitorMinutes?: number | string;
   camera?: boolean;
   talkBack?: boolean;
   videoQuality?: string;
@@ -60,6 +62,10 @@ export interface Settings {
   /** Open the door by itself on every ring: never, always, or while a HomeKit switch is on. */
   doctorMode: DoctorMode;
   doctorModeDelayMs: number;
+  /** Show the Next Visitor switch: the next ring opens the door, then it turns itself off. */
+  nextVisitorSwitch: boolean;
+  /** The Next Visitor switch turns itself off after this long if nobody rings. */
+  nextVisitorMs: number;
   /** Experimental: a doorbell camera with the intercom's video. */
   camera: boolean;
   talkBack: boolean;
@@ -144,6 +150,8 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     answerMode: (['handshake', 'answer-on-open', 'answer-on-view'] as const).find((m) => m === c.answerMode) ?? 'off',
     doctorMode: (['switch', 'always'] as const).find((m) => m === c.doctorMode) ?? 'off',
     doctorModeDelayMs: num('doctorModeDelaySeconds', 2, (n) => n >= 0 && n <= 30) * 1000,
+    nextVisitorSwitch: bool('nextVisitorSwitch', false),
+    nextVisitorMs: num('nextVisitorMinutes', 120, (n) => n >= 1 && n <= 1440) * 60_000,
     camera: bool('camera', false),
     talkBack: bool('talkBack', true),
     videoQuality: c.videoQuality === 'hd' ? 'hd' : 'sd',
@@ -181,6 +189,9 @@ export function settingsWarnings(s: Settings): string[] {
   const w: string[] = [...s.invalid];
   if (s.doctorMode !== 'off' && !s.enableNotifications) {
     w.push("doctorMode needs 'Listen for rings' (enableNotifications); without rings it never opens.");
+  }
+  if (s.nextVisitorSwitch && !s.enableNotifications) {
+    w.push("The Next Visitor switch needs 'Listen for rings' (enableNotifications); without rings it never opens.");
   }
   if (!s.enableNotifications && s.ringWindowMs > 0) {
     w.push(

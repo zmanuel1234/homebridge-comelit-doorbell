@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1-beta.2 (2026-11-10)
+
+### Added
+
+- **Next Visitor switch** (`nextVisitorSwitch`, off by default, in the **Door** section): a HomeKit switch that lets one expected visitor in. While it is on, the next ring opens the door, the same way as doctor mode (answer, open, hang up, after **open after** seconds), and the switch turns itself off. If nobody rings, it turns itself off after **Next Visitor: turn off after** (`nextVisitorMinutes`, 2 hours by default). If the open doesn't go through, it stays on for the next ring. With doctor mode also on, a ring opens once. It keeps its state and time limit across restarts. Your Doctor Mode switch is unchanged.
+
+Tests: 121 in all.
+
 ## 2.1.1-beta.1 (2026-11-10)
 
 ### Fixed

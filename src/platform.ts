@@ -1,6 +1,7 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, Service } from 'homebridge';
 import { CameraAccessory } from './accessories/cameraAccessory';
 import { DoctorModeSwitch } from './accessories/doctorModeSwitch';
+import { NextVisitorSwitch } from './accessories/nextVisitorSwitch';
 import { DoorbellAccessory } from './accessories/doorbellAccessory';
 import { LockAccessory } from './accessories/lockAccessory';
 import { authenticate } from './auth';
@@ -40,6 +41,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private shuttingDown = false;
   private doctorPending = false;
   private doctorSwitch?: DoctorModeSwitch;
+  private nextVisitor?: NextVisitorSwitch;
   /** Doors and cameras the accessories were last built from, to skip rebuilding them on every reconnect. */
   private builtFrom?: string;
   private lastRingAt = 0;
@@ -239,8 +241,10 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (s.enableNotifications && client.getChannel('CTPP')) {
       const ourAddress = `${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`;
       let listener: VipEventListener | undefined = undefined;
-      // Doctor mode answers calls itself, so it needs calls followed even with answering off.
-      const mode = s.answerMode === 'off' && s.doctorMode !== 'off' ? 'handshake' : s.answerMode;
+      // Doctor mode and the Next Visitor switch answer calls themselves, so they need calls
+      // followed even with answering off.
+      const opensItself = s.doctorMode !== 'off' || s.nextVisitorSwitch;
+      const mode = s.answerMode === 'off' && opensItself ? 'handshake' : s.answerMode;
       const call = new CallHandler(mode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log, {
         startTimeoutMs: s.mediaStartTimeoutMs,
         silenceMs: s.mediaSilenceMs,
@@ -402,35 +406,49 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     return this.settings.doctorMode === 'always' || (this.settings.doctorMode === 'switch' && this.doctorSwitch?.on === true);
   }
 
-  /** Doctor mode: answer the ring and open the door, after the configured delay. */
+  /** The Next Visitor switch is on: the next ring opens the door. */
+  nextVisitorActive(): boolean {
+    return this.nextVisitor?.on === true;
+  }
+
+  /**
+   * Doctor mode or the Next Visitor switch: answer the ring and open the door, after the
+   * configured delay. One open per ring, even with both on; the Next Visitor switch turns off
+   * only once the door was opened for the visitor.
+   */
   private doctorOpen(): void {
-    if (!this.doctorModeActive() || this.doctorPending) {
+    const doctor = this.doctorModeActive();
+    if ((!doctor && !this.nextVisitorActive()) || this.doctorPending) {
       return;
     }
+    const label = doctor ? 'Doctor mode' : 'Next visitor';
     const door = this.deviceConfig?.doors[0];
     if (!door) {
-      this.log.warn('Doctor mode: no door to open');
+      this.log.warn(`${label}: no door to open`);
       return;
     }
     this.doctorPending = true;
     const delay = this.settings.doctorModeDelayMs;
-    this.log.info(`Doctor mode: opening '${door.name}' in ${delay / 1000} s`);
+    this.log.info(`${label}: opening '${door.name}' in ${delay / 1000} s`);
     setTimeout(async () => {
       try {
         const call = this.callHandler;
         if (!call?.activeCall()) {
-          this.log.info('Doctor mode: the call is over (answered elsewhere or hung up); not opening');
+          this.log.info(`${label}: the call is over (answered elsewhere or hung up); not opening`);
           return;
         }
         const result = await call.openInCall(door, true);
         if (result) {
-          this.log.info(`Doctor mode: door '${door.name}' opened`);
+          this.log.info(`${label}: door '${door.name}' opened`);
           [...this.lockAccessories.values()][0]?.showOpened();
+          if (this.nextVisitorActive()) {
+            this.nextVisitor?.used();
+          }
         } else {
-          this.log.info('Doctor mode: no call to answer; not opening');
+          this.log.info(`${label}: no call to answer; not opening`);
         }
       } catch (e) {
-        this.log.warn(`Doctor mode: open failed: ${(e as Error).message}`);
+        this.log.warn(`${label}: open failed: ${(e as Error).message}`);
       } finally {
         this.doctorPending = false;
       }
@@ -480,7 +498,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     // Sorted, so the same doors and cameras in another order (as restored from the cache) match.
     const doors = [...config.doors].sort((a, b) => a.index - b.index);
     const cameras = [...config.cameras].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode]);
+    const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode, this.settings.nextVisitorSwitch]);
     if (from === this.builtFrom) {
       return;
     }
@@ -497,6 +515,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.doctorSwitch = new DoctorModeSwitch(this, sw);
     } else {
       this.doctorSwitch = undefined;
+    }
+    // A rebuild replaces the switch object: the old one's time limit must not run on.
+    this.nextVisitor?.dispose();
+    if (this.settings.nextVisitorSwitch) {
+      const sw = this.accessoryFor('next-visitor', `${this.displayName} Next Visitor`, keep);
+      this.nextVisitor = new NextVisitorSwitch(this, sw, this.settings.nextVisitorMs);
+    } else {
+      this.nextVisitor = undefined;
     }
     if (this.settings.camera) {
       // Experimental doorbell camera, as an accessory of its own so turning it off removes it cleanly.

@@ -27,7 +27,7 @@ function fakeApi() {
     duplicates: 0,
     hap: {
       Service: { AccessoryInformation: 'info', LockMechanism: 'lock', MotionSensor: 'motion', Doorbell: 'db', Speaker: 'sp', Switch: 'sw' },
-      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n' },
+      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n', On: 'on' },
       uuid: { generate: (s) => `uuid:${s}` },
       HapStatusError,
       HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412, SERVICE_COMMUNICATION_FAILURE: -70402 },
@@ -260,4 +260,91 @@ test('the lock shows No Response after 30 s without the intercom, and recovers (
   lock.refresh();
   assert.strictEqual(current.get(), 1);
   assert.strictEqual(current.value, 1);
+});
+
+// ─── Next Visitor switch (2.1.1-beta.2) ───
+
+const nextOn = (p) => p.nextVisitor.service.getCharacteristic('on');
+
+test('next visitor: no switch unless the setting is on', () => {
+  const { api } = doctor({});
+  assert.ok(![...api.registered].some((u) => u.includes('next-visitor')));
+});
+
+test('next visitor: the next ring opens the door, then the switch turns itself off', async () => {
+  const { p, opened, ring, api } = doctor({ nextVisitorSwitch: true });
+  assert.ok([...api.registered].some((u) => u.includes('next-visitor')), 'switch accessory');
+  await ring();
+  assert.deepStrictEqual(opened, [], 'off: nothing opens');
+  nextOn(p).set(true);
+  assert.strictEqual(nextOn(p).get(), true);
+  assert.ok(p.nextVisitor.accessory.context.until > Date.now() + 119 * 60_000, 'time limit 2 h');
+  await ring();
+  assert.deepStrictEqual(opened, [[deviceConfig.doors[0].name, true]], 'opened inside the call');
+  assert.strictEqual(nextOn(p).get(), false, 'used: off');
+  assert.strictEqual(nextOn(p).value, false, 'HomeKit told');
+  await ring();
+  assert.strictEqual(opened.length, 1, 'later rings ring normally');
+});
+
+test('next visitor: stays on when the open fails or the call was answered elsewhere', async () => {
+  const { p, opened, ring } = doctor({ nextVisitorSwitch: true });
+  nextOn(p).set(true);
+  p.callHandler.activeCall = () => undefined; // answered on a phone first
+  await ring();
+  assert.strictEqual(nextOn(p).get(), true);
+  p.callHandler.activeCall = () => ({});
+  p.callHandler.openInCall = async () => { throw new Error('Not connected'); };
+  await ring();
+  assert.strictEqual(nextOn(p).get(), true);
+  p.callHandler.openInCall = async () => null; // no call to answer
+  await ring();
+  assert.strictEqual(nextOn(p).get(), true);
+  assert.deepStrictEqual(opened, []);
+});
+
+test('next visitor with doctor mode on: one open per ring; Next Visitor counts as used', async () => {
+  const { p, opened, ring } = doctor({ doctorMode: 'switch', nextVisitorSwitch: true });
+  p.doctorSwitch.accessory.context.on = true;
+  nextOn(p).set(true);
+  await ring();
+  assert.strictEqual(opened.length, 1);
+  assert.strictEqual(nextOn(p).get(), false);
+  assert.strictEqual(p.doctorSwitch.on, true, 'doctor mode unchanged');
+});
+
+test('next visitor: turns itself off at its time limit, also across a restart', async () => {
+  const { NextVisitorSwitch } = require('../dist/accessories/nextVisitorSwitch');
+  const { api, p } = platform({ nextVisitorSwitch: true });
+  const acc = new api.platformAccessory('Next', 'uuid:x');
+  const sw = new NextVisitorSwitch(p, acc, 50);
+  sw.service.getCharacteristic('on').set(true);
+  assert.strictEqual(sw.on, true);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.strictEqual(sw.on, false, 'time limit');
+  // restart while on, limit not yet reached: stays on, and its timer is set again
+  acc.context.on = true;
+  acc.context.until = Date.now() + 60;
+  const after = new NextVisitorSwitch(p, acc, 50);
+  assert.strictEqual(after.on, true);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.strictEqual(after.on, false);
+  // restart after the limit passed: off at once
+  acc.context.on = true;
+  acc.context.until = Date.now() - 1;
+  assert.strictEqual(new NextVisitorSwitch(p, acc, 50).on, false);
+});
+
+test('next visitor: a rebuild of the accessories stops the old time limit', () => {
+  const { p } = doctor({ nextVisitorSwitch: true });
+  nextOn(p).set(true);
+  const old = p.nextVisitor;
+  assert.ok(old.timer);
+  p.builtFrom = undefined;
+  p.discoverAccessories(JSON.parse(JSON.stringify({ ...deviceConfig, doors: [{ ...deviceConfig.doors[0], name: 'Front door' }] })));
+  assert.notStrictEqual(p.nextVisitor, old);
+  assert.strictEqual(old.timer, undefined, 'old timer cleared');
+  assert.strictEqual(p.nextVisitor.on, true, 'state kept');
+  assert.ok(p.nextVisitor.timer, 'new object keeps the limit');
+  p.nextVisitor.dispose();
 });
