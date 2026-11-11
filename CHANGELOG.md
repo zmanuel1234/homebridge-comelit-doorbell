@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0 (2026-11-11)
+
+Stable release after three pre-releases (2.1.1-beta.1, 2.1.1-beta.2, 2.2.0-beta.1). Everything below is compared with 2.1.0; the pre-release entries further down give the details. No setting was renamed or removed, so your JSON keeps working.
+
+### Added
+
+- **Next Visitor switch** (`nextVisitorSwitch`, off by default, in the **Door** section): while it is on, the next ring opens the door the same way as doctor mode, then the switch turns itself off. If nobody rings, it turns off after **Next Visitor: turn off after** (`nextVisitorMinutes`, 2 hours). Its state survives a restart.
+
+### Fixed
+
+- **No more black picture in the ring notification.** An empty, black first keyframe from the intercom is skipped; the plugin waits for the next, real one.
+- **Turning the Doctor Mode or Next Visitor switch off during the seconds before the open now cancels the open.**
+- **Settings are checked more strictly:** values that aren't numbers, values above the editor's maximum and choices with typos are reported at startup and replaced by the default, instead of being read silently (for example `false` as **Unlock allowed for** used to mean "any time").
+- **No ffmpeg left running after Homebridge restarts or stops.**
+- Small leaks: a live view HomeKit prepared but never started, and doors the intercom no longer lists.
+
+### Release mechanics
+
+- Publishing stops if the GitHub release's **Set as a pre-release** box doesn't match the version; npm in the publish workflow is pinned to major version 11.
+
+Tests: 133 in all.
+
 ## 2.2.0-beta.1 (2026-11-11)
 
 Fixes from an independent review of the whole plugin, before the stable 2.2.0. Includes everything from 2.1.1-beta.1 and beta.2 (no black notification picture; the Next Visitor switch).
