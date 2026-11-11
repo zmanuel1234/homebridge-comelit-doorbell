@@ -162,7 +162,7 @@ In JSON, numbers may also be written as plain text (`"subaddress": "3"`). A valu
 |---|---|---|
 | Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. `0` allows unlocking at any time. |
 | Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
-| Doctor mode and Next Visitor: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). Turning the switch off cancels the open until the door is actually opened (about 1 s after this delay; once the call has been answered, it is then hung up). |
+| Doctor mode and Next Visitor: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). Turning the switch off cancels the open until the door is actually opened (about 1 s after this delay; if the call was already answered for the open, it is then hung up, unless a live view is showing it). |
 | Next Visitor switch (`nextVisitorSwitch`) | `false` | Adds a switch that lets the next visitor in, then turns itself off. See [next visitor](#next-visitor). |
 | Next Visitor: turn off after (`nextVisitorMinutes`) | `120` | If nobody rings, the switch turns itself off after this long (1–1440 minutes). |
 

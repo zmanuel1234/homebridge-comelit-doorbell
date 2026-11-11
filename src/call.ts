@@ -64,6 +64,8 @@ interface Call {
   born: number;
   seen: Set<string>;
   answered: boolean;
+  /** Our answer (SETUP_ACK) has been sent: media requests from now on are for the call. */
+  answerSent?: boolean;
   ended: boolean;
   media?: MediaSession;
   /** In flight, so a second viewer joins instead of answering again. */
@@ -236,7 +238,9 @@ export class CallHandler {
     if (frame.body.length > 0) {
       call.ack = (frame.seq + 1) & 0xff;
     }
-    if (frame.opcode === Opcode.MEDIA_REQUEST && frame.body.length >= 10 && call.panelAudioHandle === undefined) {
+    // Where the intercom takes our sound: from its media request after our answer (one in
+    // reply to the ring preview's sound request is not for the call).
+    if (frame.opcode === Opcode.MEDIA_REQUEST && frame.body.length >= 10 && call.panelAudioHandle === undefined && call.answerSent) {
       call.panelAudioHandle = frame.body.readUInt16LE(8);
     }
     for (const w of this.waiters.slice()) {
@@ -294,6 +298,7 @@ export class CallHandler {
       // The preview's channels go before the call's own media starts.
       await call.preview?.stop('the call is being answered');
       const reply = this.wait(call, Opcode.SETUP_ACK, 1500);
+      call.answerSent = true;
       await this.send(call, Flag.DATA, SETUP_ACK, 'answer 000c');
       await reply;
       call.answered = true;
@@ -320,6 +325,8 @@ export class CallHandler {
       return null;
     }
     this.log?.debug('call: opening the door inside the call');
+    // Whether this open answers the call, or a live view already is/was answering it.
+    const ownAnswer = !call.answered && call.answering === undefined && call.mediaStarting === undefined && call.media === undefined;
     await this.answer(call);
     if (call.ended) {
       // Answered elsewhere, or the ringing ended, meanwhile: open the normal way instead.
@@ -327,8 +334,13 @@ export class CallHandler {
       return null;
     }
     if (stillWanted && !stillWanted()) {
-      this.log?.debug('call: the open was cancelled while answering; hanging up');
-      await this.hangUp(call);
+      // Cancelled: hang up the call this open answered, but not one a live view is showing.
+      if (ownAnswer && !call.media && !call.mediaStarting) {
+        this.log?.debug('call: the open was cancelled while answering; hanging up');
+        await this.hangUp(call);
+      } else {
+        this.log?.debug('call: the open was cancelled while answering; the live view keeps the call');
+      }
       return null;
     }
     const output = Number(door.outputIndex) || 1;
@@ -695,6 +707,7 @@ export class RingPreview {
   private audioHandle?: number;
   private audioPackets = 0;
   private listening = false;
+  private audioRequested = false;
   private readonly handles = new Set<number>();
   private readonly depacketizer = new H264Depacketizer();
   private startedAt = 0;
@@ -754,6 +767,7 @@ export class RingPreview {
         // Asks for the sound without answering (no voice status). Whether the intercom sends it
         // during the ring is what this finds out; the summary line says.
         const audioReply = this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 2000);
+        this.audioRequested = true;
         await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(this.audioHandle), Buffer.alloc(2)]), 'ring preview audio request');
         const a = await audioReply;
         this.log?.debug(`call: ring preview: reply to the audio request ${a ? `op=0x${a.opcode.toString(16)} body=${hex(a.body)}` : 'none within 2 s'}`);
@@ -824,11 +838,6 @@ export class RingPreview {
   stop(reason: string): Promise<void> {
     this.stopping ??= (async () => {
       this.done = true;
-      if (this.listening) {
-        // Where the intercom takes our sound: an answer to the preview's sound request is not
-        // for the call; the call's own comes after it is answered.
-        this.call.panelAudioHandle = undefined;
-      }
       clearTimeout(this.timer);
       const t = (at: number) => (at ? `${((at - this.startedAt) / 1000).toFixed(1)} s` : 'never');
       const result = this.keyframeAt
@@ -857,6 +866,11 @@ export class RingPreview {
   private async close(): Promise<void> {
     for (const h of this.handles) {
       this.client.setBinaryHandler(h, this.drop);
+    }
+    if (this.audioRequested && this.audioHandle !== undefined && !this.call.ended) {
+      // As at the end of a call: stop the sound the preview asked for, so the call's own
+      // sound request is the only one.
+      await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_STOP, le16(this.audioHandle), Buffer.alloc(2)]), 'ring preview audio stop').catch(() => undefined);
     }
     const open = [['RTPC-audio', this.audioHandle], ['RTPC-video', this.videoHandle], ['UDPM', this.udpHandle]] as const;
     this.audioHandle = this.videoHandle = this.udpHandle = undefined; // closed once, even if stop and start both close

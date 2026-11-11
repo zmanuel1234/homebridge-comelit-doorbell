@@ -467,8 +467,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         }
         const result = await call.openInCall(door, true, armed);
         if (!result && !armed()) {
-          // Turned off while the call was being answered: hung up instead of opening.
-          this.log.info(`${label}: the switch was turned off before the door opened; not opening (the call was ended)`);
+          // Turned off while the call was being answered: not opened.
+          this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
           return;
         }
         if (result) {

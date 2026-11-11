@@ -360,19 +360,60 @@ test('RingFeeder: the sound keeps time with the picture: silence until the call\
   const s = new RingSource('call', [sps, pps, idr(3000)]);
   const out = [];
   const f = new RingFeeder(s, 0, (b) => out.push(b), true, () => undefined);
-  for (let i = 0; i < 100; i++) t.mock.timers.tick(20); // 2 s of ringing without sound
+  const step = (sound) => { s.push(p); if (sound) s.pushAudio(sound); t.mock.timers.tick(20); }; // the picture keeps coming
+  for (let i = 0; i < 100; i++) step(); // 2 s of ringing without sound
   assert.ok(Math.abs(soundBytes(out) - (2000 - 200) * 8) <= 160, `silence up to 200 ms behind: ${soundBytes(out)}`);
   assert.ok(flvTags(out).filter((x) => x.type === 8).every((x) => x.data[0] === 0x70 && x.data.subarray(1).every((b) => b === 0xd5)), 'A-law silence');
-  for (let i = 0; i < 50; i++) { s.pushAudio(Buffer.alloc(160, 1)); t.mock.timers.tick(20); } // 1 s of the call's sound
+  for (let i = 0; i < 50; i++) step(Buffer.alloc(160, 1)); // 1 s of the call's sound
   assert.ok(Math.abs(soundBytes(out) - 3000 * 8) <= 2 * 160, `the sound starts where it belongs in time: ${soundBytes(out)}`);
   const first = flvTags(out).find((x) => x.type === 8 && x.data[1] === 1);
   assert.ok(Math.abs(first.ms - 2000) <= 20, `stamped at 2 s: ${first.ms}`);
-  for (let i = 0; i < 50; i++) t.mock.timers.tick(20); // 1 s gap
-  s.pushAudio(Buffer.alloc(160, 2));
-  t.mock.timers.tick(20);
+  for (let i = 0; i < 50; i++) step(); // 1 s gap
+  step(Buffer.alloc(160, 2));
   assert.ok(Math.abs(soundBytes(out) - 4000 * 8 - 160) <= 2 * 160, `after a gap, too: ${soundBytes(out)}`);
   f.stop();
   s.end();
+});
+
+test('RingFeeder: ffmpeg finds the sound at once, even after a large buffered keyframe', () => {
+  const s = new RingSource('call', [sps, pps, idr(34_000)]);
+  const out = [];
+  const f = new RingFeeder(s, 0, (b) => out.push(b), true, () => undefined);
+  const tags = flvTags(out);
+  assert.strictEqual(tags[0].type, 8, 'a piece of silence before any video');
+  f.stop();
+  s.end();
+});
+
+test('RingFeeder: sound delayed by a Wi-Fi stall is dropped, not appended late (picture and sound stay together)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 3_000_000 });
+  const s = new RingSource('call', [sps, pps, idr(3000)]);
+  const out = [];
+  const f = new RingFeeder(s, 0, (b) => out.push(b), true, () => undefined);
+  const step = (sound) => { s.push(p); if (sound) s.pushAudio(sound); t.mock.timers.tick(20); };
+  for (let i = 0; i < 50; i++) step(Buffer.alloc(160, 1)); // 1 s of sound
+  for (let i = 0; i < 50; i++) step(); // a 1 s stall
+  for (let i = 0; i < 50; i++) s.pushAudio(Buffer.alloc(160, 3)); // the stalled second arrives at once
+  for (let i = 0; i < 50; i++) step(Buffer.alloc(160, 1)); // and on as normal
+  const ahead = soundBytes(out) / 8 - 3000;
+  assert.ok(ahead <= 100, `the sound is at most 100 ms off the picture after the stall: ${ahead} ms`);
+  f.stop();
+  s.end();
+});
+
+test('RingFeeder: when the picture stops before the ring ends, the sound stops with it (the last fragment stays short)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 4_000_000 });
+  const s = new RingSource('call', [sps, pps, idr(3000)]);
+  const out = [];
+  let ended = false;
+  new RingFeeder(s, 0, (b) => out.push(b), true, () => (ended = true));
+  for (let i = 0; i < 50; i++) { s.push(p); s.pushAudio(Buffer.alloc(160, 1)); t.mock.timers.tick(20); }
+  for (let i = 0; i < 300; i++) { s.pushAudio(Buffer.alloc(160, 1)); t.mock.timers.tick(20); } // no more picture: the ring ends 5 s later
+  assert.ok(ended);
+  const sound = soundBytes(out) / 8;
+  // At most 250 ms past the last frame (it may run that far ahead while waiting for the picture),
+  // which the keyframe interval (3.75 s for 4 s fragments) leaves room for.
+  assert.ok(sound <= 1000 + 250 + 20, `the sound ends with the last frame (1 s): ${sound} ms`);
 });
 
 test('FlvWriter: an FLV header for video (and sound), and tags with 32-bit times', () => {

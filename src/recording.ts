@@ -28,8 +28,8 @@ import { RECORDING_MAX_MS } from './settings';
 
 /** How long a recording request waits for a ring's first picture. */
 const SOURCE_WAIT_MS = 10_000;
-/** How many video units a ring keeps for a recording that starts late (about 2 min). */
-const MAX_BUFFERED_UNITS = 4_000;
+/** How many video units a ring keeps (3 min at up to 33 a second; the intercom sends 8-17). */
+const MAX_BUFFERED_UNITS = 6_000;
 /** No video for this long ends the ring's recording (the intercom stopped sending). */
 export const SOURCE_SILENCE_MS = 5_000;
 /** An ended ring can still be fetched by a hub request this long after it ends. */
@@ -47,6 +47,10 @@ const ALAW_SILENCE = 0xd5;
 const AUDIO_SLACK_MS = 200;
 /** A gap in the sound longer than this is filled with silence before the next packet. */
 const AUDIO_GAP_MS = 60;
+/** Sound arriving more than this late (its place already filled with silence) is dropped. */
+const AUDIO_LATE_MS = 100;
+/** The sound never runs further ahead of the latest frame than this (it waits for the picture). */
+const AUDIO_AHEAD_MS = 250;
 /** How often the recording writes what has come in to ffmpeg. */
 const FEED_TICK_MS = 20;
 /** The most sound in one FLV tag (100 ms). */
@@ -219,6 +223,10 @@ export class RingFeeder {
     private readonly end: () => void,
   ) {
     this.flv = new FlvWriter(write, withAudio);
+    if (withAudio) {
+      // Sound first: ffmpeg looks for the streams in its first 32 KB, which one keyframe can fill.
+      this.silence(160);
+    }
     this.nextUnit = from;
     this.base = source.units[from]?.at ?? Date.now();
     while (this.nextAudio < source.audio.length && source.audio[this.nextAudio].at < this.base) {
@@ -291,36 +299,54 @@ export class RingFeeder {
     }
   }
 
+  /** Writes one piece of the intercom's sound at its place in time. */
+  private sound(a: Timed): void {
+    const pos = Math.round((a.at - this.base) * ALAW_BYTES_PER_MS);
+    if (pos > this.audioWritten + AUDIO_GAP_MS * ALAW_BYTES_PER_MS) {
+      this.silence(pos - this.audioWritten);
+    } else if (this.audioWritten > pos + AUDIO_LATE_MS * ALAW_BYTES_PER_MS) {
+      // Late (a Wi-Fi stall): its place is already silence; appending it would put all the
+      // sound after it behind the picture.
+      return;
+    }
+    this.flv.audio(a.data, this.audioWritten / ALAW_BYTES_PER_MS);
+    this.audioWritten += a.data.length;
+  }
+
   private tick(): void {
     if (this.done) {
       return;
     }
-    const { units, audio } = this.source;
-    while (this.nextUnit < units.length) {
-      const u = units[this.nextUnit++];
-      this.video(u.data, u.at);
+    const { units, audio, ended } = this.source;
+    // After the end, nothing past the last frame: the sound stops with the picture.
+    const lastAt = units.at(-1)?.at ?? this.base;
+    // Video and sound in the order they came, so ffmpeg gets both from the start.
+    for (;;) {
+      const u = units[this.nextUnit];
+      const a = this.withAudio ? audio[this.nextAudio] : undefined;
+      if (u && (!a || u.at <= a.at)) {
+        this.nextUnit++;
+        this.video(u.data, u.at);
+      } else if (a) {
+        if (!ended && a.at > lastAt + AUDIO_AHEAD_MS) {
+          break; // wait for the picture (if it doesn't come, the ring ends and this is dropped)
+        }
+        this.nextAudio++;
+        if (!ended || a.at <= lastAt) {
+          this.sound(a);
+        }
+      } else {
+        break;
+      }
     }
     if (this.withAudio) {
-      while (this.nextAudio < audio.length) {
-        const a = audio[this.nextAudio++];
-        const gap = Math.round((a.at - this.base) * ALAW_BYTES_PER_MS) - this.audioWritten;
-        if (gap > AUDIO_GAP_MS * ALAW_BYTES_PER_MS) {
-          this.silence(gap);
-        }
-        this.flv.audio(a.data, this.audioWritten / ALAW_BYTES_PER_MS);
-        this.audioWritten += a.data.length;
-      }
-      // No sound now (the ring before answering, or between the ring and the call): silence,
-      // a little behind, so a packet arriving late still fits.
-      const until = this.source.ended ? this.source.endedAt : Date.now();
-      this.silence(Math.round((until - this.base - AUDIO_SLACK_MS) * ALAW_BYTES_PER_MS) - this.audioWritten);
+      // No sound now (the ring before answering, or between the ring and the call): silence, a
+      // little behind, so a packet arriving a little late still fits.
+      const until = ended ? lastAt : Math.min(Date.now() - AUDIO_SLACK_MS, lastAt + AUDIO_AHEAD_MS);
+      this.silence(Math.round((until - this.base) * ALAW_BYTES_PER_MS) - this.audioWritten);
     }
-    if (this.source.ended) {
+    if (ended) {
       this.flushFrame();
-      if (this.withAudio) {
-        // The sound as long as the picture.
-        this.silence(Math.round(this.lastVideoMs * ALAW_BYTES_PER_MS) - this.audioWritten);
-      }
       this.stop();
       this.end();
     }

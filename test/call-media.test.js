@@ -425,3 +425,32 @@ test('doctor mode / Next Visitor: turned off while the call is being answered, t
   assert.ok(o.includes('c') && !o.includes('2d'), `answered, not opened: ${o.join(' ')}`);
   assert.strictEqual(o.at(-1), 'e', 'hung up');
 });
+
+test('recording: answering stops the preview\'s sound first, and the intercom\'s reply to it is not taken as the call\'s talk-back channel (2.3.0 review)', async () => {
+  const { call, client, sent } = setup('answer-on-view');
+  call.enablePreview({ hd: false, onVideo: () => undefined, keepRunning: () => true });
+  await ring(call);
+  await until(() => client.handlers.get(0x2003));
+  const asked = () => sent.some((f) => parseFrame(f).body.subarray(0, 4).equals(Buffer.from('00111802', 'hex')));
+  for (let i = 0; i < 4 && !asked(); i++) await until(asked); // after the video request's 2 s wait
+  assert.ok(asked(), 'the preview asked for sound');
+  await new Promise((r) => setTimeout(r, 20)); // the fake intercom replies with its own sound request
+  const c = call.activeCall();
+  assert.strictEqual(c.panelAudioHandle, undefined, 'a reply during the ring is not for the call');
+  await call.answer(c);
+  const bodies = sent.map((f) => parseFrame(f).body.toString('hex'));
+  const stop = bodies.findIndex((b) => b.startsWith('00119802'));
+  const answer = bodies.findIndex((b) => b.startsWith('000c'));
+  assert.ok(stop >= 0 && stop < answer, `sound stop, then answer: ${bodies.join(' ')}`);
+});
+
+test('doctor mode / Next Visitor: turned off while a live view is answering, the live view keeps the call (2.3.0 review)', async () => {
+  const { call, sent } = setup('answer-on-view');
+  await ring(call);
+  const c = call.activeCall();
+  c.mediaStarting = new Promise(() => undefined); // a live view is starting
+  const door = { name: 'Entrance', index: 0, outputIndex: 1, aptAddress: 'SB100001' };
+  assert.strictEqual(await call.openInCall(door, true, () => false), null);
+  assert.ok(!ops(sent).includes('e'), 'not hung up');
+  assert.ok(!ops(sent).includes('2d'), 'not opened');
+});
