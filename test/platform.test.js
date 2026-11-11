@@ -430,3 +430,18 @@ test('recording: the call listener reaches a camera made after it (first connect
   assert.deepStrictEqual(heard, [['video', 'call'], ['ended', 'call']]);
   assert.strictEqual(platform({ camera: true }).p.recordingListener(platform({ camera: true }).p.settings), undefined);
 });
+
+test('next visitor: turned off after the delay, while the call is being answered, still cancels (2.3.0)', async () => {
+  const { p, opened } = doctor({ nextVisitorSwitch: true });
+  const asked = [];
+  p.callHandler.openInCall = async (door, force, stillWanted) => {
+    nextOn(p).set(false); // turned off while answering
+    asked.push(stillWanted());
+    return null; // openInCall hangs up when no longer wanted
+  };
+  nextOn(p).set(true);
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepStrictEqual(asked, [false], 'asked again just before the open');
+  assert.deepStrictEqual(opened, []);
+});

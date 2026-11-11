@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.3.0-beta.3 (2026-11-11)
+
+### Added
+
+- **Sound in ring recordings**, when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. Where there is no sound (the ring before anyone answers, or the moment between the ring and the call), the clip is silent, and picture and sound stay together.
+- **An experiment: sound during the ring.** While recording, the ring preview also asks the intercom for its sound, without answering. With debug mode on, the `Ring preview:` line says `sound before answering: N packets` or `none`. If the 6741W sends it, rings get sound before anyone answers too.
+
+### Changed
+
+- **Recording timing:** each frame and piece of sound now keeps the time it arrived from the intercom (they go to ffmpeg together as one FLV stream). Before, frames were counted at 16 a second, but the intercom's rate varies (8 a second in some saved calls, 16 in others): at 8 a second, a clip played twice as fast.
+- **Doctor mode and Next Visitor: turning the switch off now cancels the open up to the moment the door is actually opened**, about 1 s later than before (the plugin answers the call first). If the call was already answered, it is hung up.
+
+### Fixed
+
+- Debug log: the line with the number of fragments sent now appears (it was written after the last fragment, and HomeKit stops reading at that point). `recording N closed by HomeKit (reason 3)`, logged after every recording, was misleading: it is hap-nodejs closing the stream itself 12 s after the end, because the hub doesn't confirm it; it now reads `recording N closed`.
+
+Tests: 162 in all, including a real ffmpeg run fed at the intercom's pace that checks the sound is silent before the call and present after, and as long as the picture. Also checked with a saved call (picture and sound, 33 s): 33.1 s of picture and 33.2 s of sound.
+
 ## 2.3.0-beta.2 (2026-11-11)
 
 ### Fixed
