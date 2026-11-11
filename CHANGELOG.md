@@ -4,13 +4,14 @@
 
 ### Added
 
-- **Recording rings with HomeKit Secure Video** (setting **Record rings**, `recording`, off by default). Each ring, answered or not, is saved as a clip in the Home app's camera timeline: from the intercom's first real picture (about 3 s after the button; an empty, black first picture is skipped) until the intercom stops sending video, at most 3 minutes. One clip per ring.
+- **Recording rings with HomeKit Secure Video** (setting **Record rings**, `recording`, off by default). Each ring, answered or not, is saved as a clip in the Home app's camera timeline: from the intercom's first real picture (about 3 s after the button; an empty, black first picture is skipped) until the call ends or the intercom stops sending video for 5 s, at most 3 minutes. One clip per ring; a hub that asks again during the ring gets the rest of it, not a second copy, and one that asks just after a short ring still gets it.
+  - Not yet for rings that doctor mode or the Next Visitor switch open: they answer before the intercom's first picture, and a call that only opens the door has no video.
   - HomeKit records when a camera's motion sensor is on, so the doorbell camera gets its own motion sensor, on for the time of the ring. The doorbell's ring sensor is unchanged.
   - The plugin follows the call and asks for the video during the ring (as the notification picture does), so it works with any **Answer the ring** setting, and with the notification picture on or off.
   - Needs a home hub, iCloud+, and **Stream & Allow Recording** in the camera's Recording Options in the Home app.
   - **No sound yet**: the clip has a silent sound track when the Home app records sound. Sound from the door is planned for the next beta.
 
-Tests: 148 in all, including a run of ffmpeg on intercom-like video that checks every fragment starts with a keyframe and is at most 4 s long. Also checked by hand with two of the intercom's real ring recordings.
+Tests: 157 in all, including a run of ffmpeg on intercom-like video that checks every fragment starts with a keyframe and is at most 4 s long. Also checked by hand by running two of the intercom's real ring recordings through the recorder.
 
 ## 2.2.0-beta.1 (2026-11-11)
 

@@ -265,12 +265,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
           : undefined,
       );
       // Recording (HomeKit Secure Video) hears every call's video and its end.
-      const recorder = this.camera?.recorder;
-      call.setCallListener(
-        recorder
-          ? { video: (c, unit) => recorder.onCallVideo(c, unit), ended: (c) => recorder.onCallEnded(c) }
-          : undefined,
-      );
+      call.setCallListener(this.recordingListener(s));
       this.callHandler = call;
       this.vipListener = listener;
       await listener.start().catch((e) => this.log.warn(`VIP listener start failed: ${(e as Error).message}`));
@@ -296,6 +291,20 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     (this.plannedReconnect ? this.log.debug : this.log.info).call(this.log, 'Comelit Intercom ready');
     this.plannedReconnect = false;
+  }
+
+  /**
+   * What hears every call's video and end for recording. It looks the camera up at each call:
+   * on the first connect the camera is only made after the call handler.
+   */
+  recordingListener(s: Settings): { video: (call: object, unit: Buffer) => void; ended: (call: object) => void } | undefined {
+    if (!s.camera || !s.recording) {
+      return undefined;
+    }
+    return {
+      video: (c, unit) => this.camera?.recorder?.onCallVideo(c, unit),
+      ended: (c) => this.camera?.recorder?.onCallEnded(c),
+    };
   }
 
   private async openCtppChannels(client: IconaBridgeClient, config: DeviceConfig): Promise<void> {
@@ -551,10 +560,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       const cam = this.accessoryFor('doorbell-camera', `${this.displayName} Camera`, keep, (a) => {
         a.configureController(controller);
         this.cameraConfigured = true;
+        this.camera?.recorder?.attached();
       });
       if (!this.cameraConfigured) {
         cam.configureController(controller);
         this.cameraConfigured = true;
+        this.camera.recorder?.attached();
       }
     }
     for (const camera of config.cameras) {

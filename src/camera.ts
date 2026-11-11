@@ -345,9 +345,10 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         (on) => this.controller.motionService?.updateCharacteristic(hap.Characteristic.MotionDetected, on),
         () => this.controller.recordingManagement?.operatingModeService.getCharacteristic(hap.Characteristic.RecordingAudioActive).value === 1,
         spawnFfmpeg(this.ffmpeg, log),
+        () => new hap.HDSProtocolError(hap.HDSProtocolSpecificErrorReason.NOT_ALLOWED),
       );
       // The camera's own motion sensor: the home hub records while it shows motion, which the
-      // recorder sets for a ring (Apple's hubs don't use the doorbell press as a trigger).
+      // recorder sets for a ring.
       options.sensors = { motion: true };
       options.recording = {
         delegate: this.recorder,

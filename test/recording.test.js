@@ -34,19 +34,30 @@ function fakeProcess() {
   const proc = new EventEmitter();
   proc.exitCode = null;
   proc.stdin = { written: [], ended: false, write(b) { proc.stdin.written.push(b); return true; }, end() { proc.stdin.ended = true; }, destroy() {} };
+  proc.signalCode = null;
+  proc.stdin = Object.assign(proc.stdin, { writable: true });
   proc.stdout = new EventEmitter();
-  proc.kill = () => { if (proc.exitCode === null) { proc.exitCode = 0; proc.emit('exit', 0); } };
+  // Like a real child process: 'exit', then 'close' a moment later.
+  proc.kill = () => {
+    if (proc.exitCode === null && proc.signalCode === null) {
+      proc.signalCode = 'SIGKILL';
+      setImmediate(() => { proc.emit('exit', null, 'SIGKILL'); setImmediate(() => proc.emit('close', null, 'SIGKILL')); });
+    }
+  };
   return proc;
 }
 
-function recorder({ active = true, audio = false } = {}) {
+function recorder({ active = true, audio = false, spawn } = {}) {
   const motion = [];
   const spawned = [];
   const r = new RingRecorder(quietLog(), (on) => motion.push(on), () => audio, (what, args) => {
     const proc = fakeProcess();
+    proc.on('error', () => undefined); // as spawnFfmpeg does
     spawned.push({ what, args, proc });
+    if (spawn) spawn(proc);
     return proc;
   });
+  r.attached();
   if (active) {
     r.updateRecordingActive(true);
     r.updateRecordingConfiguration(configuration());
@@ -108,56 +119,150 @@ test('recorder: off in the Home app, a ring changes nothing', () => {
   const call = {};
   for (const u of [sps, pps, idr(3000), p]) r.onCallVideo(call, u);
   assert.strictEqual(r.recording, false);
-  assert.deepStrictEqual(motion, []);
+  assert.deepStrictEqual(motion, [false], 'only the reset when attached');
 });
 
-test('recorder: motion at the first real picture (an empty black keyframe is skipped), off when the call ends', () => {
+const ring = (r, call) => { for (const u of [sps, pps, idr(3000), p]) r.onCallVideo(call, u); };
+
+test('recorder: motion off at startup, on at the first real picture (an empty black keyframe is skipped), off when the call ends', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { r, motion } = recorder();
+  assert.deepStrictEqual(motion, [false], 'a value cached from before a restart is cleared');
   const call = {};
   for (const u of [sps, pps, idr(1000), p]) r.onCallVideo(call, u);
-  assert.deepStrictEqual(motion, [], 'not on a 1 KB black keyframe');
+  assert.deepStrictEqual(motion, [false], 'not on a 1 KB black keyframe');
   for (const u of [sps, pps, idr(1500), idr(1500), p]) r.onCallVideo(call, u); // a keyframe in two slices
-  assert.deepStrictEqual(motion, [true]);
+  assert.deepStrictEqual(motion, [false, true]);
   r.onCallVideo({}, idr(3000)); // another call's video is ignored
   r.onCallEnded({});
-  assert.deepStrictEqual(motion, [true], 'only its own call ends it');
+  t.mock.timers.tick(3000);
+  r.onCallVideo(call, p);
+  t.mock.timers.tick(3000);
+  assert.deepStrictEqual(motion, [false, true], 'only its own call ends it');
   r.onCallEnded(call);
-  assert.deepStrictEqual(motion, [true, false]);
+  assert.deepStrictEqual(motion, [false, true, false]);
+  r.shutdown();
 });
 
-test('recorder: turning recording off in the Home app, or losing the intercom, ends the recording', () => {
+test('recorder: motion stays on at least 5 s for a short ring', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { r, motion } = recorder();
-  for (const u of [sps, pps, idr(3000), p]) r.onCallVideo('call', u);
-  r.updateRecordingActive(false);
-  assert.deepStrictEqual(motion, [true, false]);
-  r.updateRecordingActive(true);
-  for (const u of [sps, pps, idr(3000), p]) r.onCallVideo('call2', u);
-  r.reset();
-  assert.deepStrictEqual(motion, [true, false, true, false]);
+  ring(r, 'call');
+  r.onCallEnded('call');
+  assert.deepStrictEqual(motion, [false, true], 'still on right after');
+  t.mock.timers.tick(5000);
+  assert.deepStrictEqual(motion, [false, true, false]);
 });
+
+test('recorder: the recording ends when the intercom stops sending video, even with the call still on', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { r, motion } = recorder();
+  ring(r, 'call');
+  t.mock.timers.tick(4000);
+  r.onCallVideo('call', p);
+  t.mock.timers.tick(4000);
+  assert.deepStrictEqual(motion, [false, true], 'video still coming');
+  t.mock.timers.tick(1000);
+  assert.deepStrictEqual(motion, [false, true, false], '5 s without video');
+  ring(r, 'call2');
+  assert.deepStrictEqual(motion, [false, true, false, true], 'the next ring is recorded');
+  r.shutdown();
+});
+
+test('recorder: the 3-minute limit ends the recording and lets the next ring be recorded', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { r, motion } = recorder();
+  ring(r, 'call');
+  for (let i = 0; i < 180; i++) {
+    t.mock.timers.tick(1000);
+    r.onCallVideo('call', p);
+  }
+  assert.deepStrictEqual(motion, [false, true, false]);
+  ring(r, 'call2');
+  assert.deepStrictEqual(motion, [false, true, false, true]);
+  r.shutdown();
+});
+
+test('recorder: turning recording off in the Home app, or losing the intercom, ends the recording', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { r, motion } = recorder();
+  ring(r, 'call');
+  t.mock.timers.tick(6000);
+  r.onCallVideo('call', p);
+  r.updateRecordingActive(false);
+  assert.deepStrictEqual(motion, [false, true, false]);
+  r.updateRecordingActive(true);
+  ring(r, 'call2');
+  t.mock.timers.tick(6000);
+  r.onCallVideo('call2', p);
+  r.reset();
+  assert.deepStrictEqual(motion, [false, true, false, true, false]);
+});
+
+async function readAll(gen) {
+  const packets = [];
+  for await (const packet of gen) packets.push(packet);
+  return packets;
+}
+
+const fmp4 = (proc) => {
+  proc.stdout.emit('data', Buffer.concat([box('ftyp'), box('moov'), box('moof'), box('mdat')]));
+  proc.stdout.emit('data', Buffer.concat([box('moof'), box('mdat', 32)]));
+};
 
 test('recorder: the hub\'s request gets the ring from its first picture, then fragments, the last marked as last', async () => {
   const { r, spawned } = recorder({ audio: true });
   const call = {};
-  for (const u of [sps, pps, idr(3000), p]) r.onCallVideo(call, u);
-  const packets = [];
-  const reading = (async () => {
-    for await (const packet of r.handleRecordingStreamRequest(1)) packets.push(packet);
-  })();
+  ring(r, call);
+  const reading = readAll(r.handleRecordingStreamRequest(1));
   await tick();
   const { proc, args } = spawned[0];
   assert.ok(args.includes('libfdk_aac'), 'sound track with HomeKit audio on');
   assert.deepStrictEqual(proc.stdin.written, [sps, pps, idr(3000), p], 'the ring so far, from its keyframe');
   r.onCallVideo(call, nal(0x41, 2));
   assert.strictEqual(proc.stdin.written.length, 5, 'and the video as it comes');
-  proc.stdout.emit('data', Buffer.concat([box('ftyp'), box('moov'), box('moof'), box('mdat')]));
-  proc.stdout.emit('data', Buffer.concat([box('moof'), box('mdat', 32)]));
+  fmp4(proc);
   await tick();
   r.onCallEnded(call);
   assert.strictEqual(proc.stdin.ended, true, 'the end of the call ends ffmpeg\'s input');
-  proc.kill();
-  await reading;
+  proc.emit('exit', 0);
+  proc.emit('close', 0);
+  const packets = await reading;
   assert.deepStrictEqual(packets.map((x) => [x.data.length, x.isLast]), [[32, false], [32, false], [48, true]]);
+  r.shutdown();
+});
+
+test('recorder: a request that comes just after a short ring still gets it, once', async () => {
+  const { r, spawned } = recorder();
+  ring(r, 'call');
+  r.onCallEnded('call');
+  const reading = readAll(r.handleRecordingStreamRequest(1));
+  await tick();
+  const { proc } = spawned[0];
+  assert.strictEqual(proc.stdin.written.length, 4);
+  assert.strictEqual(proc.stdin.ended, true);
+  fmp4(proc);
+  proc.emit('close', 0);
+  assert.strictEqual((await reading).at(-1).isLast, true);
+  const abort = new AbortController();
+  const again = r.handleRecordingStreamRequest(2, abort.signal).next();
+  abort.abort();
+  await assert.rejects(again, /no ring to record/, 'not recorded twice');
+  r.shutdown();
+});
+
+test('recorder: a second request during the same ring starts from the latest keyframe, not the start', async () => {
+  const { r, spawned } = recorder();
+  ring(r, 'call');
+  const first = readAll(r.handleRecordingStreamRequest(1));
+  await tick();
+  for (const u of [sps, pps, idr(2500), p]) r.onCallVideo('call', u);
+  const second = readAll(r.handleRecordingStreamRequest(2));
+  await tick();
+  assert.deepStrictEqual(spawned[1].proc.stdin.written, [sps, pps, idr(2500), p]);
+  for (const { proc } of spawned) { fmp4(proc); proc.emit('close', 0); }
+  await Promise.all([first, second]);
+  r.shutdown();
 });
 
 test('recorder: a request with no ring within the wait, or aborted, fails without starting ffmpeg', async () => {
@@ -169,15 +274,33 @@ test('recorder: a request with no ring within the wait, or aborted, fails withou
   assert.strictEqual(spawned.length, 0);
 });
 
-test('recorder: HomeKit closing the stream stops ffmpeg', async () => {
+test('recorder: HomeKit closing the stream stops ffmpeg and ends the request', async () => {
   const { r, spawned } = recorder();
-  for (const u of [sps, pps, idr(3000), p]) r.onCallVideo('call', u);
-  const gen = r.handleRecordingStreamRequest(3);
-  const first = gen.next();
+  ring(r, 'call');
+  const reading = readAll(r.handleRecordingStreamRequest(3));
   await tick();
   r.closeRecordingStream(3, 5);
-  assert.notStrictEqual(spawned[0].proc.exitCode, null);
-  await first;
+  assert.strictEqual(spawned[0].proc.signalCode, 'SIGKILL');
+  await assert.rejects(reading, /no ring to record/, 'nothing was recorded yet');
+  r.shutdown();
+});
+
+test('recorder: ffmpeg that fails to start (no exit event, only error and close) ends the request', async () => {
+  const { r } = recorder({ spawn: (proc) => setImmediate(() => { proc.exitCode = -2; proc.emit('error', new Error('spawn ENOENT')); proc.emit('close', -2); }) });
+  ring(r, 'call');
+  await assert.rejects(readAll(r.handleRecordingStreamRequest(4)), /no ring to record/);
+  r.shutdown();
+});
+
+test('recorder: aborted by hap while waiting for ffmpeg\'s output, the request ends', async () => {
+  const { r } = recorder();
+  ring(r, 'call');
+  const abort = new AbortController();
+  const reading = readAll(r.handleRecordingStreamRequest(5, abort.signal));
+  await tick();
+  abort.abort();
+  await assert.rejects(reading, /no ring to record/);
+  r.shutdown();
 });
 
 test('RingSource: replays what it has to a late follower, then ends it', () => {
@@ -201,7 +324,8 @@ test('settings: recording follows calls even with answering off, and warns witho
   assert.ok(settingsWarnings(resolveSettings({ recording: true, camera: true, enableNotifications: false })).some((w) => /Listen for rings/.test(w)));
 });
 
-test('camera: with recording, HomeKit gets a motion sensor and recording management; without, neither', () => {
+test('camera: with recording, HomeKit gets a motion sensor and recording management; without, neither', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const make = (recording) => {
     const cam = new DoorbellCamera({ hap }, quietLog(), resolveSettings({ camera: true, recording, host: 'h', token: 't' }), () => undefined);
     new hap.Accessory('Door', hap.uuid.generate(`door-${recording}`)).configureController(cam.controller);
@@ -216,6 +340,7 @@ test('camera: with recording, HomeKit gets a motion sensor and recording managem
   for (const u of [sps, pps, idr(3000), p]) on.recorder.onCallVideo('call', u);
   assert.strictEqual(on.controller.motionService.getCharacteristic(hap.Characteristic.MotionDetected).value, true, 'the ring turns the camera\'s motion sensor on');
   on.recorder.onCallEnded('call');
+  t.mock.timers.tick(5000);
   assert.strictEqual(on.controller.motionService.getCharacteristic(hap.Characteristic.MotionDetected).value, false);
   on.shutdown();
   const off = make(false);

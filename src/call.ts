@@ -87,6 +87,8 @@ interface Waiter {
 const hex = (b: Buffer) => b.toString('hex');
 /** The ring preview stops this long after its first keyframe, or after PREVIEW_MAX_MS. */
 const PREVIEW_AFTER_KEYFRAME_MS = 500;
+/** While a ring is recorded, the preview stops after this long without video. */
+const PREVIEW_RECORDING_SILENCE_MS = 4_000;
 const PREVIEW_MAX_MS = 8_000;
 
 /** Ring preview settings: off unless set. `onVideo` gets the preview's H.264 units. */
@@ -679,6 +681,8 @@ export class RingPreview {
   private size?: string;
   private packets = 0;
   private timer?: NodeJS.Timeout;
+  /** While recording: when the preview stops at the latest. */
+  private recordingUntil = 0;
   private stopping?: Promise<void>;
   private readonly drop = (): void => undefined;
 
@@ -734,6 +738,12 @@ export class RingPreview {
       }
       this.options.onVideo(this.call, unit);
       this.handler.callVideo(this.call, unit);
+      if (this.recordingUntil) {
+        // Recording: stop once the intercom stops sending video, or at the time limit.
+        clearTimeout(this.timer);
+        const left = Math.min(PREVIEW_RECORDING_SILENCE_MS, this.recordingUntil - Date.now());
+        this.timer = setTimeout(() => void this.stop(left < PREVIEW_RECORDING_SILENCE_MS ? 'recording time limit' : 'the video stopped'), Math.max(0, left));
+      }
       if (type === 5) {
         // Slices of one keyframe come back to back; its size tells a real picture from an empty one.
         this.runBytes = this.lastType === 5 ? this.runBytes + unit.length : unit.length;
@@ -743,8 +753,10 @@ export class RingPreview {
           this.keyframeBytes = this.runBytes;
           clearTimeout(this.timer);
           if (this.options.keepRunning?.()) {
-            // Recording: keep the video coming until the call is answered or ends (or the cap).
-            this.timer = setTimeout(() => void this.stop('recording time limit'), RECORDING_MAX_MS);
+            // Recording: keep the video coming until the call is answered or ends, the video
+            // stops, or the time limit.
+            this.recordingUntil = Date.now() + RECORDING_MAX_MS;
+            this.timer = setTimeout(() => void this.stop('the video stopped'), PREVIEW_RECORDING_SILENCE_MS);
           } else {
             // A little more, so the frames after the keyframe arrive too.
             this.timer = setTimeout(() => void this.stop('got a picture'), PREVIEW_AFTER_KEYFRAME_MS);
