@@ -475,6 +475,8 @@ export class MediaSession extends EventEmitter {
   }
   private lastMedia = 0;
   private stats = { video: 0, audio: 0, other: 0, sent: 0 };
+  /** The intercom's sound, for the log: packets missing by sequence number, and the longest pause. */
+  private readonly sound = { lastSeq: -1, lastAt: 0, lost: 0, pauseMs: 0, pauseAt: 0 };
   /** When media started, the first video packet, the first SPS and the keyframes (for the log). */
   private startedAt = 0;
   private firstVideoAt = 0;
@@ -564,6 +566,7 @@ export class MediaSession extends EventEmitter {
     this.lastMedia = Date.now();
     if (rtp.payloadType === ALAW_PAYLOAD_TYPE) {
       this.stats.audio++;
+      this.noteSound(rtp.sequence);
       this.emit('audio', rtp.payload);
       this.handler.callAudio(this.call, rtp.payload);
       return;
@@ -585,6 +588,24 @@ export class MediaSession extends EventEmitter {
       this.emit('video', unit);
       this.handler.callVideo(this.call, unit);
     }
+  }
+
+  /** Counts sound packets that never came (gaps in the sequence numbers) and the longest pause. */
+  private noteSound(seq: number): void {
+    const s = this.sound;
+    const now = Date.now();
+    if (s.lastSeq >= 0) {
+      const gap = (seq - s.lastSeq - 1) & 0xffff;
+      if (gap > 0 && gap < 1000) {
+        s.lost += gap; // (a late, out-of-order packet would show as a large gap and is not counted)
+      }
+      if (now - s.lastAt > s.pauseMs) {
+        s.pauseMs = now - s.lastAt;
+        s.pauseAt = s.lastAt;
+      }
+    }
+    s.lastSeq = seq;
+    s.lastAt = now;
   }
 
   /** One line for the live view summary: what the intercom sent and when. */
@@ -660,6 +681,13 @@ export class MediaSession extends EventEmitter {
     clearTimeout(this.keyframeRetry);
     this.client.off('channel', this.onChannel);
     this.log?.debug(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets; talk-back sent=${this.stats.sent}`);
+    if (this.stats.audio > 0) {
+      const s = this.sound;
+      this.log?.debug(
+        `call: sound from the intercom: ${this.stats.audio} packets, ${s.lost} never arrived (${(s.lost * 0.02).toFixed(1)} s), ` +
+          `longest pause ${(s.pauseMs / 1000).toFixed(1)} s at ${((s.pauseAt - this.startedAt) / 1000).toFixed(1)} s`,
+      );
+    }
     if (!this.call.ended) {
       await this.voiceStatus(0).catch(() => undefined);
       if (this.audioHandle !== undefined) {

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.0-beta.5 (2026-11-11)
+
+Debug lines only, to find out two things from real rings; nothing else changes.
+
+### Added (debug log)
+
+- **When HomeKit gets a recording:** `recording N: HomeKit asked … s after the ring; the recording starts at … (the first picture)`, `recording N: first piece to HomeKit at …`, and the end of the recording with its length. To compare with the start and end times the Home app shows for the clip, which so far were a few seconds off, in both directions.
+- **How much of the door's sound arrives:** after each call, `call: sound from the intercom: N packets, M never arrived (… s), longest pause … s at … s`; and in the recording line, how many pieces of the intercom's sound went in, how much of the gaps was filled with silence, and how many arrived too late and were dropped. To see how often a Wi-Fi stall costs sound, before deciding whether to keep late sound.
+
+### Changed
+
+- The test with ffmpeg is skipped where ffprobe isn't installed (the Homebridge Raspberry Pi image has ffmpeg but not ffprobe).
+
 ## 2.3.0-beta.4 (2026-11-11)
 
 ### Fixed

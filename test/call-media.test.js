@@ -454,3 +454,19 @@ test('doctor mode / Next Visitor: turned off while a live view is answering, the
   assert.ok(!ops(sent).includes('e'), 'not hung up');
   assert.ok(!ops(sent).includes('2d'), 'not opened');
 });
+
+test('call log (debug): sound packets that never arrived are counted by sequence number, with the longest pause (2.3.0-beta.5)', async () => {
+  const { call, client } = setup('answer-on-view');
+  const lines = [];
+  call.log = { ...quietLog(), debug: (m) => lines.push(m) };
+  await ring(call);
+  const session = await call.startMedia(false);
+  const audio = (seq) => client.handlers.get(0x2002)(buildRtp({ marker: false, payloadType: 8, sequence: seq, timestamp: seq * 160, ssrc: 3 }, Buffer.alloc(160, 0xd5)));
+  audio(1);
+  audio(2);
+  await new Promise((r) => setTimeout(r, 120));
+  audio(10); // 7 never came, after a pause
+  await session.end('viewer closed');
+  const line = lines.find((l) => l.startsWith('call: sound from the intercom'));
+  assert.match(line, /3 packets, 7 never arrived \(0\.1 s\), longest pause 0\.1 s/);
+});
