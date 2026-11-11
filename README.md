@@ -236,11 +236,11 @@ How it works: during an unanswered ring the intercom refuses door opens (*busy*)
 For one expected visitor (a delivery, a cleaner, a guest), turn on the **Next Visitor switch** setting. It adds a **Next Visitor** switch to HomeKit, separate from doctor mode:
 
 - **Turn it on** by hand, by Siri, or from a Home automation. Renaming it in the Home app to something short (for example *Next Visitor*) makes it easy to say: "Hey Siri, turn on Next Visitor". The log says until when it stays on.
-- **The next ring opens the door**, the same way as doctor mode (answer, open, hang up, after **open after** seconds), and the switch **turns itself off**. Later rings ring normally.
+- **The next ring after you turn it on opens the door**, the same way as doctor mode (answer, open, hang up, after **open after** seconds), and the switch **turns itself off**. Later rings ring normally. Turning it off during those seconds cancels the open.
 - **If nobody rings**, it turns itself off after **Next Visitor: turn off after** minutes (2 hours by default).
 - **If the open doesn't go through** (the intercom isn't reachable, or someone answered on a phone first), the switch **stays on** for the next ring.
 - With **doctor mode** also on, a ring opens the door once, and the Next Visitor switch counts as used.
-- It keeps its state and its time limit across restarts. Log lines start with `Next visitor`.
+- It keeps its state and its time limit across restarts. Log lines start with `Next visitor` (`Doctor mode and Next visitor` with both on).
 
 ### Doorbell camera
 

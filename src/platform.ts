@@ -9,7 +9,7 @@ import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
-import { ComelitPlatformConfig, reconnectDelay, resolveSettings, Settings, settingsWarnings } from './config';
+import { callHandlerMode, ComelitPlatformConfig, reconnectDelay, resolveSettings, Settings, settingsWarnings } from './config';
 import { getDeviceConfig } from './configReader';
 import { ctppInitSequence } from './ctpp';
 import { openDoor } from './door';
@@ -241,10 +241,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (s.enableNotifications && client.getChannel('CTPP')) {
       const ourAddress = `${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`;
       let listener: VipEventListener | undefined = undefined;
-      // Doctor mode and the Next Visitor switch answer calls themselves, so they need calls
-      // followed even with answering off.
-      const opensItself = s.doctorMode !== 'off' || s.nextVisitorSwitch;
-      const mode = s.answerMode === 'off' && opensItself ? 'handshake' : s.answerMode;
+      const mode = callHandlerMode(s);
       const call = new CallHandler(mode, ourAddress, deviceConfig.aptAddress, (frame) => listener!.sendFrame(frame), this.log, {
         startTimeoutMs: s.mediaStartTimeoutMs,
         silenceMs: s.mediaSilenceMs,
@@ -418,10 +415,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
    */
   private doctorOpen(): void {
     const doctor = this.doctorModeActive();
-    if ((!doctor && !this.nextVisitorActive()) || this.doctorPending) {
+    // Whether the Next Visitor switch was on at the ring: only then can this ring use it up.
+    const next = this.nextVisitorActive();
+    if ((!doctor && !next) || this.doctorPending) {
       return;
     }
-    const label = doctor ? 'Doctor mode' : 'Next visitor';
+    const label = doctor && next ? 'Doctor mode and Next visitor' : doctor ? 'Doctor mode' : 'Next visitor';
     const door = this.deviceConfig?.doors[0];
     if (!door) {
       this.log.warn(`${label}: no door to open`);
@@ -432,6 +431,11 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.log.info(`${label}: opening '${door.name}' in ${delay / 1000} s`);
     setTimeout(async () => {
       try {
+        if (!doctor && !this.nextVisitorActive()) {
+          // Armed only by the Next Visitor switch, which was turned off during the delay: cancel.
+          this.log.info('Next visitor: the switch was turned off before the door opened; not opening');
+          return;
+        }
         const call = this.callHandler;
         if (!call?.activeCall()) {
           this.log.info(`${label}: the call is over (answered elsewhere or hung up); not opening`);
@@ -441,7 +445,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         if (result) {
           this.log.info(`${label}: door '${door.name}' opened`);
           [...this.lockAccessories.values()][0]?.showOpened();
-          if (this.nextVisitorActive()) {
+          if (next && this.nextVisitorActive()) {
             this.nextVisitor?.used();
           }
         } else {

@@ -184,6 +184,14 @@ export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconn
   return Math.min(s.reconnectDelayMs * 2 ** Math.min(failures, 20), Math.max(s.maxReconnectDelayMs, s.reconnectDelayMs));
 }
 
+/**
+ * How the call handler follows calls. Doctor mode and the Next Visitor switch answer calls
+ * themselves, so they need calls followed (handshake) even with answering off.
+ */
+export function callHandlerMode(s: Settings): Settings['answerMode'] {
+  return s.answerMode === 'off' && (s.doctorMode !== 'off' || s.nextVisitorSwitch) ? 'handshake' : s.answerMode;
+}
+
 /** Settings that don't work together, as log warnings. */
 export function settingsWarnings(s: Settings): string[] {
   const w: string[] = [...s.invalid];

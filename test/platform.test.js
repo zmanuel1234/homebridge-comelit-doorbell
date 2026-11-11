@@ -348,3 +348,35 @@ test('next visitor: a rebuild of the accessories stops the old time limit', () =
   assert.ok(p.nextVisitor.timer, 'new object keeps the limit');
   p.nextVisitor.dispose();
 });
+
+test('next visitor: turning it off during the delay cancels the open (review)', async () => {
+  const { p, opened } = doctor({ nextVisitorSwitch: true, doctorModeDelaySeconds: 0.05 });
+  nextOn(p).set(true);
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  nextOn(p).set(false);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.deepStrictEqual(opened, []);
+});
+
+test('next visitor: a ring from before it was turned on does not use it up (review)', async () => {
+  const { p, opened } = doctor({ doctorMode: 'switch', nextVisitorSwitch: true, doctorModeDelaySeconds: 0.05 });
+  p.doctorSwitch.accessory.context.on = true;
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' }); // doctor mode opens this one
+  nextOn(p).set(true); // for a guest coming later
+  await new Promise((r) => setTimeout(r, 120));
+  assert.strictEqual(opened.length, 1);
+  assert.strictEqual(nextOn(p).get(), true, 'still on for the guest');
+});
+
+test('next visitor: the log says which switch opened the door (review)', async () => {
+  const { p, ring } = doctor({ doctorMode: 'switch', nextVisitorSwitch: true });
+  const lines = [];
+  p.log = { info: (m) => lines.push(m), warn() {}, error() {}, debug() {} };
+  nextOn(p).set(true);
+  await ring();
+  assert.ok(lines.some((l) => l.startsWith("Next visitor: opening 'Entrance lock'")), lines.join('\n'));
+  p.doctorSwitch.accessory.context.on = true;
+  nextOn(p).set(true);
+  await ring();
+  assert.ok(lines.some((l) => l.startsWith("Doctor mode and Next visitor: opening")), lines.join('\n'));
+});

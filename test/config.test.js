@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { resolveSettings, settingsWarnings } = require('../dist/config');
+const { callHandlerMode, resolveSettings, settingsWarnings } = require('../dist/config');
 
 test('defaults', () => {
   const s = resolveSettings({ platform: 'ComelitIntercom', host: 'h', token: 't' });
@@ -147,3 +147,12 @@ test('Next Visitor settings: defaults, text, limits (2.1.1-beta.2)', () => {
   assert.strictEqual(bad.invalid.length, 1);
   assert.ok(settingsWarnings(resolveSettings({ nextVisitorSwitch: true, enableNotifications: false })).some((w) => /Next Visitor switch needs/.test(w)));
 });
+
+test('calls are followed (handshake) for doctor mode or the Next Visitor switch with answering off (review)', () => {
+  const { callHandlerMode } = require('../dist/config');
+  assert.strictEqual(callHandlerMode(resolveSettings({})), 'off');
+  assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true })), 'handshake');
+  assert.strictEqual(callHandlerMode(resolveSettings({ doctorMode: 'switch' })), 'handshake');
+  assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true, answerMode: 'answer-on-view' })), 'answer-on-view');
+});
+
