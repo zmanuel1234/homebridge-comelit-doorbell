@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.0-beta.4 (2026-11-11)
+
+### Fixed
+
+- **Recordings had no sound, even with Record audio on in the Home app.** The plugin read that setting from the wrong HomeKit service (the camera's operating mode instead of its recording management), so it always found it off. Since 2.3.0-beta.1; with beta.3 the clips should now get the door's sound during the call.
+
+### Found at the door (2.3.0-beta.3, 2026-11-11)
+
+- The 6741W sends **no sound before the call is answered**: four rings, `sound before answering: none`, and no reply to the request. Unanswered rings are recorded silent.
+- A Next Visitor ring with **open after** at 5 s is now recorded: one short piece, from the first picture to the open.
+
 ## 2.3.0-beta.3 (2026-11-11)
 
 ### Added

@@ -46,7 +46,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |
 | Doctor mode (always, or with its switch) | ✅ | |
 | Next Visitor switch | ❓ | New in 2.2.0: the same open as doctor mode; covered by the plugin's tests |
-| Recording rings (HomeKit Secure Video) | ✅ | 2.3.0-beta.2 at the door with a home hub: unanswered rings, calls and quick unlocks recorded, clip lengths matching the calls. Sound (beta.3): checked with recorded calls, not yet at the door |
+| Recording rings (HomeKit Secure Video) | ✅ | 2.3.0-beta.2 and beta.3 at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. Sound (beta.4): checked with recorded calls, not yet at the door; the intercom sends none before answering |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
@@ -270,7 +270,7 @@ Beta, new in 2.3.0-beta.1 (sound in beta.3). With **Record rings** (`recording`)
 
 - **What is recorded:** from the intercom's first picture, about 3 s after the button press, until the call ends or the intercom stops sending video for 5 s (at most 3 minutes). One clip per ring, whoever answers and however many phones there are. If the live view answers the call, the clip goes on with the live view's video.
 - **Rings that doctor mode or the Next Visitor switch open** are recorded only up to the open: the intercom's first picture comes about 3 s after the ring, so with **open after** at 2 s there is no clip, and at 5 s a short one. A call that only opens the door sends no video. The same goes for a ring answered within about 3 s by unlocking from HomeKit (`answer-on-open`).
-- **Sound** (new in 2.3.0-beta.3), when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. During the ring itself, before anyone answers, the plugin asks the intercom for its sound too; whether the 6741W sends it then is still to be seen (with debug mode on, the `Ring preview:` line says `sound before answering: N packets` or `none`). Where there is no sound, the clip is silent.
+- **Sound** (new in 2.3.0-beta.3, working from beta.4), when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. During the ring itself, before anyone answers, the plugin asks the intercom for its sound too, but the 6741W doesn't send it then (tested 2026-11-11; the `Ring preview:` line says `sound before answering: none`), so the ring part of a clip is silent.
 - **Timing:** each frame and piece of sound keeps the time it arrived from the intercom, so picture and sound stay together, and the clip plays at the right speed whatever the intercom's frame rate (it varies: 8 to 16 frames a second have been seen).
 - **How it works:** HomeKit records when a camera's motion sensor turns on, so the camera gets its own motion sensor, which turns on at the intercom's first real picture and off at the end of the call. The ring sensor is unchanged. The live view and the notification picture work as before.
 

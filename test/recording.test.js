@@ -549,3 +549,15 @@ test('camera: a camera Homebridge already had gets the recording services and mo
   assert.ok(!has(a, hap.Service.MotionSensor) && !has(a, hap.Service.CameraRecordingManagement), 'all gone with recording off');
   cam.shutdown();
 });
+
+test('camera: Record audio in the Home app reaches the recorder (beta.1-3 read it from the wrong service)', () => {
+  const cam = new DoorbellCamera({ hap }, quietLog(), resolveSettings({ camera: true, recording: true, host: 'h', token: 't' }), () => undefined);
+  new hap.Accessory('Door', hap.uuid.generate('door-audio')).configureController(cam.controller);
+  const audio = cam.controller.recordingManagement.recordingManagementService.getCharacteristic(hap.Characteristic.RecordingAudioActive);
+  assert.strictEqual(cam.recorder.audioActive(), false);
+  audio.setValue(1);
+  assert.strictEqual(cam.recorder.audioActive(), true, 'on in the Home app: the recording has sound');
+  audio.setValue(0);
+  assert.strictEqual(cam.recorder.audioActive(), false);
+  cam.shutdown();
+});
