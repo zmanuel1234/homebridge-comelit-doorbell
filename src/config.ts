@@ -31,6 +31,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   snapshotImage?: string;
   mediaCaptureDir?: string;
   ringPreview?: boolean;
+  recording?: boolean | string;
   doorVolume?: number | string;
   mediaStartTimeoutSeconds?: number;
   mediaSilenceSeconds?: number;
@@ -80,6 +81,8 @@ export interface Settings {
   mediaCaptureDir: string;
   /** Experimental: ask for the visitor's picture during the ring, before answering. */
   ringPreview: boolean;
+  /** HomeKit Secure Video: each ring is recorded (needs the doorbell camera, a home hub and iCloud+). */
+  recording: boolean;
   /** Gain on the intercom's audio to the Home app, in dB (0: as is). */
   doorVolumeDb: number;
   /** Hang up if no video or audio arrives this long after answering. */
@@ -201,6 +204,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     snapshotImage: text('snapshotImage'),
     mediaCaptureDir: text('mediaCaptureDir'),
     ringPreview: bool('ringPreview', true),
+    recording: bool('recording', false),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
     mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1, 60) * 1000,
     mediaSilenceMs: pos('mediaSilenceSeconds', 5, 1, 60) * 1000,
@@ -228,7 +232,8 @@ export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconn
  * themselves, so they need calls followed (handshake) even with answering off.
  */
 export function callHandlerMode(s: Settings): Settings['answerMode'] {
-  return s.answerMode === 'off' && (s.doctorMode !== 'off' || s.nextVisitorSwitch) ? 'handshake' : s.answerMode;
+  const follows = s.doctorMode !== 'off' || s.nextVisitorSwitch || (s.camera && s.recording);
+  return s.answerMode === 'off' && follows ? 'handshake' : s.answerMode;
 }
 
 /** Settings that don't work together, as log warnings. */
@@ -236,6 +241,12 @@ export function settingsWarnings(s: Settings): string[] {
   const w: string[] = [...s.invalid];
   if (s.doctorMode !== 'off' && !s.enableNotifications) {
     w.push("doctorMode needs 'Listen for rings' (enableNotifications); without rings it never opens.");
+  }
+  if (s.recording && !s.camera) {
+    w.push("Recording (HomeKit Secure Video) needs the doorbell camera ('camera'); it is off.");
+  }
+  if (s.recording && s.camera && !s.enableNotifications) {
+    w.push("Recording (HomeKit Secure Video) needs 'Listen for rings' (enableNotifications); without rings nothing is recorded.");
   }
   if (s.nextVisitorSwitch && !s.enableNotifications) {
     w.push("The Next Visitor switch needs 'Listen for rings' (enableNotifications); without rings it never opens.");

@@ -15,3 +15,6 @@ export const KEEPALIVE_INTERVAL_MS = 90_000;
 export const DEFAULT_RECONNECT_DELAY_S = 10;
 /** A planned reconnect (registration refresh) waits at most this long, so rings aren't missed in the gap. */
 export const PLANNED_RECONNECT_DELAY_MS = 2_000;
+
+/** The longest a HomeKit Secure Video recording of a ring may run, whatever the intercom does. */
+export const RECORDING_MAX_MS = 180_000;

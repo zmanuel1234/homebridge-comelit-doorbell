@@ -296,6 +296,13 @@
         "type": "boolean",
         "default": true,
         "description": "On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is there. Doesn't answer the call. Needs the doorbell camera, and Answer the ring (or doctor mode) not off."
+      },
+      "recording": {
+        "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
+        "title": "Record rings (HomeKit Secure Video)",
+        "type": "boolean",
+        "default": false,
+        "description": "Records each ring, from the intercom's first picture until it stops sending video, as a HomeKit Secure Video clip in the Home app. Needs a home hub, iCloud+, and the camera set to Stream & Allow Recording in the Home app. Beta: the clip has no sound yet."
       }
     },
     "required": [
@@ -322,7 +329,8 @@
         "camera",
         "answerMode",
         "talkBack",
-        "ringPreview"
+        "ringPreview",
+        "recording"
       ]
     },
     {

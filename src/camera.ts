@@ -10,6 +10,7 @@
  * and with talk-back on, HomeKit's microphone audio is turned back into A-law for the
  * intercom's speaker. The ffmpeg arguments follow homebridge-camera-ffmpeg.
  */
+import { RingRecorder, spawnFfmpeg } from './recording';
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
 import { createWriteStream, existsSync, promises as fs, WriteStream } from 'fs';
@@ -302,6 +303,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   private readonly talkers = new WeakMap<MediaSession, { who: ActiveSession; at: number }>();
   /** Calls already being recorded (mediaCaptureDir). */
   private readonly captured = new WeakSet<MediaSession>();
+  /** HomeKit Secure Video (setting `recording`): records each ring. */
+  readonly recorder?: RingRecorder;
   /** Calls whose video already feeds the keyframe cache. */
   private readonly fed = new WeakSet<MediaSession>();
 
@@ -336,6 +339,39 @@ export class DoorbellCamera implements CameraStreamingDelegate {
         },
       },
     };
+    if (settings.recording) {
+      this.recorder = new RingRecorder(
+        log,
+        (on) => this.controller.motionService?.updateCharacteristic(hap.Characteristic.MotionDetected, on),
+        () => this.controller.recordingManagement?.operatingModeService.getCharacteristic(hap.Characteristic.RecordingAudioActive).value === 1,
+        spawnFfmpeg(this.ffmpeg, log),
+        () => new hap.HDSProtocolError(hap.HDSProtocolSpecificErrorReason.NOT_ALLOWED),
+      );
+      // The camera's own motion sensor: the home hub records while it shows motion, which the
+      // recorder sets for a ring.
+      options.sensors = { motion: true };
+      options.recording = {
+        delegate: this.recorder,
+        options: {
+          prebufferLength: 4000,
+          mediaContainerConfiguration: [{ type: hap.MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
+          video: {
+            type: hap.VideoCodecType.H264,
+            parameters: { profiles: [hap.H264Profile.BASELINE, hap.H264Profile.MAIN, hap.H264Profile.HIGH], levels: [hap.H264Level.LEVEL3_1, hap.H264Level.LEVEL3_2, hap.H264Level.LEVEL4_0] },
+            // The intercom's picture is 640x480 at most; 1280x720 is offered as hubs may want it.
+            resolutions: [
+              [320, 240, 15],
+              [640, 360, 15],
+              [640, 480, 15],
+              [1280, 720, 15],
+            ],
+          },
+          audio: {
+            codecs: [{ type: hap.AudioRecordingCodecType.AAC_LC, samplerate: hap.AudioRecordingSamplerate.KHZ_16, audioChannels: 1 }],
+          },
+        },
+      };
+    }
     this.controller = new hap.DoorbellController(options);
     this.log.info(`Doorbell camera: ffmpeg ${this.ffmpeg}${settings.talkBack ? ', talk-back on' : ''}`);
     // The last visitor's picture is kept on disk too, so it survives a restart.
@@ -924,6 +960,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   /** Homebridge is shutting down: stop every view, so no ffmpeg is left running. */
   async shutdown(): Promise<void> {
     this.pending.clear();
+    this.recorder?.shutdown();
     await Promise.all([...this.active.keys()].map((id) => this.stopStream(id, 'Homebridge is shutting down')));
   }
 

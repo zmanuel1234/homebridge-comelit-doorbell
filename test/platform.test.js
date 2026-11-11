@@ -417,3 +417,16 @@ test("a door the intercom no longer has leaves the plugin's lock list (2.2.0 rev
   p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
   assert.strictEqual(p.lockAccessories.size, 1);
 });
+
+test('recording: the call listener reaches a camera made after it (first connect after a restart, 2.3.0)', () => {
+  const { p } = platform({ camera: true, recording: true });
+  const listener = p.recordingListener(p.settings);
+  assert.ok(listener, 'set even before the camera exists');
+  listener.video('call', Buffer.alloc(1)); // no camera yet: ignored
+  const heard = [];
+  p.camera = { recorder: { onCallVideo: (c) => heard.push(['video', c]), onCallEnded: (c) => heard.push(['ended', c]) } };
+  listener.video('call', Buffer.alloc(1));
+  listener.ended('call');
+  assert.deepStrictEqual(heard, [['video', 'call'], ['ended', 'call']]);
+  assert.strictEqual(platform({ camera: true }).p.recordingListener(platform({ camera: true }).p.settings), undefined);
+});

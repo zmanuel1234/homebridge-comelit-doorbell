@@ -370,3 +370,39 @@ test('ring preview: an empty (black) first keyframe is skipped, the next real on
   await until(() => client.closed.length === 2);
   assert.strictEqual(client.closed.length, 2, 'stopped after the real picture');
 });
+
+test('recording: the preview keeps running after the picture while a ring is recorded, and the listener hears the video and the end (2.3.0)', async () => {
+  const { call, client } = setup('handshake');
+  const heard = [];
+  call.setCallListener({ video: (c, u) => heard.push(['video', u.length]), ended: () => heard.push(['ended']) });
+  call.enablePreview({ hd: false, onVideo: () => undefined, keepRunning: () => true });
+  await ring(call);
+  await until(() => client.handlers.get(0x2003));
+  const send = (seq, payload) => client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: seq, timestamp: seq, ssrc: 2 }, payload));
+  send(1, Buffer.from([0x67, 1]));
+  send(2, Buffer.concat([Buffer.from([0x65]), Buffer.alloc(3000, 7)]));
+  send(3, Buffer.from([0x41, 1]));
+  await new Promise((r) => setTimeout(r, 1200));
+  assert.deepStrictEqual(client.closed, [], 'still receiving video for the recording');
+  send(4, Buffer.from([0x41, 2]));
+  assert.strictEqual(heard.filter((h) => h[0] === 'video').length, 4);
+  await release(call);
+  await until(() => client.closed.length === 2);
+  assert.deepStrictEqual(heard.at(-1), ['ended']);
+});
+
+test('recording: the preview stops once the intercom stops sending video (2.3.0)', async () => {
+  const { call, client } = setup('handshake');
+  call.enablePreview({ hd: false, onVideo: () => undefined, keepRunning: () => true });
+  await ring(call);
+  await until(() => client.handlers.get(0x2003));
+  const send = (seq, payload) => client.handlers.get(0x2003)(buildRtp({ marker: true, payloadType: 96, sequence: seq, timestamp: seq, ssrc: 2 }, payload));
+  send(1, Buffer.from([0x67, 1]));
+  send(2, Buffer.concat([Buffer.from([0x65]), Buffer.alloc(3000, 7)]));
+  send(3, Buffer.from([0x41, 1]));
+  await new Promise((r) => setTimeout(r, 3500));
+  assert.deepStrictEqual(client.closed, [], 'not yet');
+  await new Promise((r) => setTimeout(r, 1000));
+  assert.strictEqual(client.closed.length, 2, '4 s without video: channels closed');
+  assert.strictEqual(call.busy(), false);
+});
