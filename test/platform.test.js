@@ -380,3 +380,40 @@ test('next visitor: the log says which switch opened the door (review)', async (
   await ring();
   assert.ok(lines.some((l) => l.startsWith("Doctor mode and Next visitor: opening")), lines.join('\n'));
 });
+
+// ─── 2.2.0 review ───
+
+test('doctor mode: turning the switch off during the delay cancels the open (2.2.0 review)', async () => {
+  const { p, opened } = doctor({ doctorMode: 'switch', doctorModeDelaySeconds: 0.05 });
+  p.doctorSwitch.accessory.context.on = true;
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  p.doctorSwitch.accessory.context.on = false;
+  await new Promise((r) => setTimeout(r, 120));
+  assert.deepStrictEqual(opened, []);
+});
+
+test('doctor mode: one open per ring even if the ring repeats during the delay (2.2.0 review)', async () => {
+  const { p, opened } = doctor({ doctorMode: 'always', doctorModeDelaySeconds: 0.05 });
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  await new Promise((r) => setTimeout(r, 120));
+  assert.strictEqual(opened.length, 1);
+});
+
+test('only a ring opens the unlock window, not other intercom events (2.2.0 review)', () => {
+  const { p } = platform();
+  for (const eventType of ['missed_call', 'door_opened', 'something_else']) {
+    p.onEvent({ eventType, aptAddress: 'SB000002' });
+  }
+  assert.strictEqual(p.isUnlockAllowed(), false);
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  assert.strictEqual(p.isUnlockAllowed(), true);
+});
+
+test("a door the intercom no longer has leaves the plugin's lock list (2.2.0 review)", () => {
+  const { p } = platform();
+  p.discoverAccessories({ ...deviceConfig, doors: [...deviceConfig.doors, { index: 1, name: 'Back', aptAddress: 'SB100001', outputIndex: 2, isActuator: false }] });
+  assert.strictEqual(p.lockAccessories.size, 2);
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  assert.strictEqual(p.lockAccessories.size, 1);
+});

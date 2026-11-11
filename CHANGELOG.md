@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.2.0-beta.1 (2026-11-11)
+
+Fixes from an independent review of the whole plugin, before the stable 2.2.0. Includes everything from 2.1.1-beta.1 and beta.2 (no black notification picture; the Next Visitor switch).
+
+### Fixed
+
+- **Unlock allowed for** (`ringWindowSeconds`) could be turned into "any time" by a value that isn't a number: `false`, a blank text, `[]` or `"0x0"` were read as 0, without a warning. Numbers are now accepted only as numbers or plain digits; anything else is reported and the 90 s window is kept. Only an explicit `0` allows unlocking at any time, as documented.
+- **Doctor mode:** turning the Doctor Mode switch off during the seconds before the open now cancels the open, as it does for the Next Visitor switch.
+- **Settings above the config editor's maximum** are now reported and replaced by the default, like those below the minimum. A very large value could overflow Node's timers: for example a huge refresh interval made the registration renew in a tight loop.
+- **Invalid choices** (for example a typo in **Answer the ring**, `"answer-on-veiw"`) are now reported at startup instead of silently becoming the default. A path or text setting that isn't text no longer stops the plugin from loading; it is reported.
+- **No ffmpeg left running after a restart:** when Homebridge shuts down, every camera view is stopped and its ffmpeg killed.
+- A live view HomeKit prepared but never started is forgotten after a minute (a small, slow leak).
+- A door the intercom no longer lists is dropped from the plugin's own list of locks too.
+
+### Release mechanics
+
+- Publishing now stops if the GitHub release's **Set as a pre-release** box doesn't match the version (ticked for a `-beta` version, unticked for a stable one), so a stable release can't go to npm's `beta` tag by mistake, or a beta to `latest`.
+- npm in the publish workflow is pinned to major version 11.
+
+### Documentation
+
+- README: values outside the editor's limits or choices are reported; one intercom per bridge; turning a doctor mode or Next Visitor switch off during the delay cancels; the Next Visitor switch in the module table.
+
+Tests: 133 in all, including tests for three rules that had none (one open per ring during the delay, only a ring opens the unlock window, a stopped view kills its ffmpeg).
+
 ## 2.1.1-beta.2 (2026-11-10)
 
 ### Added

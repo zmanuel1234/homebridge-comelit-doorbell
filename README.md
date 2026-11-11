@@ -132,9 +132,9 @@ For the fewest taps when someone rings (with **Doorbell camera** on and **Answer
 
 ## Settings
 
-In the config editor, settings are grouped as below: the first three groups are open, the others are folded away. Talk-back and the notification picture only show with the doorbell camera on, and the doctor mode delay only with doctor mode on. JSON keys are shown in brackets.
+In the config editor, settings are grouped as below: the first three groups are open, the others are folded away. Talk-back and the notification picture only show with the doorbell camera on, and the doctor mode delay only with doctor mode or the Next Visitor switch on. JSON keys are shown in brackets.
 
-In JSON, numbers may also be written as text (`"subaddress": "3"`). A value that isn't valid, or below the minimum the config editor allows, is replaced by its default, and the log says so at startup (`… is not valid, using …`). `true`/`false` may also be written as text. For **Unlock allowed for** that means the 90 s window is kept: only an explicit `0` allows unlocking at any time. At startup the log also shows a one-line summary of the settings in use (`Settings: …`), without the token.
+In JSON, numbers may also be written as plain text (`"subaddress": "3"`). A value that isn't valid (not a number, outside the limits the config editor allows, or not one of its choices) is replaced by its default, and the log says so at startup (`… is not valid, using …`). `true`/`false` may also be written as text. For **Unlock allowed for** that means the 90 s window is kept: only an explicit `0` allows unlocking at any time. At startup the log also shows a one-line summary of the settings in use (`Settings: …`), without the token.
 
 ### Intercom
 
@@ -229,7 +229,7 @@ Like the door of a doctor's office: when someone rings, the plugin answers the c
 - **Always on** (`"doctorMode": "always"`): every ring opens the door until you change the setting. The log warns about it at startup.
 - **With a HomeKit switch** (`"doctorMode": "switch"`): adds a **Doctor Mode** switch. Every ring opens the door only while it is on, so you can turn it on by hand or with a HomeKit automation (for example during opening hours) and off again. It starts off and keeps its state across restarts.
 
-How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones should stop ringing when it answers (not yet observed). If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Log lines start with `Doctor mode:`.
+How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones should stop ringing when it answers (not yet observed). If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Turning the switch off during the seconds before the open cancels the open. Log lines start with `Doctor mode:`.
 
 ### Next visitor
 
@@ -345,6 +345,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 - Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 - Opening inside a call (`answer-on-open`, `answer-on-view`, doctor mode) uses the door's output, but an output of `0` is sent as `1`: tested only on a door with output 1.
+- One intercom per Homebridge bridge: for two intercoms, run each in its own child bridge (the accessories' IDs and the saved visitor picture aren't separate per intercom).
 - With **Listen for rings** off, each open sets up a door channel that is left open on the intercom until the next full reconnect (every **Full reconnect every** minutes).
 
 ## Development
@@ -374,10 +375,10 @@ CI runs the checks on Node 24 (the required `check` job) and the build and tests
 | `channels.ts` | Channel state and the message queue each channel reads from |
 | `ctpp.ts` | Registering on the CTPP channel after connecting |
 | `auth.ts`, `configReader.ts`, `push.ts` | Login with the token, reading doors and cameras from the intercom, keepalive |
-| `accessories/` | The HomeKit lock, ring sensor, doctor mode switch and (unused) RTSP camera placeholders |
+| `accessories/` | The HomeKit lock, ring sensor, doctor mode and Next Visitor switches, and (unused) RTSP camera placeholders |
 | `settings.ts` | Names and fixed timings |
 
-Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag. The release tag must be `v` followed by the version in `package.json` (e.g. `v2.1.0`, or `v2.1.0-beta.25` for a pre-release), or the publish stops.
+Releases are published to npm by GitHub Actions when a GitHub release is created. A pre-release is published under the `beta` tag. The release tag must be `v` followed by the version in `package.json` (e.g. `v2.1.0`, or `v2.1.0-beta.25` for a pre-release), and the release's **Set as a pre-release** box must be ticked exactly for a version with a `-`, or the publish stops.
 
 ## Credits
 

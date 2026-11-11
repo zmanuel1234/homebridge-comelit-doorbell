@@ -309,6 +309,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   private teardown(): void {
     this.shuttingDown = true;
+    void this.camera?.shutdown().catch(() => undefined);
     this.stopKeepalive();
     clearTimeout(this.reconnectTimer);
     this.vipListener?.stop().catch(() => undefined);
@@ -431,9 +432,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.log.info(`${label}: opening '${door.name}' in ${delay / 1000} s`);
     setTimeout(async () => {
       try {
-        if (!doctor && !this.nextVisitorActive()) {
-          // Armed only by the Next Visitor switch, which was turned off during the delay: cancel.
-          this.log.info('Next visitor: the switch was turned off before the door opened; not opening');
+        if (!((doctor && this.doctorModeActive()) || (next && this.nextVisitorActive()))) {
+          // The switch that armed this open was turned off during the delay: cancel.
+          this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
           return;
         }
         const call = this.callHandler;
@@ -547,6 +548,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     for (const camera of config.cameras) {
       const accessory = this.accessoryFor(`camera-${camera.id}`, camera.name || `Camera ${camera.id}`, keep, undefined, { camera });
       new CameraAccessory(this, accessory, camera);
+    }
+    // Locks of doors the intercom no longer has: drop them from the list too (they are removed below).
+    for (const uuid of [...this.lockAccessories.keys()]) {
+      if (!keep.has(uuid)) {
+        this.lockAccessories.delete(uuid);
+      }
     }
     const stale = [...this.accessories.values()].filter((a) => !keep.has(a.UUID));
     if (stale.length > 0) {

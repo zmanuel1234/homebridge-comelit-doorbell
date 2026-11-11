@@ -98,6 +98,18 @@ export interface Settings {
 
 const isSet = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
 
+/**
+ * A number from the config: a real number, or a number written as plain text ("90", "1.5").
+ * Anything else (true/false, blank text, lists, "0x10", "1e3") is NaN, so it is reported
+ * instead of being read as 0 or as something unexpected.
+ */
+function toNumber(v: unknown): number {
+  if (typeof v === 'number') {
+    return v;
+  }
+  return typeof v === 'string' && /^\s*-?(\d+(\.\d*)?|\.\d+)\s*$/.test(v) ? Number(v) : NaN;
+}
+
 export function resolveSettings(c: ComelitPlatformConfig): Settings {
   const invalid: string[] = [];
   /** A number from the config (numbers typed as text are accepted), or the fallback if it isn't valid. */
@@ -106,18 +118,41 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     if (!isSet(v)) {
       return fallback;
     }
-    const n = Number(v);
+    const n = toNumber(v);
     if (Number.isFinite(n) && ok(n)) {
       return n;
     }
     invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
     return fallback;
   };
-  if (String(c.videoCodec ?? '').trim() === 'copy') {
-    invalid.push("videoCodec: 'copy' can't show the intercom's video (it needs re-encoding), using libx264");
-  }
-  /** A number above zero and at least `min` (the editor's minimum), else the fallback, reported if it was set. */
-  const pos = (key: keyof ComelitPlatformConfig, fallback: number, min: number): number => num(key, fallback, (n) => n > 0 && n >= min);
+  /** A number above zero within the editor's limits, else the fallback, reported if it was set. */
+  const pos = (key: keyof ComelitPlatformConfig, fallback: number, min: number, max: number): number =>
+    num(key, fallback, (n) => n > 0 && n >= min && n <= max);
+  /** One of the editor's choices; anything else is reported and gives the fallback. */
+  const choice = <T extends string>(key: keyof ComelitPlatformConfig, options: readonly T[], fallback: T): T => {
+    const v = c[key];
+    if (!isSet(v)) {
+      return fallback;
+    }
+    const found = options.find((o) => o === v);
+    if (found === undefined) {
+      invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
+      return fallback;
+    }
+    return found;
+  };
+  /** Text (a path, a name); anything that isn't text is reported and gives ''. */
+  const text = (key: keyof ComelitPlatformConfig): string => {
+    const v = c[key];
+    if (!isSet(v)) {
+      return '';
+    }
+    if (typeof v !== 'string') {
+      invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using none`);
+      return '';
+    }
+    return v.trim();
+  };
   /** true/false, also written as text; anything else is reported and gives the fallback. */
   const bool = (key: keyof ComelitPlatformConfig, fallback: boolean): boolean => {
     const v = c[key];
@@ -131,43 +166,47 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     return fallback;
   };
   // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
-  const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0);
-  const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0) : NaN;
+  const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0 && n <= 600);
+  const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0 && n <= 15) : NaN;
+  const codec = text('videoCodec');
+  if (codec === 'copy') {
+    invalid.push("videoCodec: 'copy' can't show the intercom's video (it needs re-encoding), using libx264");
+  }
   return {
-    host: String(c.host ?? '').trim(),
+    host: text('host'),
     port: num('port', ICONA_BRIDGE_PORT, (n) => Number.isInteger(n) && n > 0 && n < 65536),
-    token: String(c.token ?? '').trim(),
+    token: text('token'),
     subaddress: Number.isNaN(subaddress) ? undefined : subaddress,
     enableNotifications: bool('enableNotifications', true),
-    reconnectDelayMs: num('reconnectDelay', DEFAULT_RECONNECT_DELAY_S, (n) => n >= 1) * 1000,
-    maxReconnectDelayMs: pos('maxReconnectDelay', 300, 1) * 1000,
-    leaseMode: c.leaseRefreshMode === 'reconnect' ? 'reconnect' : 'inplace',
-    leaseRefreshMs: pos('leaseRefreshMinutes', 2, 0.5) * 60_000,
-    leaseRecycleMs: pos('leaseRecycleMinutes', 50, 5) * 60_000,
+    reconnectDelayMs: num('reconnectDelay', DEFAULT_RECONNECT_DELAY_S, (n) => n >= 1 && n <= 300) * 1000,
+    maxReconnectDelayMs: pos('maxReconnectDelay', 300, 1, 3600) * 1000,
+    leaseMode: choice('leaseRefreshMode', ['inplace', 'reconnect'] as const, 'inplace'),
+    leaseRefreshMs: pos('leaseRefreshMinutes', 2, 0.5, 55) * 60_000,
+    leaseRecycleMs: pos('leaseRecycleMinutes', 50, 5, 55) * 60_000,
     ringWindowMs: ringWindow * 1000,
-    doorbellTriggerUrl: String(c.doorbellTriggerUrl ?? '').trim(),
+    doorbellTriggerUrl: text('doorbellTriggerUrl'),
     registerPush: bool('registerPush', false),
-    answerMode: (['handshake', 'answer-on-open', 'answer-on-view'] as const).find((m) => m === c.answerMode) ?? 'off',
-    doctorMode: (['switch', 'always'] as const).find((m) => m === c.doctorMode) ?? 'off',
+    answerMode: choice('answerMode', ['off', 'handshake', 'answer-on-open', 'answer-on-view'] as const, 'off'),
+    doctorMode: choice('doctorMode', ['off', 'switch', 'always'] as const, 'off'),
     doctorModeDelayMs: num('doctorModeDelaySeconds', 2, (n) => n >= 0 && n <= 30) * 1000,
     nextVisitorSwitch: bool('nextVisitorSwitch', false),
     nextVisitorMs: num('nextVisitorMinutes', 120, (n) => n >= 1 && n <= 1440) * 60_000,
     camera: bool('camera', false),
     talkBack: bool('talkBack', true),
-    videoQuality: c.videoQuality === 'hd' ? 'hd' : 'sd',
+    videoQuality: choice('videoQuality', ['sd', 'hd'] as const, 'sd'),
     // 'copy' can't work: the intercom's stream needs new timestamps and its picture restored to 4:3,
     // both done by ffmpeg filters, which need re-encoding.
-    videoCodec: ['', 'copy'].includes((c.videoCodec ?? '').trim()) ? 'libx264' : String(c.videoCodec).trim(),
-    ffmpegPath: (c.ffmpegPath ?? '').trim(),
-    snapshotImage: (c.snapshotImage ?? '').trim(),
-    mediaCaptureDir: String(c.mediaCaptureDir ?? '').trim(),
+    videoCodec: ['', 'copy'].includes(codec) ? 'libx264' : codec,
+    ffmpegPath: text('ffmpegPath'),
+    snapshotImage: text('snapshotImage'),
+    mediaCaptureDir: text('mediaCaptureDir'),
     ringPreview: bool('ringPreview', true),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
-    mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1) * 1000,
-    mediaSilenceMs: pos('mediaSilenceSeconds', 5, 1) * 1000,
-    videoRefreshMs: pos('videoRefreshSeconds', 15, 5) * 1000,
-    liveViewWaitMs: pos('liveViewWaitSeconds', 8, 2) * 1000,
-    lastVisitorMs: num('lastVisitorMinutes', 5, (n) => n >= 0) * 60_000,
+    mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1, 60) * 1000,
+    mediaSilenceMs: pos('mediaSilenceSeconds', 5, 1, 60) * 1000,
+    videoRefreshMs: pos('videoRefreshSeconds', 15, 5, 60) * 1000,
+    liveViewWaitMs: pos('liveViewWaitSeconds', 8, 2, 20) * 1000,
+    lastVisitorMs: num('lastVisitorMinutes', 5, (n) => n >= 0 && n <= 1440) * 60_000,
     invalid,
   };
 }
