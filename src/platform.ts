@@ -249,15 +249,26 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       });
       listener = new VipEventListener(client, deviceConfig, (ev) => this.onEvent(ev), this.log, call);
       call.attach(client);
+      // The ring preview gives the notification its picture, and recording its video before an answer.
+      // With the picture setting off, the preview runs for recording only.
+      const picture = s.ringPreview;
       call.enablePreview(
-        s.ringPreview && s.camera
+        s.camera && (s.ringPreview || s.recording)
           ? {
             hd: s.videoQuality === 'hd',
-            onVideo: (c, unit) => this.camera?.previewVideo(c, unit),
-            onStart: () => this.camera?.previewStarted(),
-            onEmptyKeyframe: () => this.camera?.previewEmptyKeyframe(),
-            onDone: () => this.camera?.previewDone(),
+            onVideo: (c, unit) => picture && this.camera?.previewVideo(c, unit),
+            onStart: () => picture && this.camera?.previewStarted(),
+            onEmptyKeyframe: () => picture && this.camera?.previewEmptyKeyframe(),
+            onDone: () => picture && this.camera?.previewDone(),
+            keepRunning: () => this.camera?.recorder?.recording === true,
           }
+          : undefined,
+      );
+      // Recording (HomeKit Secure Video) hears every call's video and its end.
+      const recorder = this.camera?.recorder;
+      call.setCallListener(
+        recorder
+          ? { video: (c, unit) => recorder.onCallVideo(c, unit), ended: (c) => recorder.onCallEnded(c) }
           : undefined,
       );
       this.callHandler = call;
@@ -327,6 +338,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.warn('Device disconnected — scheduling reconnect');
     }
     this.downSince ??= Date.now();
+    this.camera?.recorder?.reset();
     this.stopKeepalive();
     this.vipListener?.stop().catch(() => undefined);
     this.vipListener = undefined;

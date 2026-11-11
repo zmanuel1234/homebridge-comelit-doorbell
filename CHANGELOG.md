@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.0-beta.1 (2026-11-11)
+
+### Added
+
+- **Recording rings with HomeKit Secure Video** (setting **Record rings**, `recording`, off by default). Each ring, answered or not, is saved as a clip in the Home app's camera timeline: from the intercom's first real picture (about 3 s after the button; an empty, black first picture is skipped) until the intercom stops sending video, at most 3 minutes. One clip per ring.
+  - HomeKit records when a camera's motion sensor is on, so the doorbell camera gets its own motion sensor, on for the time of the ring. The doorbell's ring sensor is unchanged.
+  - The plugin follows the call and asks for the video during the ring (as the notification picture does), so it works with any **Answer the ring** setting, and with the notification picture on or off.
+  - Needs a home hub, iCloud+, and **Stream & Allow Recording** in the camera's Recording Options in the Home app.
+  - **No sound yet**: the clip has a silent sound track when the Home app records sound. Sound from the door is planned for the next beta.
+
+Tests: 148 in all, including a run of ffmpeg on intercom-like video that checks every fragment starts with a keyframe and is at most 4 s long. Also checked by hand with two of the intercom's real ring recordings.
+
 ## 2.2.0-beta.1 (2026-11-11)
 
 Fixes from an independent review of the whole plugin, before the stable 2.2.0. Includes everything from 2.1.1-beta.1 and beta.2 (no black notification picture; the Next Visitor switch).

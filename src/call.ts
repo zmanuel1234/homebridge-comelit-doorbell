@@ -20,6 +20,7 @@ import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
+import { RECORDING_MAX_MS } from './settings';
 import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
 
@@ -94,6 +95,8 @@ export interface RingPreviewOptions {
   onVideo: (call: object, unit: Buffer) => void;
   /** The preview has started (its channels are being opened). */
   onStart?: (call: object) => void;
+  /** Keep the video coming for the whole ring (recording), instead of stopping at the first picture. */
+  keepRunning?: () => boolean;
   /** The intercom sent an empty (black) keyframe: the real picture will come with the next one. */
   onEmptyKeyframe?: (call: object) => void;
   /** The preview has stopped, with or without a picture. */
@@ -136,6 +139,19 @@ export class CallHandler {
     return this.mode !== 'off';
   }
 
+  /** Who hears each call's video (ring preview or live view) and its end: the recorder. */
+  private listener?: { video: (call: object, unit: Buffer) => void; ended: (call: object) => void };
+  setCallListener(listener: { video: (call: object, unit: Buffer) => void; ended: (call: object) => void } | undefined): void {
+    this.listener = listener;
+  }
+  /** A call's video unit, for the listener. */
+  callVideo(call: object, unit: Buffer): void {
+    this.listener?.video(call, unit);
+  }
+  private callEnded(call: Call): void {
+    this.listener?.ended(call);
+  }
+
   /** Whether a ring starts a ring preview (calls are followed and the preview is on). */
   get previewOn(): boolean {
     return this.enabled && this.preview !== undefined;
@@ -170,6 +186,7 @@ export class CallHandler {
     for (const [key, call] of this.calls) {
       if (call.ended || (!call.media && now - call.born > CALL_MAX_AGE_MS)) {
         this.calls.delete(key);
+        this.callEnded(call);
       }
     }
     return [...this.calls.values()].pop();
@@ -217,6 +234,7 @@ export class CallHandler {
     }
     if (frame.opcode === Opcode.RELEASE || frame.flags & Flag.FIN) {
       call.ended = true;
+      this.callEnded(call);
       call.media?.end('the intercom ended the call');
       void call.preview?.stop(`the intercom ended the call${frame.body.length >= 3 && frame.opcode === Opcode.RELEASE ? ` (cause ${frame.body[2]})` : ''}`);
       return;
@@ -364,6 +382,7 @@ export class CallHandler {
       return;
     }
     call.ended = true;
+    this.callEnded(call);
     await this.send(call, Flag.DATA_FIN, Buffer.from([0x00, 0x0e, 0x00]), 'hang up 000e').catch(() => undefined);
   }
 
@@ -528,6 +547,7 @@ export class MediaSession extends EventEmitter {
     for (const unit of this.depacketizer.push(rtp)) {
       this.noteUnit(unit);
       this.emit('video', unit);
+      this.handler.callVideo(this.call, unit);
     }
   }
 
@@ -713,6 +733,7 @@ export class RingPreview {
         this.size = sps ? `${sps.width}x${sps.height}` : 'size unknown';
       }
       this.options.onVideo(this.call, unit);
+      this.handler.callVideo(this.call, unit);
       if (type === 5) {
         // Slices of one keyframe come back to back; its size tells a real picture from an empty one.
         this.runBytes = this.lastType === 5 ? this.runBytes + unit.length : unit.length;
@@ -721,8 +742,13 @@ export class RingPreview {
           this.keyframeAt = Date.now();
           this.keyframeBytes = this.runBytes;
           clearTimeout(this.timer);
-          // A little more, so the frames after the keyframe arrive too.
-          this.timer = setTimeout(() => void this.stop('got a picture'), PREVIEW_AFTER_KEYFRAME_MS);
+          if (this.options.keepRunning?.()) {
+            // Recording: keep the video coming until the call is answered or ends (or the cap).
+            this.timer = setTimeout(() => void this.stop('recording time limit'), RECORDING_MAX_MS);
+          } else {
+            // A little more, so the frames after the keyframe arrive too.
+            this.timer = setTimeout(() => void this.stop('got a picture'), PREVIEW_AFTER_KEYFRAME_MS);
+          }
         } else {
           // The camera wasn't ready: an empty (black) keyframe. Wait for the next one.
           this.emptyKeyframes.push(this.runBytes);
