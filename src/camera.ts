@@ -433,17 +433,20 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       this.visitorFile = path.join(storage, VISITOR_FILE);
       void this.loadVisitor();
     }
-    this.keyframes.onVisitor = (frame) => {
-      this.pictureWait?.resolve();
+    this.keyframes.onVisitor = (frame, _at, late) => {
+      if (!late) {
+        this.pictureWait?.resolve();
+      }
       void this.saveVisitor(frame);
     };
     this.keyframes.onEmptyKeyframe = (bytes) =>
       this.log.debug(`Doorbell camera: skipped an empty (black) keyframe of ${bytes} bytes; the next one becomes the visitor's picture`);
-    this.keyframes.onLeftover = (frame, gapMs) => {
+    this.keyframes.onLeftover = (frame, gapMs, bytes) => {
       this.log.debug(
-        `Doorbell camera: skipped the intercom's first keyframe (${frame.length} bytes, its old picture): a fresh one followed ${(gapMs / 1000).toFixed(1)} s later and becomes the visitor's picture`,
+        `Doorbell camera: skipped the intercom's first keyframe (${bytes} bytes, its old picture): a fresh one followed ${(gapMs / 1000).toFixed(1)} s later and becomes the visitor's picture`,
       );
-      if (this.settings.mediaCaptureDir && this.ringAt) {
+      // Saved for a ring's preview (not for a live view long after the ring).
+      if (this.settings.mediaCaptureDir && this.ringAt && Date.now() - this.ringAt < 30_000) {
         void this.saveSkippedPicture(this.ringAt, frame);
       }
     };

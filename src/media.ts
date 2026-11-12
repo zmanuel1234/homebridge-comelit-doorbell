@@ -155,13 +155,15 @@ export class KeyframeCache {
   private call?: unknown;
   private wantVisitor = false;
   /** Called when a call's first keyframe becomes the visitor's picture (to save it). */
-  onVisitor?: (frame: Buffer, at: number) => void;
+  onVisitor?: (frame: Buffer, at: number, late?: boolean) => void;
   /** Called when a call's keyframe is empty (black) and so is not taken as the visitor's picture. */
   onEmptyKeyframe?: (bytes: number) => void;
   /** Called when a call's first keyframe is skipped as the intercom's old picture (see LEFTOVER_GAP_MS). */
-  onLeftover?: (frame: Buffer, gapMs: number) => void;
+  onLeftover?: (frame: Buffer, gapMs: number, pictureBytes: number) => void;
   /** The call's first real keyframe, until it is known whether a fresh one follows (LEFTOVER_GAP_MS). */
-  private candidate?: { frame: Buffer; at: number; doneAt: number; timer: NodeJS.Timeout };
+  private candidate?: { frame: Buffer; at: number; doneAt: number; bytes: number; timer: NodeJS.Timeout };
+  /** A keyframe (even an empty one) already came in this call: only the call's very first can be the old picture. */
+  private sawKeyframe = false;
   /** See LEFTOVER_GAP_MS; 0 takes the first keyframe at once (tests). */
   leftoverGapMs = LEFTOVER_GAP_MS;
 
@@ -175,8 +177,10 @@ export class KeyframeCache {
   /** A call's video starts (the same call can be viewed more than once). */
   newCall(call: unknown): void {
     if (call !== this.call) {
-      this.settle();
+      // A candidate still pending belongs to the previous call: keep it, without counting it as this call's picture.
+      this.settle(true);
       this.call = call;
+      this.sawKeyframe = false;
       this.wantVisitor = true;
       // The previous call's keyframe must not start this call's video: its frames refer to
       // their own keyframe, and decoding them on top of another gives a garbled picture.
@@ -204,6 +208,8 @@ export class KeyframeCache {
       // (black) one is skipped: the next keyframe becomes the picture instead.
       const frame = this.keyframe();
       const now = Date.now();
+      const first = !this.sawKeyframe;
+      this.sawKeyframe = true;
       if (frame && this.idrBytes < MIN_PICTURE_BYTES) {
         this.onEmptyKeyframe?.(this.idrBytes);
       } else if (frame && this.candidate) {
@@ -211,14 +217,16 @@ export class KeyframeCache {
         const old = this.candidate;
         clearTimeout(old.timer);
         this.candidate = undefined;
-        this.onLeftover?.(old.frame, now - old.doneAt);
+        this.onLeftover?.(old.frame, now - old.doneAt, old.bytes);
         this.take(frame, this.at);
-      } else if (frame && this.leftoverGapMs <= 0) {
+      } else if (frame && (this.leftoverGapMs <= 0 || !first)) {
+        // Only the call's very first keyframe can be the old picture: one after an empty
+        // (black) keyframe is taken at once.
         this.take(frame, this.at);
       } else if (frame) {
         const timer = setTimeout(() => this.settle(), this.leftoverGapMs);
         timer.unref?.();
-        this.candidate = { frame, at: this.at, doneAt: now, timer };
+        this.candidate = { frame, at: this.at, doneAt: now, bytes: this.idrBytes, timer };
       }
     }
     if (type === 7) {
@@ -236,19 +244,20 @@ export class KeyframeCache {
   }
 
   /** No second keyframe came in time (or the video stopped): the first one is the visitor's picture. */
-  settle(): void {
+  settle(late = false): void {
     const c = this.candidate;
     if (c) {
       clearTimeout(c.timer);
       this.candidate = undefined;
-      this.take(c.frame, c.at);
+      this.take(c.frame, c.at, late);
     }
   }
 
-  private take(frame: Buffer, at: number): void {
+  /** `late`: the picture of a call that is already over (a new one started): kept, but no picture request was waiting for it. */
+  private take(frame: Buffer, at: number, late = false): void {
     this.visitorFrame = { frame, at };
     this.wantVisitor = false;
-    this.onVisitor?.(frame, at);
+    this.onVisitor?.(frame, at, late);
   }
 
   /** SPS + PPS + the latest keyframe, or undefined if none has arrived (within `maxAgeMs`). */

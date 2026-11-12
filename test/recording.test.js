@@ -639,11 +639,35 @@ test("recording: the intercom's old picture (a keyframe with another 1 s after i
   assert.strictEqual(s.skipped, undefined);
   assert.strictEqual(firstFrame(s), 5 + 4 + 2996);
   s.end();
-  // An empty (black) keyframe doesn't count; the ring ending decides at once.
+  // The ring ending decides at once.
   s = new RingSource('call', [sps, pps, idr(3000)]);
   s.end();
   await s.ready;
   assert.strictEqual(s.start, 0);
+  // A keyframe followed straight by SPS/PPS still counts as complete (review).
+  s = new RingSource('call', [sps, pps, idr(3000)]);
+  s.push(sps);
+  t.mock.timers.tick(900);
+  for (const u of [pps, idr(2500), sps]) s.push(u);
+  await s.ready;
+  assert.strictEqual(s.start, 3, 'the fresh keyframe, at the SPS/PPS that came right before it');
+  s.end();
+});
+
+test('recorder: after an empty (black) keyframe the recording starts at the first real one at once (2.3.3 review)', async () => {
+  const procs = [];
+  const r = new RingRecorder(quietLog(), () => undefined, () => false, () => { const pr = fakeProcess(); pr.on('error', () => undefined); procs.push(pr); return pr; });
+  r.attached();
+  r.updateRecordingActive(true);
+  r.updateRecordingConfiguration(configuration());
+  const call = { born: Date.now() };
+  for (const u of [sps, pps, idr(1000), p, sps, pps, idr(3000), p]) r.onCallVideo(call, u);
+  const first = r.handleRecordingStreamRequest(1).next();
+  await new Promise((res) => setTimeout(res, 50));
+  assert.strictEqual(procs.length, 1, 'no 1.5 s wait');
+  r.onCallEnded(call);
+  r.shutdown();
+  await Promise.race([first.catch(() => undefined), new Promise((res) => setTimeout(res, 200))]);
 });
 
 test('recorder: the request waits for the fresh keyframe and logs that the first was the old picture (2.3.3)', async () => {

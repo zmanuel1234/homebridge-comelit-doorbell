@@ -267,6 +267,19 @@ test("the intercom's old picture: an empty (black) keyframe doesn't count as the
   for (const x of [unit(7, 0, 1), unit(8, 0, 1), unit(5, 1000, 1), unit(1, 0, 1)]) k.push(x); // black
   t.mock.timers.tick(1000);
   for (const x of [unit(5, 3000, 2), unit(1, 0, 2)]) k.push(x); // the real picture 1 s later
-  t.mock.timers.tick(1500);
-  assert.strictEqual(k.visitor().at(-1), 2, 'the real picture, not skipped');
+  assert.strictEqual(k.visitor().at(-1), 2, 'taken at once: only the very first keyframe can be the old picture (review)');
+});
+
+test("the intercom's old picture: a candidate left pending by the previous call is kept, but doesn't answer this ring's picture requests (2.3.3 review)", (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { KeyframeCache } = require('../dist/media');
+  const k = new KeyframeCache();
+  const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
+  const calls = [];
+  k.onVisitor = (frame, at, late) => calls.push([frame.at(-1), late]);
+  k.newCall({});
+  for (const [ty, tag] of [[7, 1], [8, 1], [5, 1], [1, 1]]) k.push(u(ty, tag));
+  k.newCall({}); // the next call's video before the 1.5 s were up
+  assert.deepStrictEqual(calls, [[1, true]]);
+  assert.strictEqual(k.visitor().at(-1), 1);
 });
