@@ -35,7 +35,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 |---|---|---|
 | Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
 | Door release from HomeKit after a ring | ✅ | Refused outside the ring window. During a ring the plugin answers first (`answer-on-view`, `answer-on-open`) |
-| Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked about 6 s after the tap (it waits for a refusal that doesn't come) |
+| Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked at once (from 2.3.0-beta.6; before, about 6 s after the tap), and Locked again if the intercom refuses |
 | Visitor's picture in the ring notification | ✅ | Video before answering works; the first picture comes about 3 s after the ring, and HomeKit's picture requests wait for it (none timed out) |
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, about 15–16 frames per second |
@@ -268,10 +268,11 @@ What a call looks like:
 
 Beta, new in 2.3.0-beta.1 (sound in beta.3). With **Record rings** (`recording`) on, every ring is saved as a clip in the Home app's camera timeline, answered or not:
 
-- **What is recorded:** from the intercom's first picture, about 3 s after the button press, until the call ends or the intercom stops sending video for 5 s (at most 3 minutes). One clip per ring, whoever answers and however many phones there are. If the live view answers the call, the clip goes on with the live view's video.
+- **What is recorded:** the ring's first picture held still for 4 s (see below), then the ring from the intercom's first picture, about 3 s after the button press, until the call ends or the intercom stops sending video for 5 s (at most 3 minutes). One clip per ring, whoever answers and however many phones there are. If the live view answers the call, the clip goes on with the live view's video.
 - **Rings that doctor mode or the Next Visitor switch open** are recorded only up to the open: the intercom's first picture comes about 3 s after the ring, so with **open after** at 2 s there is no clip, and at 5 s a short one. A call that only opens the door sends no video. The same goes for a ring answered within about 3 s by unlocking from HomeKit (`answer-on-open`).
 - **Sound** (new in 2.3.0-beta.3, working from beta.4), when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. During the ring itself, before anyone answers, the plugin asks the intercom for its sound too, but the 6741W doesn't send it then (tested 2026-11-11; the `Ring preview:` line says `sound before answering: none`), so the ring part of a clip is silent.
 - **Timing:** each frame and piece of sound keeps the time it arrived from the intercom, so picture and sound stay together, and the clip plays at the right speed whatever the intercom's frame rate (it varies: 8 to 16 frames a second have been seen).
+- **The 4 s still at the start:** HomeKit expects every clip to start with 4 s from before the event (a "prebuffer"; cameras that record all the time have it) and dates the clip from the end of those 4 s. The intercom has no video before a ring, so each clip starts with the ring's first picture held still for 4 s: the Home app then shows the time of the first live picture. Without it (up to 2.3.0-beta.5), clips were shown 3.4–4.5 s late.
 - **How it works:** HomeKit records when a camera's motion sensor turns on, so the camera gets its own motion sensor, which turns on at the intercom's first real picture and off at the end of the call. The ring sensor is unchanged. The live view and the notification picture work as before.
 
 What you need:
@@ -305,11 +306,11 @@ Your config keeps working. What changes:
 
 ## Troubleshooting
 
-The normal log is short: the settings at startup, rings, door opens, doctor mode, one summary line per live view, and anything that goes wrong. Everything else (the connection's steps, registration renewals, the call's messages, the ring preview's details) appears with the child bridge's **debug mode** on; turn it on before testing or reporting a problem.
+The normal log is short: the settings at startup, rings, door opens, doctor mode, one summary line per live view, and anything that goes wrong. Everything else (the connection's steps, the call's messages, the ring preview's details) appears with the child bridge's **debug mode** on; turn it on before testing or reporting a problem. The routine registration renewals every 2 minutes and the planned reconnects are not logged one by one even then: one debug line an hour sums them up (`Connection, last 60 min: registration renewed 30 time(s), …`), and a renewal or reconnect that fails is logged when it happens. If the intercom answered none of the hour's renewals, that line becomes a warning at normal level.
 
 | Symptom | What to check |
 |---|---|
-| Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. With debug mode on, the log shows `Registration renewed in place` every refresh; otherwise look for reconnects. |
+| Rings stop reaching HomeKit after a few minutes | Use the default **Registration refresh interval** of 2 minutes. With debug mode on, the hourly `Connection, last … min: registration renewed …` line counts the renewals, and becomes a warning (shown without debug mode) if the intercom answered none of them; failures and unplanned reconnects are logged when they happen. |
 | No rings at all, but the phones ring | Make sure `subaddress` is a user of its own, not shared with a phone, and that `registerPush` is off. On the intercom's Extender page, the Homebridge user should appear under **Registered slaves**. |
 | Unlock shows as failed, or snaps back to Locked | Outside the ring window, this is expected (`Open refused` in the log). During a ring with **Answer the ring** `off`, the log shows `intercom refused (cause 8, busy…)`: see [answering the ring](#answering-the-ring). |
 | The lock shows No Response | The intercom has been unreachable for more than 30 s: see the `Reconnecting in … s` lines and check the IP address and the intercom's Wi-Fi. |

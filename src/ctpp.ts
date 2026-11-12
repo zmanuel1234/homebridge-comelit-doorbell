@@ -36,12 +36,14 @@ export async function ctppInitSequence(
   // that renewal right away keeps the connection from being dropped before the listener
   // starts.
   const calls: Buffer[] = [];
+  let answers = 0;
   for (let i = 0, reads = 0; i < 2 && reads < MAX_INIT_READS; i++, reads++) {
     const resp = await client.readResponse(channel, responseTimeoutMs);
     if (!resp || resp.length < 8) {
       log?.debug(`CTPP init response ${i + 1}: timeout (no data)`);
       continue;
     }
+    answers++;
     const prefix = resp.readUInt16LE(0);
     if (prefix === PREFIX_CALL_INIT) {
       log?.debug('CTPP init: a call arrived during the registration; keeping it for the listener');
@@ -60,6 +62,11 @@ export async function ctppInitSequence(
         log?.warn('CTPP init: fast renewal ACK failed (connection closing)');
       }
     }
+  }
+  if (answers === 0 && calls.length === 0) {
+    // At normal level, also when the connection's steps aren't logged (a planned reconnect):
+    // without an answer, rings may not come.
+    log?.warn('CTPP init: the intercom did not answer the registration; rings may not reach HomeKit until the next refresh');
   }
   for (const c of calls) {
     channel.responseQueue.enqueue(c);

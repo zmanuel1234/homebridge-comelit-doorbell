@@ -10,7 +10,7 @@
  * and with talk-back on, HomeKit's microphone audio is turned back into A-law for the
  * intercom's speaker. The ffmpeg arguments follow homebridge-camera-ffmpeg.
  */
-import { RingRecorder, spawnFfmpeg } from './recording';
+import { PREBUFFER_MS, RingRecorder, spawnFfmpeg } from './recording';
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
 import { createWriteStream, existsSync, promises as fs, WriteStream } from 'fs';
@@ -273,6 +273,19 @@ export function talkSdp(address: string, ipv6: boolean, port: number, srtp: Buff
   ].join('\r\n');
 }
 
+/**
+ * ffmpeg for talk-back: the Home app's microphone (AAC-ELD over SRTP, described by talkSdp on
+ * stdin) to the intercom's A-law. Low delay: no input buffering or probing (the SDP says what the
+ * stream is), no waiting to reorder late packets, and each piece passed on at once.
+ */
+export const TALK_BACK_ARGS = [
+  '-hide_banner', '-loglevel', 'error',
+  '-fflags', 'nobuffer', '-flags', 'low_delay', '-probesize', '512', '-analyzeduration', '0', '-max_delay', '0', '-reorder_queue_size', '0',
+  '-protocol_whitelist', 'pipe,udp,rtp,file,crypto',
+  '-f', 'sdp', '-c:a', 'libfdk_aac', '-i', 'pipe:0',
+  '-vn', '-c:a', 'pcm_alaw', '-ar', '8000', '-ac', '1', '-flush_packets', '1', '-f', 'alaw', 'pipe:1',
+];
+
 /** The last visitor's picture, saved in Homebridge's storage folder. */
 const VISITOR_FILE = 'comelit-last-visitor.h264';
 /**
@@ -368,7 +381,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       options.recording = {
         delegate: this.recorder,
         options: {
-          prebufferLength: 4000,
+          prebufferLength: PREBUFFER_MS,
           mediaContainerConfiguration: [{ type: hap.MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
           video: {
             type: hap.VideoCodecType.H264,
@@ -928,12 +941,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private startTalkBack(active: ActiveSession, p: PendingSession, media: MediaSession): void {
-    const talk = this.spawnProcess('talk-back', [
-      '-hide_banner', '-loglevel', 'error',
-      '-protocol_whitelist', 'pipe,udp,rtp,file,crypto',
-      '-f', 'sdp', '-c:a', 'libfdk_aac', '-i', 'pipe:0',
-      '-vn', '-c:a', 'pcm_alaw', '-ar', '8000', '-ac', '1', '-f', 'alaw', 'pipe:1',
-    ]);
+    const talk = this.spawnProcess('talk-back', TALK_BACK_ARGS);
     talk.stdin.end(talkSdp(p.address, p.ipv6, p.audioReturnPort, p.audioSrtp));
     let pending = Buffer.alloc(0);
     let frames = 0;

@@ -445,3 +445,65 @@ test('next visitor: turned off after the delay, while the call is being answered
   assert.deepStrictEqual(asked, [false], 'asked again just before the open');
   assert.deepStrictEqual(opened, []);
 });
+
+test('the lock shows Unlocked at once while the open is on its way, and Locked again if the intercom refuses (2.3.0-beta.6)', async () => {
+  const { p } = platform();
+  const lock = lockOf(p);
+  let finish;
+  p.openDoor = () => new Promise((resolve, reject) => { finish = { resolve, reject }; });
+  const opening = lock.triggerOpen();
+  assert.strictEqual(lock.lockState, 0, 'Unlocked before the intercom answers');
+  finish.reject(new Error('intercom refused (cause 8, busy)'));
+  await opening;
+  assert.strictEqual(lock.lockState, 1, 'Locked again after a refusal');
+});
+
+test('debug log: renewals every 2 min are summed up once an hour instead of logged each time; none answered is a warning (2.3.0-beta.6)', async () => {
+  const { p } = platform();
+  const lines = [];
+  const warnings = [];
+  p.log = { ...p.log, debug: (m) => lines.push(m), info: () => undefined, warn: (m) => warnings.push(m) };
+  p.deviceConfig = deviceConfig;
+  const client = { getChannel: () => ({}), sendBinary: async () => undefined };
+  await p.reregister(client);
+  await p.reregister(client);
+  assert.deepStrictEqual(lines, [], 'nothing per renewal');
+  // A reconnect in the hour: the old listener's count is kept.
+  let checks = 2;
+  p.vipListener = { takeRenewalChecks: () => { const n = checks; checks = 0; return n; }, stop: async () => undefined };
+  p.scheduleReconnect = () => undefined;
+  p.onClientDisconnect(true);
+  p.logRoutineSummary();
+  assert.match(lines.at(-1), /registration renewed 2 time\(s\), 2 renewal check\(s\) from the intercom answered, 0 planned reconnect\(s\)$/);
+  assert.deepStrictEqual(warnings, []);
+  await p.reregister(client);
+  p.logRoutineSummary();
+  assert.match(warnings[0], /renewed 1 time\(s\), 0 renewal check\(s\).*answered none of the renewals/, 'renewals with no answer at all are worth a warning');
+});
+
+test('talk-back ffmpeg starts without buffering, so the door hears the phone sooner (2.3.0-beta.6)', () => {
+  const { TALK_BACK_ARGS } = require('../dist/camera');
+  const j = TALK_BACK_ARGS.join(' ');
+  for (const opt of ['-fflags nobuffer', '-flags low_delay', '-probesize 512', '-analyzeduration 0', '-max_delay 0', '-reorder_queue_size 0', '-flush_packets 1']) {
+    assert.ok(j.includes(opt), opt);
+  }
+  assert.ok(j.indexOf('-fflags nobuffer') < j.indexOf('-i pipe:0'), 'input options before the input');
+});
+
+test('lock: an earlier open\'s relock doesn\'t show Locked while a second open is on its way (2.3.0-beta.6 review)', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { p } = platform();
+  const lock = lockOf(p);
+  p.openDoor = async () => ({ confirmed: true });
+  await lock.triggerOpen(); // relock due in 3 s
+  t.mock.timers.tick(1000);
+  let finish;
+  p.openDoor = () => new Promise((resolve) => { finish = resolve; });
+  const second = lock.triggerOpen();
+  t.mock.timers.tick(2500); // past the first open's relock
+  assert.strictEqual(lock.lockState, 0, 'still Unlocked during the second open');
+  finish({ confirmed: true });
+  await second;
+  t.mock.timers.tick(3000);
+  assert.strictEqual(lock.lockState, 1);
+});

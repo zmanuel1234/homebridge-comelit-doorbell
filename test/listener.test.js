@@ -89,3 +89,19 @@ test('off mode never takes part in the call', async () => {
   await listener.processMessage(frames.capabilities);
   assert.strictEqual(client.sent.filter((b) => b[0] === 0x40).length, 0);
 });
+
+test('debug log: the intercom\'s renewal checks and plain acknowledgements are answered and counted, not logged one by one; a ring still is (2.3.0-beta.6)', async () => {
+  const { client, listener } = setup();
+  const lines = [];
+  listener.log = { ...quietLog(), debug: (m) => lines.push(m) };
+  const msg = (prefix, action) => Buffer.concat([Buffer.from([prefix & 0xff, prefix >> 8, 0x01, 0x02, 0x03, 0x04, action >> 8, action & 0xff]), hex('ffffffff'), Buffer.from('SB000002\0')]);
+  const sentBefore = client.sent.length;
+  await listener.processMessage(msg(0x1860, 0x0010)); // renewal check
+  await listener.processMessage(msg(0x1800, 0x0000)); // acknowledgement
+  assert.strictEqual(client.sent.length - sentBefore, 2, 'the renewal check is still answered (ACK + FIN)');
+  assert.deepStrictEqual(lines, []);
+  assert.strictEqual(listener.takeRenewalChecks(), 1);
+  assert.strictEqual(listener.takeRenewalChecks(), 0, 'counted from the last summary');
+  await listener.processMessage(frames.invite);
+  assert.ok(lines.some((l) => l.startsWith('VIP msg: prefix=0x18c0')), 'a ring is still logged');
+});
