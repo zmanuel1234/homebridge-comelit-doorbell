@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.3-beta.1 (2026-11-12)
+
+Pre-release for a field test; the plugin behaves exactly like 2.3.2.
+
+### Found at the door
+
+- The intercom (6741W) starts a call with an **old picture**, left over from its previous call, before sending fresh ones. The plugin takes that as the visitor's picture: it shows in the ring notification, the camera tile and the 4 s still at the start of the recording (twice on 2026-11-12: a morning ring showed the night before, an afternoon ring showed the morning). The live video after it is fresh.
+
+### Added
+
+- Debug log of the keyframes at the start of each call, to decide how to skip the old picture: for the first 4 keyframes in the 15 s after the ring, when each arrived, how long after the one before, its size and a short fingerprint, and whether it is a copy of a keyframe of the previous call (`call: keyframe 1 3.00 s after the ring, … (a copy of the previous call's keyframe from 6.50 s after its ring)`). At the end of each call, one line about its last keyframe. Only with Homebridge debug mode on; nothing else changes.
+
 ## 2.3.2 (2026-11-12)
 
 Packaging only, for the Homebridge Verified checks; the plugin itself doesn't change.

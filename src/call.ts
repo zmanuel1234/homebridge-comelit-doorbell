@@ -15,6 +15,7 @@
  *
  * Every frame of a call is logged with the prefix `call:`.
  */
+import { KeyframeTrace } from './keyframes';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
@@ -155,8 +156,12 @@ export class CallHandler {
   setCallListener(listener: CallListener | undefined): void {
     this.listener = listener;
   }
+  /** Debug log of the keyframes at the start of each call (see keyframes.ts). */
+  private readonly keyframes = new KeyframeTrace((line) => this.log?.debug(line));
+
   /** A call's video unit, for the listener. */
   callVideo(call: object, unit: Buffer): void {
+    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit);
     this.listener?.video(call, unit);
   }
   /** A call's sound (A-law), for the listener. */
@@ -164,6 +169,7 @@ export class CallHandler {
     this.listener?.audio?.(call, data);
   }
   private callEnded(call: Call): void {
+    this.keyframes.ended(call);
     this.listener?.ended(call);
   }
 
