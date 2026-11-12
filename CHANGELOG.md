@@ -8,9 +8,9 @@
 
 ### Changed
 
-- **The lock shows Unlocked at once** when you unlock during a ring, instead of about 6 s later: the intercom confirms an open only by not refusing it. If it does refuse, or the open fails, the lock turns back to Locked at once.
+- **The lock shows Unlocked at once** when you unlock during a ring, instead of about 6 s later: the intercom confirms an open only by not refusing it. If it does refuse, or the open fails, the lock turns back to Locked at once. Two opens close together no longer show Locked in the middle of the second one.
 - **Talk-back with less delay:** the ffmpeg that turns the Home app's microphone into the intercom's sound no longer buffers its input, probes it, or waits to reorder late network packets. How much of the ~2 s heard at the door this saves is to be measured; the iPhone, HomeKit and the panel add their own delay.
-- **A quieter debug log:** the registration renewals every 2 minutes and the planned reconnects are no longer logged line by line (about 150 lines an hour); one debug line an hour sums them up. Failures are still logged when they happen. The intercom's plain acknowledgements outside a call aren't logged either.
+- **A quieter debug log:** the registration renewals every 2 minutes and the planned reconnects are no longer logged line by line (about 150 lines an hour); one debug line an hour sums them up (`Connection, last 60 min: …`). If the intercom answered none of the renewals in that hour, the line is a warning instead, since rings may not be reaching HomeKit. A registration the intercom doesn't answer at all is also a warning now, even on a planned reconnect. Other failures are still logged when they happen. The intercom's plain acknowledgements outside a call aren't logged either.
 
 ## 2.3.0-beta.5 (2026-11-11)
 

@@ -589,5 +589,5 @@ test('recorder log (debug): when HomeKit asked, when the first piece went, and t
   const text = lines.join('\n');
   assert.match(text, /recording 7: HomeKit asked 3\.\d s after the ring; the recording starts at [\d:.]+ \(3\.\d s after the ring, the first picture\)/);
   assert.match(text, /recording 7: first piece to HomeKit at [\d:.]+, \d+\.\d s after the recording starts/);
-  assert.match(text, /recording 7: sent the ring to HomeKit, 3 fragment\(s\), \d+\.\d s, ending at [\d:.]+, with sound: 1 pieces of the intercom's sound, \d+\.\d s of gaps filled with silence, 0 dropped as late/);
+  assert.match(text, /recording 7: sent the ring to HomeKit, 3 fragment\(s\), \d+\.\d s \(including the 4 s still at the start\), ending at [\d:.]+, with sound: 1 pieces of the intercom's sound, \d+\.\d s of gaps filled with silence, 0 dropped as late/);
 });

@@ -56,7 +56,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
    * Routine work that is no longer logged line by line (renewals every 2 min, planned
    * reconnects): counted, and summed up once an hour in the debug log.
    */
-  private readonly routine = { renewals: 0, reconnects: 0, since: Date.now() };
+  private readonly routine = { renewals: 0, checks: 0, reconnects: 0, since: Date.now() };
   private routineTimer?: NodeJS.Timeout;
   /** Door opens on their way, so a planned reconnect waits for them. */
   private opening = 0;
@@ -367,25 +367,32 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   /** The hourly debug line: how many renewals and planned reconnects since the last one. */
   logRoutineSummary(): void {
-    {
-      const r = this.routine;
-      const checks = this.vipListener?.takeRenewalChecks() ?? 0;
-      const minutes = Math.round((Date.now() - r.since) / 60_000);
-      this.log.debug(
-        `Connection, last ${minutes} min: registration renewed ${r.renewals} time(s), ${checks} renewal check(s) from the intercom answered, ` +
-          `${r.reconnects} planned reconnect(s); all fine (problems are logged when they happen)`,
-      );
-      r.renewals = 0;
-      r.reconnects = 0;
-      r.since = Date.now();
+    const r = this.routine;
+    const checks = r.checks + (this.vipListener?.takeRenewalChecks() ?? 0);
+    const minutes = Math.round((Date.now() - r.since) / 60_000);
+    const line =
+      `Connection, last ${minutes} min: registration renewed ${r.renewals} time(s), ${checks} renewal check(s) from the intercom answered, ` +
+      `${r.reconnects} planned reconnect(s)`;
+    if (r.renewals > 0 && checks === 0) {
+      // The intercom normally checks back after each renewal: none at all means it may have
+      // stopped routing rings to the plugin.
+      this.log.warn(`${line}: the intercom answered none of the renewals; if rings stop reaching HomeKit, restart the plugin`);
+    } else {
+      this.log.debug(line);
     }
+    r.renewals = 0;
+    r.checks = 0;
+    r.reconnects = 0;
+    r.since = Date.now();
   }
+
 
   private teardown(): void {
     this.shuttingDown = true;
     void this.camera?.shutdown().catch(() => undefined);
     this.stopKeepalive();
     clearInterval(this.routineTimer);
+    this.routineTimer = undefined;
     clearTimeout(this.reconnectTimer);
     this.vipListener?.stop().catch(() => undefined);
     this.vipListener = undefined;
@@ -396,14 +403,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   private onClientDisconnect(planned: boolean): void {
     this.plannedReconnect = planned;
-    if (planned) {
-      this.log.debug('Reconnecting to refresh the registration');
-    } else {
+    if (!planned) {
       this.log.warn('Device disconnected — scheduling reconnect');
     }
     this.downSince ??= Date.now();
     this.camera?.recorder?.reset();
     this.stopKeepalive();
+    // Keep the listener's count of renewal checks for the hourly summary.
+    this.routine.checks += this.vipListener?.takeRenewalChecks() ?? 0;
     this.vipListener?.stop().catch(() => undefined);
     this.vipListener = undefined;
     this.callHandler = undefined;
@@ -429,8 +436,11 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (failed) {
       this.failures++;
     }
-    // A planned refresh is routine; a reconnect after a drop or a failure is worth seeing.
-    (why === 'planned' ? this.log.debug : this.log.info).call(this.log, `Reconnecting in ${delay / 1000} s …`);
+    // A planned refresh is routine (counted for the hourly summary); a reconnect after a drop or
+    // a failure is worth seeing.
+    if (why !== 'planned') {
+      this.log.info(`Reconnecting in ${delay / 1000} s …`);
+    }
     this.reconnectTimer = setTimeout(() => {
       this.setupDevice().catch((e) => this.onSetupError('Reconnect', e));
     }, delay);

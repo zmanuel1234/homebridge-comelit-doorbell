@@ -761,7 +761,7 @@ export class RingRecorder implements CameraRecordingDelegate {
       fragments++;
       const snd = feeder.soundStats;
       this.log.debug(
-        `Doorbell camera: recording ${streamId}: sent the ring to HomeKit, ${fragments} fragment(s), ${feeder.seconds.toFixed(1)} s, ending at ${time(Date.now())}` +
+        `Doorbell camera: recording ${streamId}: sent the ring to HomeKit, ${fragments} fragment(s), ${feeder.seconds.toFixed(1)} s (including the ${PREBUFFER_MS / 1000} s still at the start), ending at ${time(Date.now())}` +
           (withAudio
             ? `, with sound: ${snd.packets} pieces of the intercom's sound, ${(snd.gapBytes / ALAW_BYTES_PER_MS / 1000).toFixed(1)} s of gaps filled with silence, ` +
               `${snd.late} dropped as late (${(snd.late * 0.02).toFixed(1)} s)`

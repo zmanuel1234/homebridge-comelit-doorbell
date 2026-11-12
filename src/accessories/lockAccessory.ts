@@ -14,6 +14,8 @@ export class LockAccessory {
   private lockState: number;
   private lastRefusedLog = 0;
   private opening = false;
+  /** When the lock shows Locked again after an open; a new open cancels it. */
+  private relockTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly platform: ComelitIntercomPlatform,
@@ -86,9 +88,13 @@ export class LockAccessory {
   /** Shows Unlocked for a moment after a door open that didn't come from this lock (doctor mode). */
   showOpened(): void {
     const { Characteristic } = this.platform;
+    if (this.opening) {
+      return; // this lock's own open is showing Unlocked already, and relocks itself
+    }
+    clearTimeout(this.relockTimer);
     this.lockState = Characteristic.LockCurrentState.UNSECURED;
     this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.UNSECURED);
-    setTimeout(() => {
+    this.relockTimer = setTimeout(() => {
       this.lockState = Characteristic.LockCurrentState.SECURED;
       this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.SECURED);
     }, SHOW_UNLOCKED_MS);
@@ -102,6 +108,7 @@ export class LockAccessory {
       this.service.updateCharacteristic(Characteristic.LockTargetState, Characteristic.LockTargetState.SECURED);
     };
     this.opening = true;
+    clearTimeout(this.relockTimer); // an earlier open's relock must not show Locked during this one
     // Shown as Unlocked at once: the intercom confirms an open only by not refusing it, which
     // takes a few seconds (and longer when the call must be answered first). A refusal or a
     // failure turns it back to Locked.
@@ -121,6 +128,6 @@ export class LockAccessory {
     } finally {
       this.opening = false;
     }
-    setTimeout(relock, SHOW_UNLOCKED_MS);
+    this.relockTimer = setTimeout(relock, SHOW_UNLOCKED_MS);
   }
 }

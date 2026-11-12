@@ -280,7 +280,7 @@ export function talkSdp(address: string, ipv6: boolean, port: number, srtp: Buff
  */
 export const TALK_BACK_ARGS = [
   '-hide_banner', '-loglevel', 'error',
-  '-fflags', 'nobuffer', '-flags', 'low_delay', '-probesize', '32', '-analyzeduration', '0', '-max_delay', '0', '-reorder_queue_size', '0',
+  '-fflags', 'nobuffer', '-flags', 'low_delay', '-probesize', '512', '-analyzeduration', '0', '-max_delay', '0', '-reorder_queue_size', '0',
   '-protocol_whitelist', 'pipe,udp,rtp,file,crypto',
   '-f', 'sdp', '-c:a', 'libfdk_aac', '-i', 'pipe:0',
   '-vn', '-c:a', 'pcm_alaw', '-ar', '8000', '-ac', '1', '-flush_packets', '1', '-f', 'alaw', 'pipe:1',
