@@ -40,7 +40,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, about 15–16 frames per second |
 | Sound from the door | ✅ | Turned up 12 dB by default; no delay |
-| Talk-back | ✅ | About 2 s of delay at the door up to 2.3.0-beta.5; noticeably less from 2.3.0 |
+| Talk-back | ✅ | About 2 s of delay at the door up to 2.3.0-beta.5; noticeably less from 2.3.0 (by ear at the door, not measured) |
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
 | Last visitor's picture | ✅ | Taken at the ring or the start of the call; kept across restarts |
 | Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |

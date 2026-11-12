@@ -10,19 +10,19 @@ Stable release after six pre-releases (2.3.0-beta.1 to beta.6), tested at the do
   - **Sound**, when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume**. The 6741W sends no sound before a call is answered, so unanswered rings are recorded silent.
   - **Each clip starts with the ring's first picture held still for 4 s.** HomeKit treats the first 4 s of a clip as coming from before the event and dates the clip from the end of them; with the still, the Home app shows the exact time of the first live picture.
   - Picture and sound keep the time they arrived from the intercom, so clips play at the right speed whatever its frame rate (8 to 16 frames a second have been seen).
-  - Rings that doctor mode or Next Visitor open are recorded only up to the open.
+  - Rings that doctor mode or Next Visitor open are recorded only up to the open: with **open after** at 2 s there is no clip (the first picture comes about 3 s after the ring), at 5 s a short one.
   - The doorbell camera gets its own motion sensor (HomeKit records when it is on), on for the time of the ring; it is added to existing cameras too, and removed when **Record rings** is turned off. The ring sensor is unchanged.
   - Needs a home hub, iCloud+, **Stream & Allow Recording** in the camera's Recording Options, and ffmpeg with `libfdk_aac` for sound (the bundled ffmpeg-for-homebridge has it).
 
 ### Changed
 
 - **The lock shows Unlocked at once** when you unlock during a ring, instead of about 6 s later; it turns back to Locked at once if the intercom refuses or the open fails.
-- **Talk-back with less delay:** the ffmpeg that sends the Home app's microphone to the intercom no longer buffers or probes its input.
+- **Talk-back with less delay:** the ffmpeg that sends the Home app's microphone to the intercom no longer buffers or probes its input, or waits to reorder late packets; by ear at the door, noticeably less than the ~2 s before.
 - **Doctor mode and Next Visitor: turning the switch off cancels the open up to the moment the door is actually opened.** If the plugin had already answered the call for the open, it hangs up; a live view showing the call keeps it.
 - **A quieter debug log:** the registration renewals every 2 minutes and the planned reconnects are summed up in one debug line an hour (`Connection, last 60 min: …`) instead of about 150 lines. It becomes a warning if the intercom answered none of the renewals; a registration the intercom doesn't answer at all is also a warning.
 - New debug lines for recordings (when HomeKit asked, when the recording starts and ends, how much of the door's sound went in) and for the sound of each call.
 
-### Known limitations
+### Known limits
 
 - A Wi-Fi stall between the intercom and Homebridge can cost a few seconds of the door's sound in a clip (in one tested call, about 5 s of a minute); the live view isn't affected.
 
