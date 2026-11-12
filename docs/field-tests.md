@@ -53,3 +53,25 @@ Five `ring-*.jpg` from the day, measured: three are normal 640x480 pictures of t
 So the black squares in the banners at 16:11 and 16:28 were most likely black pictures from the plugin, not iOS showing the banner early: at the start of a ring the intercom sometimes sends an empty, black first keyframe while its camera gets ready, and the ring preview took it as the visitor's picture. A black 640x240 keyframe is about 1 KB; a very dim real one at least 3 KB.
 
 Fixed in 2.1.1-beta.1: keyframes under 2 KB are skipped, and the picture requests wait for the next real keyframe (up to 7 s after the ring).
+
+## 2026-11-11: 2.3.0-beta.1 to beta.6, recording rings (HomeKit Secure Video)
+
+Same installation, with **Record rings** on and the camera's Recording Options set to Stream & Allow Recording, Record audio on.
+
+| Beta | Test | Result |
+|---|---|---|
+| beta.1 | Updating with an existing doorbell camera | No **Recording Options** in the Home app: hap-nodejs added the recording services to the cached camera but not the motion sensor that triggers them. Fixed in beta.2 (the plugin adds its own motion sensor). |
+| beta.2 | Unanswered rings, calls, a quick unlock, a Next Visitor ring (open after 5 s) | All recorded, one clip per ring (31 s and 51 s for the first two). One clip looked like two rings in one, with a gap: two rings close together, the second joining the first one's recording. Clips had no sound. |
+| beta.3 | The same, with sound | Still no sound: the plugin read **Record audio** from the wrong HomeKit service and always found it off. The ring preview's sound request got no reply: the 6741W sends **no sound before answering** (four rings). |
+| beta.4 | Answered call with sound | Sound in the clip from the moment the call was answered; then on and off for the last part of the call. The saved sound showed gaps of a second or more, matching Wi-Fi stalls between the intercom and the Pi (late sound was dropped to keep picture and sound together). |
+| beta.5 | Clip times against the new debug lines | Three rings: the Home app dated each clip **3.4–4.5 s after** the log's `the recording starts at`. Fits HomeKit treating the first 4 s of a clip as the prebuffer from before the event. |
+| beta.6 | Unanswered ring, two answered rings | Clip start times in the Home app **exact** (to the second) against the log, each clip opening with a few seconds of still picture. First piece to HomeKit 4.1 s after the recording starts (8.0 s on beta.5). |
+| beta.6 | Unlock during a ring | The lock tile showed Unlocked at once and Locked again a few seconds later; the door opened (`not refused`) about 4 s after the tap. |
+| beta.6 | Talk-back | Noticeably less delay at the panel than the ~2 s heard before (not measured). |
+| beta.6 | Sound in answered calls | In the clips. In one call of about a minute, 260 pieces (5.2 s) of the door's sound arrived too late and were dropped, and 2.6 s were silence-filled; in a shorter call, 39 pieces (0.8 s). Kept as a known limitation for 2.3.0. |
+| beta.6 | First hour after the update | `Connection, last 60 min` debug line: 28 renewals, all 28 answered, 1 planned reconnect; no warnings. |
+
+Other findings:
+
+- **Next Visitor with a HomeKit arrival automation** ("anyone arrives" turns the switch on): it turned on for every arrival of a member of the home, including while another member was already in, and the arriving member was let in on their ring about a minute later. The Home app on a phone that hadn't reconnected after a bridge restart still showed the switch off while it was on; the log was right.
+- A test run of the automation from the Home app ("Test This Automation") left the switch on, and the next ring was let in.
