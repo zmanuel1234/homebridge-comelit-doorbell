@@ -15,7 +15,7 @@
  *
  * Every frame of a call is logged with the prefix `call:`.
  */
-import { KeyframeTrace } from './keyframes';
+import { KeyframeTrace, type VideoSource } from './keyframes';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
@@ -160,8 +160,8 @@ export class CallHandler {
   private readonly keyframes = new KeyframeTrace((line) => this.log?.debug(line));
 
   /** A call's video unit, for the listener. */
-  callVideo(call: object, unit: Buffer): void {
-    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit);
+  callVideo(call: object, unit: Buffer, source: VideoSource = 'live view'): void {
+    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit, source);
     this.listener?.video(call, unit);
   }
   /** A call's sound (A-law), for the listener. */
@@ -834,7 +834,7 @@ export class RingPreview {
         this.size = sps ? `${sps.width}x${sps.height}` : 'size unknown';
       }
       this.options.onVideo(this.call, unit);
-      this.handler.callVideo(this.call, unit);
+      this.handler.callVideo(this.call, unit, 'ring preview');
       if (this.recordingUntil) {
         // Recording: stop once the intercom stops sending video, or at the time limit.
         clearTimeout(this.timer);
