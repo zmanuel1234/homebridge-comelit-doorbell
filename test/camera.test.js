@@ -350,3 +350,22 @@ test('stopping a view kills its ffmpeg; shutdown stops every view (2.2.0 review)
   assert.strictEqual(cam.active.size, 0);
   assert.deepStrictEqual(killed, [['video', 'SIGKILL'], ['video', 'SIGKILL']]);
 });
+
+test('short-lived live view files are kept in Homebridge\'s storage folder, and leftovers are cleared at startup (2.3.1)', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-storage-'));
+  const work = path.join(dir, 'comelit-doorbell');
+  fs.mkdirSync(work);
+  fs.writeFileSync(path.join(work, 'last-visitor-view-abcd1234.jpg'), 'x');
+  fs.writeFileSync(path.join(work, 'still.jpg'), 'x');
+  const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't' });
+  const cam = new DoorbellCamera({ hap, user: { storagePath: () => dir } }, quietLog(), settings, () => undefined);
+  for (let i = 0; i < 100 && fs.existsSync(path.join(work, 'last-visitor-view-abcd1234.jpg')); i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(!fs.existsSync(path.join(work, 'last-visitor-view-abcd1234.jpg')), 'a leftover per-view picture is removed');
+  assert.ok(fs.existsSync(path.join(work, 'still.jpg')), 'other files are left alone');
+  const file = await cam.workFile('last-visitor-view-0000.jpg');
+  assert.strictEqual(path.dirname(file), work);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

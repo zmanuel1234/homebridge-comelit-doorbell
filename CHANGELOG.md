@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.1 (2026-11-12)
+
+### Changed
+
+- **No more files in the system's temporary folder (`/tmp`).** The pictures the live view loops when there is no call (the last visitor's, and the dark placeholder when the built-in picture is missing) are now written to a `comelit-doorbell` folder inside Homebridge's storage folder (usually `/var/lib/homebridge/comelit-doorbell`), as Homebridge asks of verified plugins. Copies left behind if Homebridge stops during a live view are cleared at the next start. Nothing else changes.
+- CI also runs the tests on Node.js 24.
+
 ## 2.3.0 (2026-11-12)
 
 Stable release after six pre-releases (2.3.0-beta.1 to beta.6), tested at the door on 2026-11-11. Everything below is compared with 2.2.0; the pre-release entries further down give the details. No setting was renamed or removed, and nothing changes until you turn on **Record rings**.
