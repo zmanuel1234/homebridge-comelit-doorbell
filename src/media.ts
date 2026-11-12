@@ -130,6 +130,15 @@ export function nalType(unit: Buffer): number {
  */
 export const MIN_PICTURE_BYTES = 2_000;
 
+/**
+ * The 6741W starts a call with two keyframes 1 s apart: the first is an old picture it kept from
+ * its previous call (encoded again), the second the first fresh one (seen at the door in
+ * 2.3.3-beta.1: 1.00 s apart on every ring, then one every 3-4 s). So a keyframe followed by
+ * another within this time is the old picture, and the second one becomes the ring's picture.
+ * With no second keyframe in time, the first is taken after all (as before 2.3.3).
+ */
+export const LEFTOVER_GAP_MS = 1_500;
+
 export class KeyframeCache {
   private sps?: Buffer;
   private pps?: Buffer;
@@ -149,6 +158,12 @@ export class KeyframeCache {
   onVisitor?: (frame: Buffer, at: number) => void;
   /** Called when a call's keyframe is empty (black) and so is not taken as the visitor's picture. */
   onEmptyKeyframe?: (bytes: number) => void;
+  /** Called when a call's first keyframe is skipped as the intercom's old picture (see LEFTOVER_GAP_MS). */
+  onLeftover?: (frame: Buffer, gapMs: number) => void;
+  /** The call's first real keyframe, until it is known whether a fresh one follows (LEFTOVER_GAP_MS). */
+  private candidate?: { frame: Buffer; at: number; doneAt: number; timer: NodeJS.Timeout };
+  /** See LEFTOVER_GAP_MS; 0 takes the first keyframe at once (tests). */
+  leftoverGapMs = LEFTOVER_GAP_MS;
 
   /** Restores a visitor's picture saved before a restart (kept only if no newer one). */
   restoreVisitor(frame: Buffer, at: number): void {
@@ -160,6 +175,7 @@ export class KeyframeCache {
   /** A call's video starts (the same call can be viewed more than once). */
   newCall(call: unknown): void {
     if (call !== this.call) {
+      this.settle();
       this.call = call;
       this.wantVisitor = true;
       // The previous call's keyframe must not start this call's video: its frames refer to
@@ -187,12 +203,22 @@ export class KeyframeCache {
       // The call's first real keyframe is complete (its slices came back to back). An empty
       // (black) one is skipped: the next keyframe becomes the picture instead.
       const frame = this.keyframe();
+      const now = Date.now();
       if (frame && this.idrBytes < MIN_PICTURE_BYTES) {
         this.onEmptyKeyframe?.(this.idrBytes);
+      } else if (frame && this.candidate) {
+        // A second keyframe right after the first: the first was the intercom's old picture.
+        const old = this.candidate;
+        clearTimeout(old.timer);
+        this.candidate = undefined;
+        this.onLeftover?.(old.frame, now - old.doneAt);
+        this.take(frame, this.at);
+      } else if (frame && this.leftoverGapMs <= 0) {
+        this.take(frame, this.at);
       } else if (frame) {
-        this.visitorFrame = { frame, at: this.at };
-        this.wantVisitor = false;
-        this.onVisitor?.(frame, this.at);
+        const timer = setTimeout(() => this.settle(), this.leftoverGapMs);
+        timer.unref?.();
+        this.candidate = { frame, at: this.at, doneAt: now, timer };
       }
     }
     if (type === 7) {
@@ -207,6 +233,22 @@ export class KeyframeCache {
       this.at = Date.now();
     }
     this.lastType = type;
+  }
+
+  /** No second keyframe came in time (or the video stopped): the first one is the visitor's picture. */
+  settle(): void {
+    const c = this.candidate;
+    if (c) {
+      clearTimeout(c.timer);
+      this.candidate = undefined;
+      this.take(c.frame, c.at);
+    }
+  }
+
+  private take(frame: Buffer, at: number): void {
+    this.visitorFrame = { frame, at };
+    this.wantVisitor = false;
+    this.onVisitor?.(frame, at);
   }
 
   /** SPS + PPS + the latest keyframe, or undefined if none has arrived (within `maxAgeMs`). */

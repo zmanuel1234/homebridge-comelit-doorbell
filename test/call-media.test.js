@@ -278,7 +278,8 @@ test('a live view that fails to start in the pause after an open still lets the 
   assert.strictEqual(ops(sent).at(-1), 'e', `hung up: ${ops(sent).join(' ')}`);
 });
 
-const until = async (cond) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 5)); };
+// Up to 3 s: without recording, the preview stays 1.8 s after its picture, for a fresh keyframe after the intercom's old one (2.3.3).
+const until = async (cond) => { for (let i = 0; i < 600 && !cond(); i++) await new Promise((r) => setTimeout(r, 5)); };
 
 test('ring preview: asks for video during the ring without answering, takes the keyframe, then closes its channels (test build)', async () => {
   const { call, client, sent } = setup('answer-on-view');

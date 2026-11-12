@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import type { CameraRecordingConfiguration, CameraRecordingDelegate, Logging, RecordingPacket } from 'homebridge';
 import { RESTORE_ASPECT } from './camera';
-import { MIN_PICTURE_BYTES, nalType } from './media';
+import { LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType } from './media';
 import { RECORDING_MAX_MS } from './settings';
 
 /**
@@ -83,8 +83,42 @@ export class RingSource {
   private readonly keyStarts: number[] = [];
   private readonly capTimer: NodeJS.Timeout;
   private silenceTimer?: NodeJS.Timeout;
+  /**
+   * Where the recording starts in `units`: 0, or the intercom's second keyframe when it came
+   * right after the first, which is then its old picture (see LEFTOVER_GAP_MS).
+   */
+  start = 0;
+  /** Settles once `start` is known: at the second keyframe, LEFTOVER_GAP_MS after the first, or the end. */
+  readonly ready: Promise<void>;
+  private settle: () => void = () => undefined;
+  private settled = false;
+  private gapTimer?: NodeJS.Timeout;
+  /** Following the keyframes as units arrive. */
+  private lastType = -1;
+  private paramsAt = -1;
+  private runStart = 0;
+  private runBytes = 0;
+  private realKeyframes = 0;
+  private firstDoneAt = 0;
+  /** For the log: the old picture skipped, and how long before the fresh one. */
+  skipped?: { bytes: number; gapMs: number };
 
-  constructor(readonly call: object, first: Buffer[], private readonly onEnd: (s: RingSource) => void = () => undefined) {
+  constructor(
+    readonly call: object,
+    first: Buffer[],
+    private readonly onEnd: (s: RingSource) => void = () => undefined,
+    /** See LEFTOVER_GAP_MS; 0 starts at the first keyframe at once (tests). */
+    private readonly gapMs = LEFTOVER_GAP_MS,
+  ) {
+    this.ready = new Promise((resolve) => {
+      this.settle = () => {
+        if (!this.settled) {
+          this.settled = true;
+          clearTimeout(this.gapTimer);
+          resolve();
+        }
+      };
+    });
     const now = Date.now();
     for (const u of first) {
       this.keep(u, now);
@@ -95,12 +129,47 @@ export class RingSource {
   }
 
   private keep(unit: Buffer, at: number): void {
-    if (this.units.length < MAX_BUFFERED_UNITS) {
-      if (nalType(unit) === 7) {
-        this.keyStarts.push(this.units.length);
-      }
-      this.units.push({ data: unit, at });
+    if (this.units.length >= MAX_BUFFERED_UNITS) {
+      return;
     }
+    const type = nalType(unit);
+    const index = this.units.length;
+    if (type === 7) {
+      this.keyStarts.push(index);
+    }
+    this.watchKeyframes(type, index, unit.length, at);
+    this.units.push({ data: unit, at });
+  }
+
+  /** Finds the intercom's second keyframe, if it comes right after the first (its old picture). */
+  private watchKeyframes(type: number, index: number, bytes: number, at: number): void {
+    if (type === 7 || type === 8) {
+      if (this.lastType !== 7 && this.lastType !== 8) {
+        this.paramsAt = index;
+      }
+    } else if (type === 5) {
+      if (this.lastType !== 5) {
+        this.runStart = this.lastType === 7 || this.lastType === 8 ? this.paramsAt : index;
+        this.runBytes = 0;
+      }
+      this.runBytes += bytes;
+    } else if (this.lastType === 5 && !this.settled && this.runBytes >= MIN_PICTURE_BYTES) {
+      this.realKeyframes++;
+      if (this.realKeyframes === 1 && this.gapMs <= 0) {
+        this.settle();
+      } else if (this.realKeyframes === 1) {
+        this.firstDoneAt = at;
+        this.gapTimer = setTimeout(() => this.settle(), this.gapMs);
+        this.gapTimer.unref?.();
+      } else if (at - this.firstDoneAt <= this.gapMs) {
+        this.skipped = { bytes: this.units.slice(0, this.runStart).reduce((n, u) => n + (nalType(u.data) === 5 ? u.data.length : 0), 0), gapMs: at - this.firstDoneAt };
+        this.start = this.runStart;
+        this.settle();
+      } else {
+        this.settle();
+      }
+    }
+    this.lastType = type;
   }
 
   private armSilence(): void {
@@ -130,6 +199,7 @@ export class RingSource {
     }
     this.ended = true;
     this.endedAt = Date.now();
+    this.settle();
     clearTimeout(this.capTimer);
     clearTimeout(this.silenceTimer);
     this.onEnd(this);
@@ -251,6 +321,16 @@ export class RingFeeder {
       this.silence(160);
     }
     this.nextUnit = from;
+    // Starting at a keyframe without its own SPS/PPS: use the latest ones before it.
+    for (let i = from - 1; i >= 0 && (!this.sps || !this.pps); i--) {
+      const nal = payload(source.units[i].data);
+      const t = nal[0] & 0x1f;
+      if (t === 7 && !this.sps) {
+        this.sps = nal;
+      } else if (t === 8 && !this.pps) {
+        this.pps = nal;
+      }
+    }
     const start = source.units[from]?.at ?? Date.now();
     // The clip's time 0 is PREBUFFER_MS before the first picture: see PREBUFFER_MS.
     this.base = start - PREBUFFER_MS;
@@ -482,6 +562,9 @@ export function recordingArgs(c: CameraRecordingConfiguration, withAudio: boolea
 type Spawn = (what: string, args: string[]) => ChildProcessWithoutNullStreams;
 
 export class RingRecorder implements CameraRecordingDelegate {
+  /** See LEFTOVER_GAP_MS; 0 starts recordings at the first keyframe at once (tests). */
+  leftoverGapMs = LEFTOVER_GAP_MS;
+
   private active = false;
   private configuration?: CameraRecordingConfiguration;
   /** Per call: the last SPS/PPS and the keyframe being received, until the first real picture. */
@@ -560,7 +643,7 @@ export class RingRecorder implements CameraRecordingDelegate {
     if (type !== 5 && w.lastType === 5 && w.idrBytes >= MIN_PICTURE_BYTES && w.params.length > 0) {
       // The keyframe is complete and is a real picture: the recording starts with it.
       this.waiting.delete(call);
-      const source = new RingSource(call, [...w.params, ...w.idr], (ended) => this.sourceEnded(ended));
+      const source = new RingSource(call, [...w.params, ...w.idr], (ended) => this.sourceEnded(ended), this.leftoverGapMs);
       this.startSource(source);
       source.push(unit);
       return;
@@ -675,16 +758,20 @@ export class RingRecorder implements CameraRecordingDelegate {
       this.log.debug(`Doorbell camera: recording ${streamId}: no ring to record`);
       throw this.nothingToRecord();
     }
+    // Until it's known whether the intercom's first keyframe is its old picture (at most
+    // LEFTOVER_GAP_MS after it).
+    await source.ready;
     // A second request for the same ring (the hub asks again while motion is on) starts from
     // the latest keyframe, so the ring isn't recorded twice.
-    const from = source.requests++ === 0 ? 0 : source.latestKeyframe;
+    const from = source.requests++ === 0 ? source.start : source.latestKeyframe;
     // For the log: when the hub asked, and when the recording starts, after the ring.
     const ringAt = (source.call as { born?: number }).born;
     const startAt = source.units[from]?.at ?? Date.now();
     const sinceRing = (t: number) => (ringAt ? `${((t - ringAt) / 1000).toFixed(1)} s after the ring` : time(t));
     this.log.debug(
       `Doorbell camera: recording ${streamId}: HomeKit asked ${sinceRing(askedAt)}; the recording starts at ${time(startAt)} (${sinceRing(startAt)}, the first picture)` +
-        `${from ? ', from the latest keyframe (a second request for this ring)' : ''}`,
+        `${from && from !== source.start ? ', from the latest keyframe (a second request for this ring)' : ''}` +
+        `${from && from === source.start && source.skipped ? `, the intercom's second keyframe: its first (${source.skipped.bytes} bytes, ${(source.skipped.gapMs / 1000).toFixed(1)} s before) was its old picture` : ''}`,
     );
     const withAudio = this.audioActive();
     const proc = this.spawnProcess('recording', recordingArgs(configuration, withAudio, this.gainDb));

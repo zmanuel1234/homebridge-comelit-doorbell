@@ -22,7 +22,7 @@ import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
 import { RECORDING_MAX_MS } from './settings';
-import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
+import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
@@ -89,7 +89,8 @@ interface Waiter {
 
 const hex = (b: Buffer) => b.toString('hex');
 /** The ring preview stops this long after its first keyframe, or after PREVIEW_MAX_MS. */
-const PREVIEW_AFTER_KEYFRAME_MS = 500;
+/** After the first picture: long enough for a fresh keyframe to follow the intercom's old one (LEFTOVER_GAP_MS). */
+const PREVIEW_AFTER_KEYFRAME_MS = LEFTOVER_GAP_MS + 300;
 /** While a ring is recorded, the preview stops after this long without video. */
 const PREVIEW_RECORDING_SILENCE_MS = 4_000;
 const PREVIEW_MAX_MS = 8_000;

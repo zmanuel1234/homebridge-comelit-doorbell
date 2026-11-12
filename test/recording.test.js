@@ -74,6 +74,7 @@ function recorder({ active = true, audio = false, spawn } = {}) {
     if (spawn) spawn(proc);
     return proc;
   });
+  r.leftoverGapMs = 0; // the old-picture check has its own tests
   r.attached();
   if (active) {
     r.updateRecordingActive(true);
@@ -485,6 +486,7 @@ test('recording with ffmpeg: fragments start with a keyframe and are no longer t
     return spawnFfmpeg('ffmpeg', quietLog())(what, fixed);
   };
   const r = new RingRecorder(quietLog(), () => undefined, () => true, spawnTest);
+  r.leftoverGapMs = 0;
   r.updateRecordingActive(true);
   r.updateRecordingConfiguration(configuration());
   const call = {};
@@ -570,6 +572,7 @@ test('recorder log (debug): when HomeKit asked, when the first piece went, and t
   const log = { ...quietLog(), debug: (m) => lines.push(m) };
   const procs = [];
   const r = new RingRecorder(log, () => undefined, () => true, () => { const p = fakeProcess(); p.on('error', () => undefined); procs.push(p); return p; });
+  r.leftoverGapMs = 0;
   r.updateRecordingActive(true);
   r.updateRecordingConfiguration(configuration());
   const call = { born: Date.now() - 3000 };
@@ -590,4 +593,80 @@ test('recorder log (debug): when HomeKit asked, when the first piece went, and t
   assert.match(text, /recording 7: HomeKit asked 3\.\d s after the ring; the recording starts at [\d:.]+ \(3\.\d s after the ring, the first picture\)/);
   assert.match(text, /recording 7: first piece to HomeKit at [\d:.]+, \d+\.\d s after the recording starts/);
   assert.match(text, /recording 7: sent the ring to HomeKit, 3 fragment\(s\), \d+\.\d s \(including the 4 s still at the start\), ending at [\d:.]+, with sound: 1 pieces of the intercom's sound, \d+\.\d s of gaps filled with silence, 0 dropped as late/);
+});
+
+test("recording: the intercom's old picture (a keyframe with another 1 s after it) is skipped; the clip starts at the fresh one (2.3.3)", async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 3_000_000 });
+  const firstFrame = (s) => {
+    const out = [];
+    const f = new RingFeeder(s, s.start, (b) => out.push(b), false, () => undefined);
+    t.mock.timers.tick(40);
+    f.stop();
+    const v = videoTags(out);
+    assert.strictEqual(v[0].data[0], 0x17, 'decoder configuration first');
+    return v[1].data.length; // 5 + 4 + the keyframe's bytes
+  };
+  // The fresh keyframe with its own SPS/PPS, 1 s after the old one.
+  let s = new RingSource('call', [sps, pps, idr(3000)]);
+  s.push(p);
+  t.mock.timers.tick(1000);
+  for (const u of [sps, pps, idr(2500), p]) s.push(u);
+  await s.ready;
+  assert.strictEqual(s.start, 4, 'at the fresh keyframe\'s SPS');
+  assert.deepStrictEqual(s.skipped, { bytes: 3000, gapMs: 1000 });
+  assert.strictEqual(firstFrame(s), 5 + 4 + 2496, 'the clip starts with the fresh picture');
+  s.end();
+  // Without its own SPS/PPS: the ones before it are used.
+  s = new RingSource('call', [sps, pps, idr(3000)]);
+  s.push(p);
+  t.mock.timers.tick(800);
+  for (const u of [idr(2500), p]) s.push(u);
+  await s.ready;
+  assert.strictEqual(s.start, 4);
+  assert.strictEqual(firstFrame(s), 5 + 4 + 2496);
+  s.end();
+  // The next keyframe only 3 s later: an ordinary start, the first keyframe is kept.
+  s = new RingSource('call', [sps, pps, idr(3000)]);
+  s.push(p);
+  let settled = false;
+  void s.ready.then(() => (settled = true));
+  t.mock.timers.tick(1500);
+  await Promise.resolve();
+  assert.strictEqual(settled, true, 'decided 1.5 s after the first keyframe');
+  t.mock.timers.tick(1500);
+  for (const u of [sps, pps, idr(2500), p]) s.push(u);
+  assert.strictEqual(s.start, 0);
+  assert.strictEqual(s.skipped, undefined);
+  assert.strictEqual(firstFrame(s), 5 + 4 + 2996);
+  s.end();
+  // An empty (black) keyframe doesn't count; the ring ending decides at once.
+  s = new RingSource('call', [sps, pps, idr(3000)]);
+  s.end();
+  await s.ready;
+  assert.strictEqual(s.start, 0);
+});
+
+test('recorder: the request waits for the fresh keyframe and logs that the first was the old picture (2.3.3)', async () => {
+  const lines = [];
+  const log = { ...quietLog(), debug: (m) => lines.push(m) };
+  const procs = [];
+  const r = new RingRecorder(log, () => undefined, () => false, () => { const pr = fakeProcess(); pr.on('error', () => undefined); procs.push(pr); return pr; });
+  r.attached();
+  r.updateRecordingActive(true);
+  r.updateRecordingConfiguration(configuration());
+  const call = { born: Date.now() - 3000 };
+  for (const u of [sps, pps, idr(3000), p]) r.onCallVideo(call, u);
+  const gen = r.handleRecordingStreamRequest(1);
+  const first = gen.next();
+  await new Promise((res) => setTimeout(res, 300));
+  assert.strictEqual(procs.length, 0, 'ffmpeg waits until it is known where the clip starts');
+  for (const u of [sps, pps, idr(2500), p]) r.onCallVideo(call, u);
+  await new Promise((res) => setTimeout(res, 50));
+  assert.strictEqual(procs.length, 1);
+  assert.ok(lines.some((l) => /the recording starts at .*the intercom's second keyframe: its first \(3000 bytes, 0\.3 s before\) was its old picture/.test(l)), lines.join('\n'));
+  r.onCallEnded(call);
+  procs[0].emit('exit', 0);
+  procs[0].stdout.end?.();
+  r.shutdown();
+  await Promise.race([first.catch(() => undefined), new Promise((res) => setTimeout(res, 200))]);
 });

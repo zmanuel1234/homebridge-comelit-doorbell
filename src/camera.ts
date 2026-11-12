@@ -311,8 +311,12 @@ function processAlive(pid: number): boolean {
 const SNAPSHOT_QUALITY = ['-q:v', '2'];
 /** A prepared stream that HomeKit hasn't started after this long is forgotten. */
 const PENDING_STREAM_MS = 60_000;
-/** How long after a ring a picture request waits for the ring preview's picture. */
-const PREVIEW_PICTURE_WAIT_MS = 4_500;
+/**
+ * How long after a ring a picture request waits for the ring preview's picture. The first
+ * picture comes 3-3.5 s after the ring; deciding whether it is the intercom's old one takes up to
+ * LEFTOVER_GAP_MS more (2.3.3; it was 4.5 s).
+ */
+const PREVIEW_PICTURE_WAIT_MS = 6_000;
 /**
  * After an empty (black) first keyframe, picture requests wait for the next keyframe (the 6741W
  * sends one every 2.7-3 s) up to this long after the ring; HomeKit warns after 8 s.
@@ -435,6 +439,14 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     };
     this.keyframes.onEmptyKeyframe = (bytes) =>
       this.log.debug(`Doorbell camera: skipped an empty (black) keyframe of ${bytes} bytes; the next one becomes the visitor's picture`);
+    this.keyframes.onLeftover = (frame, gapMs) => {
+      this.log.debug(
+        `Doorbell camera: skipped the intercom's first keyframe (${frame.length} bytes, its old picture): a fresh one followed ${(gapMs / 1000).toFixed(1)} s later and becomes the visitor's picture`,
+      );
+      if (this.settings.mediaCaptureDir && this.ringAt) {
+        void this.saveSkippedPicture(this.ringAt, frame);
+      }
+    };
   }
 
   /** Folder for the live view's short-lived files (see the constructor). */
@@ -557,6 +569,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   /** The ring preview stopped: stop waiting for its picture (it may have none). */
   previewDone(): void {
+    this.keyframes.settle();
     this.pictureWait?.resolve();
   }
 
@@ -613,6 +626,20 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       this.log.info(`Doorbell camera: saved the notification picture (${which}) to ${file}`);
     } catch (e) {
       this.log.warn(`Doorbell camera: can't save the notification picture to ${dir}: ${(e as Error).message}`);
+    }
+  }
+
+  /** Troubleshooting (mediaCaptureDir): keeps the intercom's skipped first keyframe of a ring, to compare with the ring's picture. */
+  private async saveSkippedPicture(ringAt: number, keyframe: Buffer): Promise<void> {
+    const dir = this.settings.mediaCaptureDir;
+    const file = path.join(dir, `ring-${localStamp(new Date(ringAt))}-skipped.jpg`);
+    try {
+      const jpeg = await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'h264', '-i', 'pipe:0', '-frames:v', '1', '-vf', RESTORE_ASPECT, ...SNAPSHOT_QUALITY, '-f', 'image2', '-'], keyframe);
+      await MediaCapture.prepare(dir, 'ring-');
+      await fs.writeFile(file, jpeg);
+      this.log.info(`Doorbell camera: saved the skipped first picture (the intercom's old one) to ${file}`);
+    } catch (e) {
+      this.log.warn(`Doorbell camera: can't save the skipped picture to ${dir}: ${(e as Error).message}`);
     }
   }
 
