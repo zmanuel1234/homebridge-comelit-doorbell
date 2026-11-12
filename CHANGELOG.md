@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.3-beta.2 (2026-11-12)
+
+### Fixed
+
+- **The ring's picture and the recording no longer start with the intercom's old picture.** The 6741W starts every call with two keyframes 1.00 s apart (measured on every ring with 2.3.3-beta.1): the first is a picture kept from its previous call (encoded again, so not an exact copy), the second the first fresh one. The plugin now skips a keyframe that another follows within 1.5 s, and uses the second as the ring's picture (the ring notification, the camera tile, `comelit-last-visitor.h264`) and as the start of the HomeKit recording, including its 4 s still. With no second keyframe in time, the first is used, as before; after an empty (black) keyframe the first real one is taken at once (only the call's very first keyframe can be the old picture). A ring answered or opened before the fresh keyframe (about 4 s after the ring) still gets the old picture. Cost: the picture and the clip start about 1 s later (about 4 s after the ring instead of 3); picture requests now wait up to 6 s after a ring (was 4.5 s); without recording, the ring preview stays 1.8 s after its first picture (was 0.5 s).
+- With debug on, `Doorbell camera: skipped the intercom's first keyframe (… bytes, its old picture): a fresh one followed 1.0 s later …`, and the recording line says `…, the intercom's second keyframe: its first (… bytes, 1.0 s before) was its old picture`. With `mediaCaptureDir`, the skipped picture is also saved, as `ring-…-skipped.jpg` next to the ring's `ring-….jpg`, to compare.
+- From the 2.3.3-beta.1 review (they missed that release): the keyframe log traces the ring preview and the live view apart (`call: ring preview keyframe 1 …`, `call: live view keyframe 1 …`), and ignores video that arrives just after a call has ended.
+
 ## 2.3.3-beta.1 (2026-11-12)
 
 Pre-release for a field test; the plugin behaves exactly like 2.3.2.
@@ -10,7 +18,7 @@ Pre-release for a field test; the plugin behaves exactly like 2.3.2.
 
 ### Added
 
-- Debug log of the keyframes at the start of each call, to decide how to skip the old picture: for the first 4 keyframes in the 15 s after the ring, when each arrived, how long after the one before, its size and a short fingerprint, and whether it is a copy of a keyframe of the previous call (`call: keyframe 1 3.00 s after the ring, … (a copy of the previous call's keyframe from 6.50 s after its ring)`). At the end of each call, one line about its last keyframe. Only with Homebridge debug mode on; nothing else changes.
+- Debug log of the keyframes at the start of each call, to decide how to skip the old picture: for the ring preview and, if the call is answered, the live view, the first 4 keyframes of each in the 15 s after the ring, when each arrived, how long after the one before, its size and a short fingerprint, and whether it is a copy of a keyframe of the previous call (`call: keyframe 1 3.00 s after the ring, … (a copy of the previous call's keyframe from 6.50 s after its ring)`). At the end of each call, one line about its last keyframe. The lines show only with Homebridge debug mode on (the small bookkeeping runs either way); nothing else changes. "new" means the picture's bytes differ from the previous call's: an old picture encoded again would also say "new", but its time and size still tell.
 
 ## 2.3.2 (2026-11-12)
 

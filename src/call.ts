@@ -15,14 +15,14 @@
  *
  * Every frame of a call is logged with the prefix `call:`.
  */
-import { KeyframeTrace } from './keyframes';
+import { KeyframeTrace, type VideoSource } from './keyframes';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
 import { RECORDING_MAX_MS } from './settings';
-import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
+import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
@@ -89,7 +89,8 @@ interface Waiter {
 
 const hex = (b: Buffer) => b.toString('hex');
 /** The ring preview stops this long after its first keyframe, or after PREVIEW_MAX_MS. */
-const PREVIEW_AFTER_KEYFRAME_MS = 500;
+/** After the first picture: long enough for a fresh keyframe to follow the intercom's old one (LEFTOVER_GAP_MS). */
+const PREVIEW_AFTER_KEYFRAME_MS = LEFTOVER_GAP_MS + 300;
 /** While a ring is recorded, the preview stops after this long without video. */
 const PREVIEW_RECORDING_SILENCE_MS = 4_000;
 const PREVIEW_MAX_MS = 8_000;
@@ -160,8 +161,8 @@ export class CallHandler {
   private readonly keyframes = new KeyframeTrace((line) => this.log?.debug(line));
 
   /** A call's video unit, for the listener. */
-  callVideo(call: object, unit: Buffer): void {
-    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit);
+  callVideo(call: object, unit: Buffer, source: VideoSource = 'live view'): void {
+    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit, source);
     this.listener?.video(call, unit);
   }
   /** A call's sound (A-law), for the listener. */
@@ -834,7 +835,7 @@ export class RingPreview {
         this.size = sps ? `${sps.width}x${sps.height}` : 'size unknown';
       }
       this.options.onVideo(this.call, unit);
-      this.handler.callVideo(this.call, unit);
+      this.handler.callVideo(this.call, unit, 'ring preview');
       if (this.recordingUntil) {
         // Recording: stop once the intercom stops sending video, or at the time limit.
         clearTimeout(this.timer);

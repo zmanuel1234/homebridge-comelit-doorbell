@@ -30,6 +30,7 @@ test('H.264: a lost FU-A fragment drops the unit', () => {
 
 test('keyframe cache keeps SPS, PPS and the latest keyframe', () => {
   const k = new KeyframeCache();
+  k.leftoverGapMs = 0; // the old-picture check has its own tests
   const u = (b) => Buffer.from([0, 0, 0, 1, ...b]);
   assert.strictEqual(k.keyframe(), undefined);
   [u([0x67, 1]), u([0x68, 2]), u([0x65, 3]), u([0x65, 4]), u([0x41, 5]), u([0x65, 6])].forEach((x) => k.push(x));
@@ -56,6 +57,7 @@ test('the built-in still picture ships with the package and ffmpeg is found in k
 
 test('an old keyframe is not used', async () => {
   const k = new KeyframeCache();
+  k.leftoverGapMs = 0; // the old-picture check has its own tests
   const u = (b) => Buffer.from([0, 0, 0, 1, ...b]);
   [u([0x67]), u([0x68]), u([0x65])].forEach((x) => k.push(x));
   assert.ok(k.keyframe(1000));
@@ -164,6 +166,7 @@ test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle
 test('the last visitor picture is the call\'s first keyframe, not its last', () => {
   const { KeyframeCache } = require('../dist/media');
   const k = new KeyframeCache();
+  k.leftoverGapMs = 0; // the old-picture check has its own tests
   // keyframes (type 5) of a realistic size: a few bytes would be an empty (black) picture
   const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
   const call = {};
@@ -187,6 +190,7 @@ test('the last visitor picture is the call\'s first keyframe, not its last', () 
 test("a new call doesn't start from the previous call's keyframe", () => {
   const { KeyframeCache } = require('../dist/media');
   const k = new KeyframeCache();
+  k.leftoverGapMs = 0; // the old-picture check has its own tests
   // keyframes (type 5) of a realistic size: a few bytes would be an empty (black) picture
   const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
   k.newCall({});
@@ -202,6 +206,7 @@ test("a new call doesn't start from the previous call's keyframe", () => {
 test('an empty (black) keyframe is not taken as the visitor picture; the next real one is (2.1.1)', () => {
   const { KeyframeCache, MIN_PICTURE_BYTES } = require('../dist/media');
   const k = new KeyframeCache();
+  k.leftoverGapMs = 0; // the old-picture check has its own tests
   const empty = [];
   k.onEmptyKeyframe = (b) => empty.push(b);
   const unit = (type, size, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(size), Buffer.from([tag])]);
@@ -213,4 +218,68 @@ test('an empty (black) keyframe is not taken as the visitor picture; the next re
   for (const u of [unit(5, 1500, 2), unit(5, 1500, 3), unit(1, 0, 2)]) k.push(u); // two slices: 3 KB
   assert.strictEqual(k.visitor().at(-1), 3, 'the next real keyframe, all its slices');
   assert.strictEqual(empty.length, 1);
+});
+
+test("the intercom's old picture: a keyframe followed by another within 1.5 s is skipped, the second becomes the visitor's picture (2.3.3)", (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { KeyframeCache, LEFTOVER_GAP_MS } = require('../dist/media');
+  const k = new KeyframeCache();
+  const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
+  const skipped = [];
+  const taken = [];
+  k.onLeftover = (frame, gap) => skipped.push([frame.at(-1), gap]);
+  k.onVisitor = (frame) => taken.push(frame.at(-1));
+  k.newCall({});
+  for (const [ty, tag] of [[7, 1], [8, 1], [5, 1], [1, 1]]) k.push(u(ty, tag));
+  assert.strictEqual(k.visitor(), undefined, 'not yet: a fresh one may follow');
+  t.mock.timers.tick(1000);
+  for (const [ty, tag] of [[7, 2], [8, 2], [5, 2], [1, 2]]) k.push(u(ty, tag));
+  assert.deepStrictEqual(skipped, [[1, 1000]]);
+  assert.deepStrictEqual(taken, [2]);
+  assert.strictEqual(k.visitor().at(-1), 2);
+  t.mock.timers.tick(3000);
+  for (const [ty, tag] of [[5, 3], [1, 3]]) k.push(u(ty, tag));
+  assert.strictEqual(k.visitor().at(-1), 2, 'later keyframes change nothing');
+
+  // No second keyframe in time: the first one after all.
+  k.newCall({});
+  for (const [ty, tag] of [[7, 4], [8, 4], [5, 4], [1, 4]]) k.push(u(ty, tag));
+  t.mock.timers.tick(LEFTOVER_GAP_MS);
+  assert.strictEqual(k.visitor().at(-1), 4);
+  t.mock.timers.tick(2000);
+  for (const [ty, tag] of [[5, 5], [1, 5]]) k.push(u(ty, tag));
+  assert.strictEqual(k.visitor().at(-1), 4);
+
+  // The video stops (the preview ends) before the time is up: the first one, at once.
+  k.newCall({});
+  for (const [ty, tag] of [[7, 6], [8, 6], [5, 6], [1, 6]]) k.push(u(ty, tag));
+  k.settle();
+  assert.strictEqual(k.visitor().at(-1), 6);
+  assert.strictEqual(skipped.length, 1);
+});
+
+test("the intercom's old picture: an empty (black) keyframe doesn't count as the first one (2.3.3)", (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { KeyframeCache } = require('../dist/media');
+  const k = new KeyframeCache();
+  const unit = (type, size, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(size), Buffer.from([tag])]);
+  k.newCall({});
+  for (const x of [unit(7, 0, 1), unit(8, 0, 1), unit(5, 1000, 1), unit(1, 0, 1)]) k.push(x); // black
+  t.mock.timers.tick(1000);
+  for (const x of [unit(5, 3000, 2), unit(1, 0, 2)]) k.push(x); // the real picture 1 s later
+  assert.strictEqual(k.visitor().at(-1), 2, 'taken at once: only the very first keyframe can be the old picture (review)');
+});
+
+test("the intercom's old picture: a candidate left pending by the previous call is kept, but doesn't answer this ring's picture requests (2.3.3 review)", (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { KeyframeCache } = require('../dist/media');
+  const k = new KeyframeCache();
+  const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
+  const calls = [];
+  k.onVisitor = (frame, at, late) => calls.push([frame.at(-1), late]);
+  k.newCall({});
+  for (const [ty, tag] of [[7, 1], [8, 1], [5, 1], [1, 1]]) k.push(u(ty, tag));
+  k.newCall({}); // the next call's video before the 1.5 s were up
+  assert.deepStrictEqual(calls, [[1, true]]);
+  assert.strictEqual(k.visitor().at(-1), 1);
 });

@@ -28,6 +28,7 @@ function camera(config = {}, media) {
   const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't', ...config });
   const call = media ? { startMedia: async () => media } : undefined;
   const cam = new DoorbellCamera({ hap }, quietLog(), settings, () => call);
+  cam.keyframes.leftoverGapMs = 0; // the old-picture check has its own tests
   cam.spawned = [];
   cam.spawnProcess = (what) => { const p = fakeProcess(); cam.spawned.push([what, p]); return p; };
   return cam;
@@ -148,7 +149,9 @@ test("the last visitor's picture survives a restart, and expires with lastVisito
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-visitor-'));
   const make = (config = {}) => {
     const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't', ...config });
-    return new DoorbellCamera({ hap, user: { storagePath: () => dir } }, quietLog(), settings, () => undefined);
+    const c = new DoorbellCamera({ hap, user: { storagePath: () => dir } }, quietLog(), settings, () => undefined);
+    c.keyframes.leftoverGapMs = 0;
+    return c;
   };
   const file = path.join(dir, 'comelit-last-visitor.h264');
   const first = make();
