@@ -288,6 +288,22 @@ export const TALK_BACK_ARGS = [
 
 /** The last visitor's picture, saved in Homebridge's storage folder. */
 const VISITOR_FILE = 'comelit-last-visitor.h264';
+/** Folder inside Homebridge's storage folder for the live view's short-lived files. */
+const WORK_DIR = 'comelit-doorbell';
+
+/** Whether a process with this id is running (files named after it may be in use). */
+function processAlive(pid: number): boolean {
+  if (pid === process.pid) {
+    // Our own id at startup: left by an earlier process that had the same id.
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
 /**
  * JPEG quality for the visitor's picture. ffmpeg's default is low; near-best quality measured
  * +2.7 dB (PSNR) on a 6741W frame, about 60 KB instead of 33 KB at 640x480.
@@ -404,6 +420,11 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     this.log.info(`Doorbell camera: ffmpeg ${this.ffmpeg}${settings.talkBack ? ', talk-back on' : ''}${settings.recording ? ', recording rings (HomeKit Secure Video)' : ''}`);
     // The last visitor's picture is kept on disk too, so it survives a restart.
     const storage = api.user?.storagePath?.();
+    // Files the live view needs for a moment (pictures ffmpeg loops) go in a folder of their
+    // own inside Homebridge's storage folder, not in the system's temporary folder. (Homebridge
+    // always gives a storage folder; the temporary folder is only for tests without one.)
+    this.workDir = path.join(storage ?? os.tmpdir(), WORK_DIR);
+    void this.clearWorkDir();
     if (storage && settings.lastVisitorMs > 0) {
       this.visitorFile = path.join(storage, VISITOR_FILE);
       void this.loadVisitor();
@@ -414,6 +435,32 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     };
     this.keyframes.onEmptyKeyframe = (bytes) =>
       this.log.debug(`Doorbell camera: skipped an empty (black) keyframe of ${bytes} bytes; the next one becomes the visitor's picture`);
+  }
+
+  /** Folder for the live view's short-lived files (see the constructor). */
+  private readonly workDir: string;
+
+  /** Creates the work folder if needed and returns the path of `name` in it. */
+  private async workFile(name: string): Promise<string> {
+    await fs.mkdir(this.workDir, { recursive: true });
+    return path.join(this.workDir, name);
+  }
+
+  /**
+   * Removes pictures left behind by a Homebridge process that has stopped (during a live view,
+   * say). Their names carry the process id, so another child bridge's files in use are kept.
+   */
+  private async clearWorkDir(): Promise<void> {
+    try {
+      for (const name of await fs.readdir(this.workDir)) {
+        const owner = /^(?:view|still)-(\d+)[-.]/.exec(name);
+        if (owner && !processAlive(Number(owner[1]))) {
+          await fs.unlink(path.join(this.workDir, name)).catch(() => undefined);
+        }
+      }
+    } catch {
+      // No folder yet: nothing to clear.
+    }
   }
 
   /** Where the last visitor's picture is saved (as H.264), if anywhere. */
@@ -610,7 +657,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       return DEFAULT_STILL;
     }
     if (!this.placeholderFile) {
-      const file = path.join(os.tmpdir(), 'comelit-doorbell-still.jpg');
+      const file = await this.workFile(`still-${process.pid}.jpg`);
       await fs.writeFile(file, await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x202020:s=1280x720', '-frames:v', '1', '-f', 'image2', '-']));
       this.placeholderFile = file;
     }
@@ -763,16 +810,32 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       }
       if (visitor) {
         // One file per view: ffmpeg re-reads it for every frame, so views mustn't share it.
-        const file = path.join(os.tmpdir(), `comelit-last-visitor-${process.pid}-${sessionID.slice(0, 8)}.jpg`);
-        const remove = () => void fs.unlink(file).catch(() => undefined);
-        await fs.writeFile(file, visitor);
-        if (left()) {
-          remove();
-          return;
+        let file: string | undefined;
+        try {
+          file = await this.workFile(`view-${process.pid}-${sessionID.slice(0, 8)}.jpg`);
+          await fs.writeFile(file, visitor);
+        } catch (e) {
+          // Can't write to the storage folder: show the idle picture instead.
+          this.log.warn(`Doorbell camera: can't write the last visitor's picture to ${this.workDir}: ${(e as Error).message}`);
+          if (file) {
+            void fs.unlink(file).catch(() => undefined);
+          }
+          file = undefined;
         }
-        still = file;
-        active.cleanup.push(remove);
-        active.stats.request += ', showing the last visitor';
+        if (file) {
+          const written = file;
+          const remove = () => void fs.unlink(written).catch(() => undefined);
+          if (left()) {
+            remove();
+            return;
+          }
+          still = written;
+          active.cleanup.push(remove);
+          active.stats.request += ', showing the last visitor';
+        }
+      }
+      if (left()) {
+        return;
       }
       const idx = vargs.indexOf(LIVE_INPUT[0]);
       vargs.splice(idx, LIVE_INPUT.length, '-re', '-loop', '1', '-framerate', '1', '-i', still);
