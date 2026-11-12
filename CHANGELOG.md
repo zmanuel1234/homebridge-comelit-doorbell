@@ -10,7 +10,7 @@ Pre-release for a field test; the plugin behaves exactly like 2.3.2.
 
 ### Added
 
-- Debug log of the keyframes at the start of each call, to decide how to skip the old picture: for the first 4 keyframes in the 15 s after the ring, when each arrived, how long after the one before, its size and a short fingerprint, and whether it is a copy of a keyframe of the previous call (`call: keyframe 1 3.00 s after the ring, … (a copy of the previous call's keyframe from 6.50 s after its ring)`). At the end of each call, one line about its last keyframe. Only with Homebridge debug mode on; nothing else changes.
+- Debug log of the keyframes at the start of each call, to decide how to skip the old picture: for the ring preview and, if the call is answered, the live view, the first 4 keyframes of each in the 15 s after the ring, when each arrived, how long after the one before, its size and a short fingerprint, and whether it is a copy of a keyframe of the previous call (`call: keyframe 1 3.00 s after the ring, … (a copy of the previous call's keyframe from 6.50 s after its ring)`). At the end of each call, one line about its last keyframe. The lines show only with Homebridge debug mode on (the small bookkeeping runs either way); nothing else changes. "new" means the picture's bytes differ from the previous call's: an old picture encoded again would also say "new", but its time and size still tell.
 
 ## 2.3.2 (2026-11-12)
 

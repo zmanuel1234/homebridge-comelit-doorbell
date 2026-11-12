@@ -6,10 +6,10 @@ const nal = (type, fill, len = 20) => Buffer.concat([Buffer.from([0, 0, 0, 1, 0x
 const SPS = nal(7, 1, 8);
 const P = nal(1, 9, 10);
 
-function feedKeyframe(trace, call, born, at, fill, slices = 2) {
-  trace.video(call, born, SPS, at);
-  for (let i = 0; i < slices; i++) trace.video(call, born, nal(5, fill + i), at);
-  trace.video(call, born, P, at); // the keyframe is complete once something else follows
+function feedKeyframe(trace, call, born, at, fill, source = 'ring preview', slices = 2) {
+  trace.video(call, born, SPS, source, at);
+  for (let i = 0; i < slices; i++) trace.video(call, born, nal(5, fill + i), source, at);
+  trace.video(call, born, P, source, at); // the keyframe is complete once something else follows
 }
 
 test('keyframe trace: logs the first keyframes of a call with time, gap, size and fingerprint (2.3.3-beta.1)', () => {
@@ -19,8 +19,8 @@ test('keyframe trace: logs the first keyframes of a call with time, gap, size an
   feedKeyframe(t, call, 0, 3000, 1);
   feedKeyframe(t, call, 0, 3100, 2);
   assert.strictEqual(lines.length, 2);
-  assert.match(lines[0], /^call: keyframe 1 3\.00 s after the ring, 40 bytes, fingerprint [0-9a-f]{10} \(new\)$/);
-  assert.match(lines[1], /^call: keyframe 2 3\.10 s after the ring, 0\.10 s after the one before, 40 bytes, fingerprint [0-9a-f]{10} \(new\)$/);
+  assert.match(lines[0], /^call: ring preview keyframe 1 3\.00 s after the ring, 40 bytes, fingerprint [0-9a-f]{10} \(new\)$/);
+  assert.match(lines[1], /^call: ring preview keyframe 2 3\.10 s after the ring, 0\.10 s after the one before, 40 bytes, fingerprint [0-9a-f]{10} \(new\)$/);
   for (let i = 0; i < 10; i++) feedKeyframe(t, call, 0, 4000 + i * 100, 10 + i);
   assert.strictEqual(lines.length, TRACE_KEYFRAMES, 'only the first few');
 });
@@ -51,4 +51,21 @@ test('keyframe trace: keyframes later than the window are not logged, and ending
   assert.strictEqual(lines.length, 1);
   t.ended({}, 0); // a call with no video
   assert.strictEqual(lines.length, 1);
+});
+
+test('keyframe trace: the live view after the ring preview is traced on its own; video after the end is ignored (review)', () => {
+  const lines = [];
+  const t = new KeyframeTrace((l) => lines.push(l));
+  const call = {};
+  for (let i = 0; i < 5; i++) feedKeyframe(t, call, 0, 3000 + i * 100, 1 + i);
+  feedKeyframe(t, call, 0, 4000, 1, 'live view'); // the live view starts with the preview's first picture again
+  assert.match(lines.at(-1), /^call: live view keyframe 1 4\.00 s after the ring, .*\(new\)$/);
+  t.ended(call, 5000);
+  const n = lines.length;
+  feedKeyframe(t, call, 0, 5100, 9, 'live view'); // a unit just after the hang-up
+  t.ended(call, 6000);
+  assert.strictEqual(lines.length, n, 'nothing more about an ended call');
+  const next = {};
+  feedKeyframe(t, next, 10_000, 13_000, 5, 'ring preview');
+  assert.match(lines.at(-1), /\(a copy of the previous call's keyframe from 3\.40 s after its ring\)$/, "the previous call's keyframes are kept whole");
 });
