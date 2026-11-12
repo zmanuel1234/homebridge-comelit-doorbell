@@ -351,21 +351,29 @@ test('stopping a view kills its ffmpeg; shutdown stops every view (2.2.0 review)
   assert.deepStrictEqual(killed, [['video', 'SIGKILL'], ['video', 'SIGKILL']]);
 });
 
-test('short-lived live view files are kept in Homebridge\'s storage folder, and leftovers are cleared at startup (2.3.1)', async () => {
+test('short-lived live view files are kept in Homebridge\'s storage folder; a stopped process\'s leftovers are cleared at startup, another running one\'s kept (2.3.1)', async () => {
   const fs = require('fs');
   const os = require('os');
   const path = require('path');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-storage-'));
-  const work = path.join(dir, 'comelit-doorbell');
-  fs.mkdirSync(work);
-  fs.writeFileSync(path.join(work, 'last-visitor-view-abcd1234.jpg'), 'x');
-  fs.writeFileSync(path.join(work, 'still.jpg'), 'x');
-  const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't' });
-  const cam = new DoorbellCamera({ hap, user: { storagePath: () => dir } }, quietLog(), settings, () => undefined);
-  for (let i = 0; i < 100 && fs.existsSync(path.join(work, 'last-visitor-view-abcd1234.jpg')); i++) await new Promise((r) => setTimeout(r, 5));
-  assert.ok(!fs.existsSync(path.join(work, 'last-visitor-view-abcd1234.jpg')), 'a leftover per-view picture is removed');
-  assert.ok(fs.existsSync(path.join(work, 'still.jpg')), 'other files are left alone');
-  const file = await cam.workFile('last-visitor-view-0000.jpg');
-  assert.strictEqual(path.dirname(file), work);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    const work = path.join(dir, 'comelit-doorbell');
+    fs.mkdirSync(work);
+    const dead = path.join(work, 'view-999999999-abcd1234.jpg'); // no such process
+    const ours = path.join(work, `still-${process.pid}.jpg`); // an earlier process with our id
+    const other = path.join(work, `view-${process.ppid}-ef567890.jpg`); // another running bridge
+    const unrelated = path.join(work, 'notes.txt');
+    for (const f of [dead, ours, other, unrelated]) fs.writeFileSync(f, 'x');
+    const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't' });
+    const cam = new DoorbellCamera({ hap, user: { storagePath: () => dir } }, quietLog(), settings, () => undefined);
+    for (let i = 0; i < 100 && (fs.existsSync(dead) || fs.existsSync(ours)); i++) await new Promise((r) => setTimeout(r, 5));
+    assert.ok(!fs.existsSync(dead), "a stopped process's picture is removed");
+    assert.ok(!fs.existsSync(ours), 'a leftover with our own process id is removed');
+    assert.ok(fs.existsSync(other), "a running process's picture is kept");
+    assert.ok(fs.existsSync(unrelated), 'other files are left alone');
+    const file = await cam.workFile('x.jpg');
+    assert.strictEqual(path.dirname(file), work);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

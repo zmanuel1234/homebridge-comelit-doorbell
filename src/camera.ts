@@ -290,8 +290,20 @@ export const TALK_BACK_ARGS = [
 const VISITOR_FILE = 'comelit-last-visitor.h264';
 /** Folder inside Homebridge's storage folder for the live view's short-lived files. */
 const WORK_DIR = 'comelit-doorbell';
-/** Name prefix of the per-view copies of the last visitor's picture. */
-const VIEW_PICTURE_PREFIX = 'last-visitor-view-';
+
+/** Whether a process with this id is running (files named after it may be in use). */
+function processAlive(pid: number): boolean {
+  if (pid === process.pid) {
+    // Our own id at startup: left by an earlier process that had the same id.
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
 /**
  * JPEG quality for the visitor's picture. ffmpeg's default is low; near-best quality measured
  * +2.7 dB (PSNR) on a 6741W frame, about 60 KB instead of 33 KB at 640x480.
@@ -409,7 +421,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     // The last visitor's picture is kept on disk too, so it survives a restart.
     const storage = api.user?.storagePath?.();
     // Files the live view needs for a moment (pictures ffmpeg loops) go in a folder of their
-    // own inside Homebridge's storage folder, not in the system's temporary folder.
+    // own inside Homebridge's storage folder, not in the system's temporary folder. (Homebridge
+    // always gives a storage folder; the temporary folder is only for tests without one.)
     this.workDir = path.join(storage ?? os.tmpdir(), WORK_DIR);
     void this.clearWorkDir();
     if (storage && settings.lastVisitorMs > 0) {
@@ -433,11 +446,15 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     return path.join(this.workDir, name);
   }
 
-  /** Removes per-view pictures left behind if Homebridge stopped during a live view. */
+  /**
+   * Removes pictures left behind by a Homebridge process that has stopped (during a live view,
+   * say). Their names carry the process id, so another child bridge's files in use are kept.
+   */
   private async clearWorkDir(): Promise<void> {
     try {
       for (const name of await fs.readdir(this.workDir)) {
-        if (name.startsWith(VIEW_PICTURE_PREFIX)) {
+        const owner = /^(?:view|still)-(\d+)[-.]/.exec(name);
+        if (owner && !processAlive(Number(owner[1]))) {
           await fs.unlink(path.join(this.workDir, name)).catch(() => undefined);
         }
       }
@@ -640,7 +657,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       return DEFAULT_STILL;
     }
     if (!this.placeholderFile) {
-      const file = await this.workFile('still.jpg');
+      const file = await this.workFile(`still-${process.pid}.jpg`);
       await fs.writeFile(file, await this.runToBuffer(['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x202020:s=1280x720', '-frames:v', '1', '-f', 'image2', '-']));
       this.placeholderFile = file;
     }
@@ -793,16 +810,32 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       }
       if (visitor) {
         // One file per view: ffmpeg re-reads it for every frame, so views mustn't share it.
-        const file = await this.workFile(`${VIEW_PICTURE_PREFIX}${sessionID.slice(0, 8)}.jpg`);
-        const remove = () => void fs.unlink(file).catch(() => undefined);
-        await fs.writeFile(file, visitor);
-        if (left()) {
-          remove();
-          return;
+        let file: string | undefined;
+        try {
+          file = await this.workFile(`view-${process.pid}-${sessionID.slice(0, 8)}.jpg`);
+          await fs.writeFile(file, visitor);
+        } catch (e) {
+          // Can't write to the storage folder: show the idle picture instead.
+          this.log.warn(`Doorbell camera: can't write the last visitor's picture to ${this.workDir}: ${(e as Error).message}`);
+          if (file) {
+            void fs.unlink(file).catch(() => undefined);
+          }
+          file = undefined;
         }
-        still = file;
-        active.cleanup.push(remove);
-        active.stats.request += ', showing the last visitor';
+        if (file) {
+          const written = file;
+          const remove = () => void fs.unlink(written).catch(() => undefined);
+          if (left()) {
+            remove();
+            return;
+          }
+          still = written;
+          active.cleanup.push(remove);
+          active.stats.request += ', showing the last visitor';
+        }
+      }
+      if (left()) {
+        return;
       }
       const idx = vargs.indexOf(LIVE_INPUT[0]);
       vargs.splice(idx, LIVE_INPUT.length, '-re', '-loop', '1', '-framerate', '1', '-i', still);

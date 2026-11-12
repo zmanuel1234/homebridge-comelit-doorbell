@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **No more files in the system's temporary folder (`/tmp`).** The pictures the live view loops when there is no call (the last visitor's, and the dark placeholder when the built-in picture is missing) are now written to a `comelit-doorbell` folder inside Homebridge's storage folder (usually `/var/lib/homebridge/comelit-doorbell`), as Homebridge asks of verified plugins. Copies left behind if Homebridge stops during a live view are cleared at the next start. Nothing else changes.
+- **No more files in the system's temporary folder (`/tmp`).** The pictures the live view loops when there is no call (the last visitor's, and the dark placeholder when the built-in picture is missing) are now written to a `comelit-doorbell` folder inside Homebridge's storage folder (usually `/var/lib/homebridge/comelit-doorbell`), as Homebridge asks of verified plugins. Copies left behind if Homebridge stops during a live view are cleared at the next start (each file carries its Homebridge process's id, so a second child bridge's files in use are kept). If that folder can't be written, the live view shows the idle picture instead of failing. Nothing else changes.
 - CI also runs the tests on Node.js 24.
 
 ## 2.3.0 (2026-11-12)
