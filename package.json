@@ -1,6 +1,6 @@
 {
   "name": "homebridge-comelit-doorbell",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "Homebridge plugin for Comelit ViP intercoms (6701W/6741W Mini): HomeKit doorbell notifications, door release only after a ring, and a doorbell camera with live video, talk-back and the visitor's picture in the ring notification. Fully local.",
   "main": "dist/index.js",
   "files": [
@@ -26,6 +26,7 @@
   "license": "Apache-2.0",
   "keywords": [
     "homebridge-plugin",
+    "supports-hap",
     "comelit",
     "vip",
     "intercom",
@@ -46,9 +47,6 @@
   "engines": {
     "homebridge": ">=2.0.0-beta.0",
     "node": "^20.0.0 || ^22.0.0 || ^24.0.0"
-  },
-  "peerDependencies": {
-    "homebridge": ">=2.0.0-beta.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
