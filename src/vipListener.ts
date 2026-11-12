@@ -14,6 +14,8 @@ import type { DeviceConfig, IntercomEvent, IntercomEventType } from './models';
 import { encodeCallResponseAck } from './protocol';
 
 const PREFIX_VIDEO_EVENT = 0x1840;
+/** The intercom acknowledging a frame. */
+const PREFIX_ACK = 0x1800;
 const PREFIX_VIP_EVENT = 0x1860;
 const PREFIX_CALL_INIT = 0x18c0;
 const ACTION_IN_ALERTING = 0x0001;
@@ -134,6 +136,16 @@ export class VipEventListener {
     }
   }
 
+  /** Renewal checks from the intercom answered (not logged one by one). */
+  private renewalChecks = 0;
+
+  /** How many renewal checks were answered since the last call, for the hourly summary. */
+  takeRenewalChecks(): number {
+    const n = this.renewalChecks;
+    this.renewalChecks = 0;
+    return n;
+  }
+
   async processMessage(data: Buffer): Promise<void> {
     const msg = parseCtppMessage(data);
     if (!msg) {
@@ -145,9 +157,14 @@ export class VipEventListener {
     const last = this.lastSeen.get(key);
     const isRetransmit = last !== undefined && last[0] === msg.timestamp && now - last[1] < 10_000;
     this.lastSeen.set(key, [msg.timestamp, now]);
-    this.log?.debug(
-      `VIP msg: prefix=0x${prefix.toString(16).padStart(4, '0')} action=0x${action.toString(16).padStart(4, '0')} ts=0x${msg.timestamp.toString(16)} addrs=${msg.addresses.join(',')}`,
-    );
+    // Not logged: the intercom's renewal checks (every 2 min; counted, see takeRenewalChecks)
+    // and its acknowledgements (0x1800: during a call, the call's own log shows them).
+    const routine = (prefix === PREFIX_VIP_EVENT && action === ACTION_REGISTRATION_RENEWAL) || (prefix === PREFIX_ACK && action === 0);
+    if (!routine) {
+      this.log?.debug(
+        `VIP msg: prefix=0x${prefix.toString(16).padStart(4, '0')} action=0x${action.toString(16).padStart(4, '0')} ts=0x${msg.timestamp.toString(16)} addrs=${msg.addresses.join(',')}`,
+      );
+    }
 
     // Periodic registration renewal: ACK + FIN pair.
     if (prefix === PREFIX_VIP_EVENT && action === ACTION_REGISTRATION_RENEWAL) {
@@ -227,11 +244,10 @@ export class VipEventListener {
     }
     const aptAddr = this.config.aptAddress;
     const word = ackWord(msg.timestamp);
-    this.log?.debug(`VIP: renewal ACK ts=0x${word.toString(16)} caller=${this.ourAddress} callee=${aptAddr} msg-addrs=${msg.addresses.join(',')}`);
     try {
       await this.client.sendBinary(this.channel, encodeCallResponseAck(this.ourAddress, aptAddr, word));
       await this.client.sendBinary(this.channel, encodeCallResponseAck(this.ourAddress, aptAddr, word, 0x1820));
-      this.log?.debug('VIP: sent renewal ACK pair');
+      this.renewalChecks++;
     } catch (e) {
       this.log?.warn(`VIP: failed to send renewal ACK: ${(e as Error).message}`);
     }

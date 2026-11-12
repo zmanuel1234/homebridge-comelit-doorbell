@@ -6,8 +6,8 @@ const SHOW_UNLOCKED_MS = 3_000;
 const REFUSED_LOG_INTERVAL_MS = 5_000;
 
 /**
- * One door relay as a HomeKit lock. Unlock opens the door; the lock shows Unlocked for a
- * few seconds once the intercom confirms, then Locked again.
+ * One door relay as a HomeKit lock. Unlock opens the door; the lock shows Unlocked at once, and
+ * Locked again a few seconds after the intercom has taken the open (at once if it refuses).
  */
 export class LockAccessory {
   private readonly service: Service;
@@ -102,6 +102,11 @@ export class LockAccessory {
       this.service.updateCharacteristic(Characteristic.LockTargetState, Characteristic.LockTargetState.SECURED);
     };
     this.opening = true;
+    // Shown as Unlocked at once: the intercom confirms an open only by not refusing it, which
+    // takes a few seconds (and longer when the call must be answered first). A refusal or a
+    // failure turns it back to Locked.
+    this.lockState = Characteristic.LockCurrentState.UNSECURED;
+    this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.UNSECURED);
     try {
       const result = await this.platform.openDoor(this.door);
       if (result.confirmed) {
@@ -116,8 +121,6 @@ export class LockAccessory {
     } finally {
       this.opening = false;
     }
-    this.lockState = Characteristic.LockCurrentState.UNSECURED;
-    this.service.updateCharacteristic(Characteristic.LockCurrentState, Characteristic.LockCurrentState.UNSECURED);
     setTimeout(relock, SHOW_UNLOCKED_MS);
   }
 }

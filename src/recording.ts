@@ -51,6 +51,15 @@ const AUDIO_GAP_MS = 60;
 const AUDIO_LATE_MS = 100;
 /** The sound never runs further ahead of the latest frame than this (it waits for the picture). */
 const AUDIO_AHEAD_MS = 250;
+/**
+ * HomeKit's prebuffer (CameraRecordingOptions.prebufferLength): the hub takes the first this-many
+ * ms of a recording as what happened before the event, and dates the clip from the end of it.
+ * The intercom has no video before the ring, so a clip starts with its first picture held still
+ * for this long; the Home app then shows the time of the first live picture (it showed times
+ * 3.4-4.5 s late without, 2026-11-11).
+ */
+export const PREBUFFER_MS = 4000;
+
 /** How often the recording writes what has come in to ffmpeg. */
 const FEED_TICK_MS = 20;
 /** The most sound in one FLV tag (100 ms). */
@@ -242,8 +251,10 @@ export class RingFeeder {
       this.silence(160);
     }
     this.nextUnit = from;
-    this.base = source.units[from]?.at ?? Date.now();
-    while (this.nextAudio < source.audio.length && source.audio[this.nextAudio].at < this.base) {
+    const start = source.units[from]?.at ?? Date.now();
+    // The clip's time 0 is PREBUFFER_MS before the first picture: see PREBUFFER_MS.
+    this.base = start - PREBUFFER_MS;
+    while (this.nextAudio < source.audio.length && source.audio[this.nextAudio].at < start) {
       this.nextAudio++;
     }
     this.tick();
@@ -269,8 +280,10 @@ export class RingFeeder {
       if (!f.key || !this.sps || !this.pps) {
         return; // nothing decodable before the first keyframe with its SPS/PPS
       }
-      this.flv.config(this.sps, this.pps, f.ms);
+      this.flv.config(this.sps, this.pps, 0);
       this.configSent = true;
+      // The prebuffer: the first picture, held from time 0 until it is live.
+      this.flv.frame(f.nals, true, 0);
     }
     this.flv.frame(f.nals, f.key, f.ms);
     this.lastVideoMs = f.ms;

@@ -445,3 +445,39 @@ test('next visitor: turned off after the delay, while the call is being answered
   assert.deepStrictEqual(asked, [false], 'asked again just before the open');
   assert.deepStrictEqual(opened, []);
 });
+
+test('the lock shows Unlocked at once while the open is on its way, and Locked again if the intercom refuses (2.3.0-beta.6)', async () => {
+  const { p } = platform();
+  const lock = lockOf(p);
+  let finish;
+  p.openDoor = () => new Promise((resolve, reject) => { finish = { resolve, reject }; });
+  const opening = lock.triggerOpen();
+  assert.strictEqual(lock.lockState, 0, 'Unlocked before the intercom answers');
+  finish.reject(new Error('intercom refused (cause 8, busy)'));
+  await opening;
+  assert.strictEqual(lock.lockState, 1, 'Locked again after a refusal');
+});
+
+test('debug log: renewals every 2 min are summed up once an hour instead of logged each time (2.3.0-beta.6)', async () => {
+  const { p } = platform();
+  const lines = [];
+  p.log = { ...p.log, debug: (m) => lines.push(m), info: () => undefined };
+  p.deviceConfig = deviceConfig;
+  const client = { getChannel: () => ({}), sendBinary: async () => undefined };
+  await p.reregister(client);
+  await p.reregister(client);
+  assert.deepStrictEqual(lines, [], 'nothing per renewal');
+  p.logRoutineSummary();
+  assert.match(lines[0], /registration renewed 2 time\(s\), 0 renewal check\(s\) from the intercom answered, 0 planned reconnect\(s\); all fine/);
+  p.logRoutineSummary();
+  assert.match(lines[1], /renewed 0 time\(s\)/, 'counted from the last summary');
+});
+
+test('talk-back ffmpeg starts without buffering, so the door hears the phone sooner (2.3.0-beta.6)', () => {
+  const { TALK_BACK_ARGS } = require('../dist/camera');
+  const j = TALK_BACK_ARGS.join(' ');
+  for (const opt of ['-fflags nobuffer', '-flags low_delay', '-probesize 32', '-analyzeduration 0', '-max_delay 0', '-reorder_queue_size 0', '-flush_packets 1']) {
+    assert.ok(j.includes(opt), opt);
+  }
+  assert.ok(j.indexOf('-fflags nobuffer') < j.indexOf('-i pipe:0'), 'input options before the input');
+});

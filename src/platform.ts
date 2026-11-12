@@ -22,6 +22,9 @@ import { VipEventListener } from './vipListener';
 /** How long the intercom must be unreachable before the lock shows No Response. */
 export const UNREACHABLE_AFTER_MS = 30_000;
 
+/** How often the routine work (renewals, planned reconnects) is summed up in the debug log. */
+const ROUTINE_SUMMARY_MS = 60 * 60_000;
+
 export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   readonly Service: typeof Service;
   readonly Characteristic: typeof Characteristic;
@@ -49,6 +52,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private downSince: number | undefined = Date.now();
   /** The last disconnect was a planned refresh: its reconnect is routine (debug log). */
   private plannedReconnect = false;
+  /**
+   * Routine work that is no longer logged line by line (renewals every 2 min, planned
+   * reconnects): counted, and summed up once an hour in the debug log.
+   */
+  private readonly routine = { renewals: 0, reconnects: 0, since: Date.now() };
+  private routineTimer?: NodeJS.Timeout;
   /** Door opens on their way, so a planned reconnect waits for them. */
   private opening = 0;
   private camera?: DoorbellCamera;
@@ -135,7 +144,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.error('Missing required config: host and token are required');
       return;
     }
-    this.log.debug(`Connecting to ${s.host}:${s.port} …`);
+    this.routineDebug(`Connecting to ${s.host}:${s.port} …`);
     // The registration lease keeps rings coming. Without listening for rings there is no
     // registration to renew: just reconnect every leaseRecycleMinutes, which also clears the
     // door channels that opens leave on the intercom.
@@ -179,7 +188,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       if (await stopped()) {
         return;
       }
-      this.log.debug('Authenticated');
+      this.routineDebug('Authenticated');
     } catch (e) {
       this.log.error(`Authentication failed: ${(e as Error).message}`);
       await client.disconnect();
@@ -193,7 +202,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         // Register as our own Comelit user, so calls aren't shared with a phone.
         deviceConfig.aptSubaddress = s.subaddress;
       }
-      this.log.debug(`Device config: ${deviceConfig.doors.length} door(s), apt=${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`);
+      this.routineDebug(`Device config: ${deviceConfig.doors.length} door(s), apt=${deviceConfig.aptAddress}${deviceConfig.aptSubaddress}`);
     } catch (e) {
       this.log.error(`Config fetch failed: ${(e as Error).message}`);
       await client.disconnect();
@@ -226,7 +235,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (s.enableNotifications) {
       try {
         await this.openCtppChannels(client, deviceConfig);
-        this.log.debug('CTPP channels open for VIP events');
+        this.routineDebug('CTPP channels open for VIP events');
       } catch (e) {
         this.log.warn(`CTPP setup failed (notifications disabled): ${(e as Error).message}`);
       }
@@ -289,8 +298,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         lock.refresh();
       }
     }
-    (this.plannedReconnect ? this.log.debug : this.log.info).call(this.log, 'Comelit Intercom ready');
+    if (this.plannedReconnect) {
+      this.routine.reconnects++;
+    } else {
+      this.log.info('Comelit Intercom ready');
+    }
     this.plannedReconnect = false;
+    this.startRoutineSummary();
   }
 
   /**
@@ -314,7 +328,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     await client.openChannel('CTPP', ChannelType.UAUT, ourAddr);
     await client.openChannel('CSPB', ChannelType.UAUT);
     const ctpp = client.getChannel('CTPP')!;
-    await ctppInitSequence(client, ctpp, config.aptAddress, config.aptSubaddress, ourAddr, (Date.now() / 1000) | 0, 2_000, this.log);
+    // Its steps are logged (debug) only when the connection isn't a routine, planned one.
+    const quiet = {
+      info: (m: string) => this.log.info(m),
+      warn: (m: string) => this.log.warn(m),
+      error: (m: string) => this.log.error(m),
+      debug: () => undefined,
+    } as unknown as Logging;
+    await ctppInitSequence(client, ctpp, config.aptAddress, config.aptSubaddress, ourAddr, (Date.now() / 1000) | 0, 2_000, this.plannedReconnect ? quiet : this.log);
   }
 
   /** Re-sends the registration on the open connection (lease mode `inplace`). */
@@ -325,13 +346,46 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       throw new Error('CTPP channel not open');
     }
     await client.sendBinary(ch, encodeCtppInit(cfg.aptAddress, cfg.aptSubaddress, (Date.now() / 1000) | 0));
-    this.log.debug('Registration renewed in place');
+    this.routine.renewals++;
+  }
+
+  /** A debug line for the connection's steps, left out when the connection is a routine, planned one. */
+  private routineDebug(message: string): void {
+    if (!this.plannedReconnect) {
+      this.log.debug(message);
+    }
+  }
+
+  /** Once an hour, one debug line for the routine work of that hour. */
+  private startRoutineSummary(): void {
+    if (this.routineTimer) {
+      return;
+    }
+    this.routineTimer = setInterval(() => this.logRoutineSummary(), ROUTINE_SUMMARY_MS);
+    this.routineTimer.unref?.();
+  }
+
+  /** The hourly debug line: how many renewals and planned reconnects since the last one. */
+  logRoutineSummary(): void {
+    {
+      const r = this.routine;
+      const checks = this.vipListener?.takeRenewalChecks() ?? 0;
+      const minutes = Math.round((Date.now() - r.since) / 60_000);
+      this.log.debug(
+        `Connection, last ${minutes} min: registration renewed ${r.renewals} time(s), ${checks} renewal check(s) from the intercom answered, ` +
+          `${r.reconnects} planned reconnect(s); all fine (problems are logged when they happen)`,
+      );
+      r.renewals = 0;
+      r.reconnects = 0;
+      r.since = Date.now();
+    }
   }
 
   private teardown(): void {
     this.shuttingDown = true;
     void this.camera?.shutdown().catch(() => undefined);
     this.stopKeepalive();
+    clearInterval(this.routineTimer);
     clearTimeout(this.reconnectTimer);
     this.vipListener?.stop().catch(() => undefined);
     this.vipListener = undefined;
