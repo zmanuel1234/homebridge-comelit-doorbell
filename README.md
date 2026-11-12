@@ -29,24 +29,24 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 
 ## Tested hardware
 
-Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0), with Homebridge on a Raspberry Pi (Homebridge image, ffmpeg 7.0.2), plugin 2.1.0:
+Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0), with Homebridge on a Raspberry Pi (Homebridge image, ffmpeg 7.0.2), plugin 2.1.0 to 2.3.0:
 
 | Feature | Works | Notes |
 |---|---|---|
 | Rings → HomeKit (ring sensor, doorbell notification) | ✅ | With in-place registration renewal every 2 minutes |
 | Door release from HomeKit after a ring | ✅ | Refused outside the ring window. During a ring the plugin answers first (`answer-on-view`, `answer-on-open`) |
-| Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked at once (from 2.3.0-beta.6; before, about 6 s after the tap), and Locked again if the intercom refuses |
+| Unlocking during a ring without opening the live view | ✅ | From Control Centre: answers, opens and hangs up; the lock shows Unlocked at once (from 2.3.0; before, about 6 s after the tap), and Locked again if the intercom refuses |
 | Visitor's picture in the ring notification | ✅ | Video before answering works; the first picture comes about 3 s after the ring, and HomeKit's picture requests wait for it (none timed out) |
 | Doorbell camera: answering by opening the live view | ✅ | |
 | Live video | ✅ | 640x240 from the intercom, shown as 4:3; picture after about 2.5 s, about 15–16 frames per second |
 | Sound from the door | ✅ | Turned up 12 dB by default; no delay |
-| Talk-back | ✅ | |
+| Talk-back | ✅ | About 2 s of delay at the door up to 2.3.0-beta.5; noticeably less from 2.3.0 |
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
 | Last visitor's picture | ✅ | Taken at the ring or the start of the call; kept across restarts |
 | Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |
 | Doctor mode (always, or with its switch) | ✅ | |
 | Next Visitor switch | ❓ | New in 2.2.0: the same open as doctor mode; covered by the plugin's tests |
-| Recording rings (HomeKit Secure Video) | ✅ | 2.3.0-beta.2 and beta.3 at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. Sound (beta.4): checked with recorded calls, not yet at the door; the intercom sends none before answering |
+| Recording rings (HomeKit Secure Video) | ✅ | 2.3.0 betas at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. The door's sound is in the clips of answered calls (the intercom sends none before answering); the Home app shows the clips at the exact start time. A Wi-Fi stall can still cost a few seconds of the door's sound in a clip |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
@@ -154,7 +154,7 @@ In JSON, numbers may also be written as plain text (`"subaddress": "3"`). A valu
 | Answer the ring (`answerMode`) | `off` | See [below](#answering-the-ring). `off`, `handshake`, `answer-on-open` or `answer-on-view`. |
 | Talk back from the Home app (`talkBack`) | `true` | Sends the Home app's microphone to the intercom's speaker during a live view (on by default since 2.1.0). Set to `false` to hide the microphone button. |
 | Visitor's picture in the ring notification (`ringPreview`) | `true` | On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is at the door instead of an older picture. It doesn't answer the call: the phones and the monitor keep ringing. The intercom's first picture comes about 3 s after the ring, so a picture HomeKit asks for in the first 4.5 s waits for it. If that first picture is empty (black, the camera not ready yet), the plugin waits for the next one, usually about 6 s after the ring, up to 7 s, rather than send a black picture; if none comes in time (or the scene is so dark that every picture is nearly empty), the notification shows the earlier visitor's picture. With debug mode on, the `Ring preview: …` lines say whether it worked, and which picture HomeKit got. Needs the doorbell camera, **Answer the ring** (or doctor mode) not `off`, since the plugin must follow the call, and **Show the last visitor for** above 0. If the intercom sends no picture before an answer, the log says so (`Ring preview: no video before answering`); turn this off then. |
-| Record rings (`recording`) | `false` | Beta. Records each ring as a HomeKit Secure Video clip, with sound, from the intercom's first picture until the call ends or the video stops (rings that doctor mode or Next Visitor open: only up to the open). See [recording rings](#recording-rings-homekit-secure-video). Needs the doorbell camera, a home hub and iCloud+. Works with any **Answer the ring** setting: the plugin follows the call without answering it. |
+| Record rings (`recording`) | `false` | Records each ring as a HomeKit Secure Video clip, with sound, from the intercom's first picture until the call ends or the video stops (rings that doctor mode or Next Visitor open: only up to the open). See [recording rings](#recording-rings-homekit-secure-video). Needs the doorbell camera, a home hub and iCloud+. Works with any **Answer the ring** setting: the plugin follows the call without answering it. |
 
 ### Door
 
@@ -266,13 +266,13 @@ What a call looks like:
 
 ### Recording rings (HomeKit Secure Video)
 
-Beta, new in 2.3.0-beta.1 (sound in beta.3). With **Record rings** (`recording`) on, every ring is saved as a clip in the Home app's camera timeline, answered or not:
+New in 2.3.0. With **Record rings** (`recording`) on, every ring is saved as a clip in the Home app's camera timeline, answered or not:
 
 - **What is recorded:** the ring's first picture held still for 4 s (see below), then the ring from the intercom's first picture, about 3 s after the button press, until the call ends or the intercom stops sending video for 5 s (at most 3 minutes). One clip per ring, whoever answers and however many phones there are. If the live view answers the call, the clip goes on with the live view's video.
 - **Rings that doctor mode or the Next Visitor switch open** are recorded only up to the open: the intercom's first picture comes about 3 s after the ring, so with **open after** at 2 s there is no clip, and at 5 s a short one. A call that only opens the door sends no video. The same goes for a ring answered within about 3 s by unlocking from HomeKit (`answer-on-open`).
-- **Sound** (new in 2.3.0-beta.3, working from beta.4), when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. During the ring itself, before anyone answers, the plugin asks the intercom for its sound too, but the 6741W doesn't send it then (tested 2026-11-11; the `Ring preview:` line says `sound before answering: none`), so the ring part of a clip is silent.
+- **Sound**, when **Record audio** is on in the camera's Recording Options: the door's sound during the call, turned up by **Door volume** as in the live view. During the ring itself, before anyone answers, the plugin asks the intercom for its sound too, but the 6741W doesn't send it then (tested 2026-11-11; the `Ring preview:` line says `sound before answering: none`), so the ring part of a clip is silent.
 - **Timing:** each frame and piece of sound keeps the time it arrived from the intercom, so picture and sound stay together, and the clip plays at the right speed whatever the intercom's frame rate (it varies: 8 to 16 frames a second have been seen).
-- **The 4 s still at the start:** HomeKit expects every clip to start with 4 s from before the event (a "prebuffer"; cameras that record all the time have it) and dates the clip from the end of those 4 s. The intercom has no video before a ring, so each clip starts with the ring's first picture held still for 4 s: the Home app then shows the time of the first live picture. Without it (up to 2.3.0-beta.5), clips were shown 3.4–4.5 s late.
+- **The 4 s still at the start:** HomeKit expects every clip to start with 4 s from before the event (a "prebuffer"; cameras that record all the time have it) and dates the clip from the end of those 4 s. The intercom has no video before a ring, so each clip starts with the ring's first picture held still for 4 s: the Home app then shows the time of the first live picture. Without it, clips were shown 3.4–4.5 s late.
 - **How it works:** HomeKit records when a camera's motion sensor turns on, so the camera gets its own motion sensor, which turns on at the intercom's first real picture and off at the end of the call. The ring sensor is unchanged. The live view and the notification picture work as before.
 
 What you need:
