@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.2 (2026-11-12)
+
+Packaging only, for the Homebridge Verified checks; the plugin itself doesn't change.
+
+### Changed
+
+- `package.json` declares that the plugin works over HomeKit (HAP), with the `supports-hap` keyword.
+- Homebridge is no longer listed as a peer dependency (npm installed it again alongside the plugin); the required Homebridge version stays in `engines`.
+- ffmpeg is started without passing the environment explicitly (it was passed unchanged, which is also the default); the verification scan flagged `process.env` as "accesses environment files".
+- The settings schema lists its required settings (name, IP address, token) the standard JSON Schema way, in one `required` list, instead of `"required": true` on each setting. The settings screen looks and works the same.
+
 ## 2.3.1 (2026-11-12)
 
 ### Changed

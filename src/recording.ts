@@ -808,7 +808,7 @@ export class RingRecorder implements CameraRecordingDelegate {
 export function spawnFfmpeg(ffmpeg: string, log: Logging): Spawn {
   return (what, args) => {
     log.debug(`Doorbell camera: ${what}: ${ffmpeg} ${args.join(' ')}`);
-    const p = spawn(ffmpeg, args, { env: process.env });
+    const p = spawn(ffmpeg, args);
     p.stdin.on('error', () => undefined);
     // At debug level: when a call is answered, the live view's video joins mid-stream, and ffmpeg
     // reports the frames it can't decode until the next keyframe.

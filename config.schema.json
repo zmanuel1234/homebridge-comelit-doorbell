@@ -10,13 +10,11 @@
         "title": "Name",
         "type": "string",
         "default": "Comelit Intercom",
-        "required": true,
         "description": "Name of the platform in the log, and of the Doorbell accessory when it is first created."
       },
       "host": {
         "title": "Intercom IP address",
         "type": "string",
-        "required": true,
         "placeholder": "192.168.1.100",
         "description": "Local IP address of the Comelit monitor or Extender, e.g. 192.168.1.50. Give it a fixed address in your router."
       },
@@ -29,7 +27,6 @@
       "token": {
         "title": "User token",
         "type": "string",
-        "required": true,
         "description": "32-character token of the Comelit user Homebridge signs in as. Find it in users.cfg inside a backup downloaded from the intercom's web page (http://<intercom-ip>:8080). See the README."
       },
       "enableNotifications": {
@@ -306,6 +303,7 @@
       }
     },
     "required": [
+      "name",
       "host",
       "token"
     ]

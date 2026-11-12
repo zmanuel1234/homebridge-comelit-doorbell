@@ -1036,7 +1036,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   private spawnProcess(what: string, args: string[]): ChildProcessWithoutNullStreams {
     this.log.debug(`Doorbell camera: ${what}: ${this.ffmpeg} ${args.join(' ')}`);
-    const p = spawn(this.ffmpeg, args, { env: process.env });
+    const p = spawn(this.ffmpeg, args);
     p.stdin.on('error', () => undefined);
     p.stderr.on('data', (d: Buffer) => this.log.warn(`Doorbell camera ${what}: ${d.toString().trim().slice(0, 300)}`));
     p.on('error', (e) => this.log.error(`Doorbell camera ${what}: ${e.message}`));
