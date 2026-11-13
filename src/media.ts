@@ -131,13 +131,14 @@ export function nalType(unit: Buffer): number {
 export const MIN_PICTURE_BYTES = 2_000;
 
 /**
- * The 6741W starts a call with two keyframes 1 s apart: the first is an old picture it kept from
- * its previous call (encoded again), the second the first fresh one (seen at the door in
- * 2.3.3-beta.1: 1.00 s apart on every ring, then one every 3-4 s). So a keyframe followed by
- * another within this time is the old picture, and the second one becomes the ring's picture.
- * With no second keyframe in time, the first is taken after all (as before 2.3.3).
+ * The 6741W starts every call with two keyframes 0.8-1.2 s apart, then one every 3-4 s (seen at
+ * the door with 2.3.3-beta.1 and beta.2). After a long quiet spell (hours), the first is an old
+ * picture it kept from before (encoded again); otherwise both are fresh. So a keyframe followed
+ * by another within this time is skipped, and the second one becomes the ring's picture: it
+ * fixes the old picture and costs about 1 s otherwise. With no second keyframe in time, the
+ * first is taken after all (as before 2.3.3). Well before the third keyframe (~2.9 s later).
  */
-export const LEFTOVER_GAP_MS = 1_500;
+export const LEFTOVER_GAP_MS = 2_000;
 
 export class KeyframeCache {
   private sps?: Buffer;

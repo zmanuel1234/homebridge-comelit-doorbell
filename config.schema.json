@@ -126,7 +126,7 @@
         "default": 2,
         "minimum": 0,
         "maximum": 30,
-        "description": "Wait this long after the ring before opening."
+        "description": "Wait this long after the ring before opening. With Record rings on, 8 or more gives a clip of who comes in (the intercom's fresh picture comes about 4-5.6 s after the ring)."
       },
       "nextVisitorSwitch": {
         "title": "Next Visitor switch",
