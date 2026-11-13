@@ -319,7 +319,9 @@ const PENDING_STREAM_MS = 60_000;
 const PREVIEW_PICTURE_WAIT_MS = 7_000;
 /**
  * After an empty (black) first keyframe, picture requests wait for the next keyframe (the 6741W
- * sends one every 2.7-3 s) up to this long after the ring; HomeKit warns after 8 s.
+ * sends one every 2.7-3 s) up to this long after the ring; HomeKit warns after 8 s. Since 2.3.3
+ * this is the same as PREVIEW_PICTURE_WAIT_MS, so extending the wait changes nothing; kept in
+ * case the two differ again.
  */
 const PREVIEW_EMPTY_WAIT_MS = 7_000;
 /** If no ring preview has started this long after a ring, picture requests stop waiting. */
