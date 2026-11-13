@@ -75,3 +75,23 @@ Other findings:
 
 - **Next Visitor with a HomeKit arrival automation** ("anyone arrives" turns the switch on): it turned on for every arrival of a member of the home, including while another member was already in, and the arriving member was let in on their ring about a minute later. The Home app on a phone that hadn't reconnected after a bridge restart still showed the switch off while it was on; the log was right.
 - A test run of the automation from the Home app ("Test This Automation") left the switch on, and the next ring was let in.
+
+## 2026-11-12/13: the intercom's old first picture (2.3.3-beta.1 and beta.2)
+
+Same installation. A morning ring's notification picture, camera tile and recording still showed the street from the night before; an afternoon ring showed the morning. The live video after it was fresh.
+
+| Ring | Quiet before it | Keyframes at the start (after the ring) | First picture | Second picture |
+|---|---|---|---|---|
+| beta.1, two rings 2 min apart | — | 3.13 s / 4.14 s, then +2.9 s, +4.0 s; 3.25 s / 4.24 s, then +2.9 s, +4.0 s | — | — |
+| beta.2, evening | ~2.3 h | 3.73 s, 39 KB / 4.55 s | fresh (the person at the panel) | fresh |
+| beta.2, evening, Next Visitor at 6 s | ~2.5 h | 3.31 s, 44 KB / 4.11 s | fresh | fresh |
+| beta.2, evening, Next Visitor at 6 s | 14 min | 3.85 s, 43 KB / none before the door opened | probably fresh (visitor stepping into view) | — |
+| beta.2, first ring of the day, Next Visitor at 6 s | **~15.7 h** | 4.38 s, 44 KB / 5.58 s | **old: the night before** | fresh (the visitor in daylight) |
+| beta.2, unanswered | ~80 min | 3.28 s / 4.14 s | fresh | fresh |
+| beta.2, answered | 1 min | 2.44 s / 3.58 s | fresh | fresh |
+
+Findings:
+
+- The 6741W starts every call with two keyframes 0.79–1.20 s apart, then one every ~3-4 s. The first is often larger (39-44 KB against 24-32 KB).
+- After a quiet spell of hours (13 h, 5.7 h and 15.7 h seen) the first keyframe is an old picture, encoded again (never a byte copy of an earlier keyframe); after up to ~2.5 h it was fresh. How the previous call ended (door opened or not) made no difference.
+- 2.3.3 skips a keyframe that another follows within 2 s. With Next Visitor or doctor mode opening at 6 s, the second keyframe came 0.4 s before the open once and not at all once: 8 s or more is recommended with recording.
