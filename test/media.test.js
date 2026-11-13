@@ -220,7 +220,7 @@ test('an empty (black) keyframe is not taken as the visitor picture; the next re
   assert.strictEqual(empty.length, 1);
 });
 
-test("the intercom's old picture: a keyframe followed by another within 1.5 s is skipped, the second becomes the visitor's picture (2.3.3)", (t) => {
+test("the intercom's old picture: a keyframe followed by another within 2 s is skipped, the second becomes the visitor's picture (2.3.3)", (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { KeyframeCache, LEFTOVER_GAP_MS } = require('../dist/media');
   const k = new KeyframeCache();
@@ -279,7 +279,7 @@ test("the intercom's old picture: a candidate left pending by the previous call 
   k.onVisitor = (frame, at, late) => calls.push([frame.at(-1), late]);
   k.newCall({});
   for (const [ty, tag] of [[7, 1], [8, 1], [5, 1], [1, 1]]) k.push(u(ty, tag));
-  k.newCall({}); // the next call's video before the 1.5 s were up
+  k.newCall({}); // the next call's video before the 2 s were up
   assert.deepStrictEqual(calls, [[1, true]]);
   assert.strictEqual(k.visitor().at(-1), 1);
 });

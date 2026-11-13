@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.3 (2026-11-13)
+
+### Fixed
+
+- **The first ring after a quiet spell no longer shows an old picture.** The 6741W starts every call with two keyframes 0.8–1.2 s apart; after hours without a call (overnight, or most of a day), the first is an old picture it kept, from the previous evening say. That old picture became the ring's notification picture, the camera tile and the 4 s still at the start of the HomeKit recording. The plugin now skips a keyframe that another follows within 2 s and uses the second. Checked at the door with 2.3.3-beta.2: after 15.7 h of quiet the skipped picture was the night before and the one used showed the visitor in daylight; after shorter breaks both pictures were fresh, and the skip only cost about 1 s.
+  - The picture and the clip start about 1 s later (about 4 s after the ring). Picture requests wait up to 7 s after a ring (was 4.5 s). Without recording, the ring preview stays 2.3 s after its first picture (was 0.5 s).
+  - With no second keyframe in time the first is used, as before; after an empty (black) keyframe the first real one is taken at once. A ring answered or opened before the fresh keyframe (up to 5.6 s after the ring) can still only get the old one: **open after** of 8 s or more is recommended for doctor mode and Next Visitor.
+  - With debug on: `Doorbell camera: skipped the intercom's first keyframe (… bytes, its old picture): a fresh one followed 1.0 s later …`, and `recording N: … the intercom's second keyframe: its first … was its old picture`. With `mediaCaptureDir`, the skipped picture is saved as `ring-…-skipped.jpg` next to `ring-….jpg`.
+- Debug log of the keyframes at the start of each call (`call: ring preview keyframe 1 3.31 s after the ring, … bytes, fingerprint …`, and for the live view), kept from the betas.
+
+The pre-release entries below have the details.
+
 ## 2.3.3-beta.2 (2026-11-12)
 
 ### Fixed

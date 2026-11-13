@@ -630,10 +630,10 @@ test("recording: the intercom's old picture (a keyframe with another 1 s after i
   s.push(p);
   let settled = false;
   void s.ready.then(() => (settled = true));
-  t.mock.timers.tick(1500);
+  t.mock.timers.tick(2000);
   await Promise.resolve();
-  assert.strictEqual(settled, true, 'decided 1.5 s after the first keyframe');
-  t.mock.timers.tick(1500);
+  assert.strictEqual(settled, true, 'decided 2 s after the first keyframe');
+  t.mock.timers.tick(1000);
   for (const u of [sps, pps, idr(2500), p]) s.push(u);
   assert.strictEqual(s.start, 0);
   assert.strictEqual(s.skipped, undefined);
@@ -664,7 +664,7 @@ test('recorder: after an empty (black) keyframe the recording starts at the firs
   for (const u of [sps, pps, idr(1000), p, sps, pps, idr(3000), p]) r.onCallVideo(call, u);
   const first = r.handleRecordingStreamRequest(1).next();
   await new Promise((res) => setTimeout(res, 50));
-  assert.strictEqual(procs.length, 1, 'no 1.5 s wait');
+  assert.strictEqual(procs.length, 1, 'no 2 s wait');
   r.onCallEnded(call);
   r.shutdown();
   await Promise.race([first.catch(() => undefined), new Promise((res) => setTimeout(res, 200))]);
