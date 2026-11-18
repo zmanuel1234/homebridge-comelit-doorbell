@@ -214,3 +214,21 @@ test('settings: off by default; on, calls are followed and it needs the camera a
   assert.ok(settingsWarnings(resolveSettings({ platform: 'x', liveViewWithoutRing: true })).some((w) => /needs the doorbell camera/.test(w)));
   assert.ok(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, enableNotifications: false })).some((w) => /Listen for rings/.test(w)));
 });
+
+test('an own call that ends without video warns once per run; closing the view early does not', async () => {
+  const { call } = setup();
+  const warns = [];
+  call.log = { debug() {}, info() {}, error() {}, warn: (m) => warns.push(m) };
+  let session = await call.startMedia(false);
+  await session.end('viewer closed');
+  session = await call.startMedia(false);
+  await session.end('viewer left');
+  assert.deepStrictEqual(warns, [], 'the viewer left before any video was due: no warning');
+  session = await call.startMedia(false);
+  await session.end('no media from the intercom');
+  assert.strictEqual(warns.length, 1);
+  assert.match(warns[0], /took the call but sent no video \(no media from the intercom\).*Entrance button/);
+  session = await call.startMedia(false);
+  await session.end('the intercom ended the call');
+  assert.strictEqual(warns.length, 1, 'only once');
+});
