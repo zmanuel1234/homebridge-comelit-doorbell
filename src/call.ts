@@ -258,6 +258,24 @@ export class CallHandler {
     return [...this.calls.values()].filter((c) => !c.outbound).pop();
   }
 
+  private warnedNoVideo = false;
+
+  /**
+   * Our own call to the panel (live view without a ring) ended without any video: warns once
+   * per run, since some systems accept the call but never send video.
+   */
+  noVideoFromOwnCall(reason: string): void {
+    if (this.warnedNoVideo) {
+      return;
+    }
+    this.warnedNoVideo = true;
+    this.log?.warn(
+      `Live view without a ring: the entrance panel took the call but sent no video (${reason}). ` +
+        "Some systems don't support this: if the Comelit app's Entrance button can't show the entrance " +
+        'without a ring either, turn Live view without a ring off.',
+    );
+  }
+
   /** The most recent call still in progress, if any. */
   activeCall(): Call | undefined {
     const now = Date.now();
@@ -879,6 +897,9 @@ export class MediaSession extends EventEmitter {
     clearTimeout(this.keyframeRetry);
     this.client.off('channel', this.onChannel);
     this.log?.debug(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets; talk-back sent=${this.stats.sent}`);
+    if (this.call.outbound && this.stats.video === 0 && (reason === 'no media from the intercom' || reason === 'the intercom ended the call')) {
+      this.handler.noVideoFromOwnCall(reason);
+    }
     if (this.stats.audio > 0) {
       const s = this.sound;
       this.log?.debug(

@@ -316,7 +316,7 @@
         "title": "Live view without a ring (experimental)",
         "type": "boolean",
         "default": false,
-        "description": "Opening the doorbell camera when nobody is ringing calls the entrance panel, as the Comelit app's camera button does, and shows its video (no sound). Closing the view hangs up. Off: outside a call the camera shows a picture."
+        "description": "Opening the doorbell camera when nobody is ringing calls the entrance panel, as the Comelit app's camera button does, and shows its video (no sound). Closing the view hangs up. Off: outside a call the camera shows a picture. Needs the monitor in Kit mode (S3 DIP 1 ON). Try the Comelit app's Entrance button first: if the app can't show the entrance without a ring, this can't either."
       },
       "recording": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
