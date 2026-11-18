@@ -33,6 +33,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   snapshotImage?: string;
   mediaCaptureDir?: string;
   ringPreview?: boolean;
+  liveViewWithoutRing?: boolean | string;
   recording?: boolean | string;
   doorVolume?: number | string;
   mediaStartTimeoutSeconds?: number;
@@ -90,6 +91,11 @@ export interface Settings {
   mediaCaptureDir: string;
   /** Experimental: ask for the visitor's picture during the ring, before answering. */
   ringPreview: boolean;
+  /**
+   * Experimental: opening the live view when nobody is ringing places our own call to the
+   * entrance panel, as the Comelit app's camera button does, so the view shows the panel's video.
+   */
+  liveViewWithoutRing: boolean;
   /** HomeKit Secure Video: each ring is recorded (needs the doorbell camera, a home hub and iCloud+). */
   recording: boolean;
   /** Gain on the intercom's audio to the Home app, in dB (0: as is). */
@@ -215,6 +221,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     snapshotImage: text('snapshotImage'),
     mediaCaptureDir: text('mediaCaptureDir'),
     ringPreview: bool('ringPreview', true),
+    liveViewWithoutRing: bool('liveViewWithoutRing', false),
     recording: bool('recording', false),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
     mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1, 60) * 1000,
@@ -243,7 +250,7 @@ export function reconnectDelay(s: Pick<Settings, 'reconnectDelayMs' | 'maxReconn
  * themselves, so they need calls followed (handshake) even with answering off.
  */
 export function callHandlerMode(s: Settings): Settings['answerMode'] {
-  const follows = s.doctorMode !== 'off' || s.nextVisitorSwitch || (s.camera && s.recording);
+  const follows = s.doctorMode !== 'off' || s.nextVisitorSwitch || (s.camera && (s.recording || s.liveViewWithoutRing));
   return s.answerMode === 'off' && follows ? 'handshake' : s.answerMode;
 }
 
@@ -270,6 +277,12 @@ export function settingsWarnings(s: Settings): string[] {
   }
   if (s.answerMode === 'answer-on-view' && !s.camera) {
     w.push("answerMode 'answer-on-view' needs the doorbell camera (camera: true); without it nothing answers the ring.");
+  }
+  if (s.liveViewWithoutRing && !s.camera) {
+    w.push("'Live view without a ring' (liveViewWithoutRing) needs the doorbell camera (camera: true); it is off.");
+  }
+  if (s.liveViewWithoutRing && s.camera && !s.enableNotifications) {
+    w.push("'Live view without a ring' (liveViewWithoutRing) needs 'Listen for rings' (enableNotifications): the call to the panel uses that connection.");
   }
   if (s.camera && s.doorbellTriggerUrl) {
     w.push('The doorbell camera rings in HomeKit by itself; with doorbellTriggerUrl set as well, each ring gives two notifications. Clear the trigger URL once the camera works.');

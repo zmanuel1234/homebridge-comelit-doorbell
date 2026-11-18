@@ -311,6 +311,13 @@
         "default": true,
         "description": "On a ring, gets the visitor's picture from the intercom before anyone answers, so the notification shows who is there. Doesn't answer the call. Needs the doorbell camera, and Answer the ring (or doctor mode) not off."
       },
+      "liveViewWithoutRing": {
+        "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
+        "title": "Live view without a ring (experimental)",
+        "type": "boolean",
+        "default": false,
+        "description": "Opening the doorbell camera when nobody is ringing calls the entrance panel, as the Comelit app's camera button does, and shows its video (no sound). Closing the view hangs up. Off: outside a call the camera shows a picture."
+      },
       "recording": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
         "title": "Record rings (HomeKit Secure Video)",
@@ -345,6 +352,7 @@
         "answerMode",
         "talkBack",
         "ringPreview",
+        "liveViewWithoutRing",
         "recording"
       ]
     },

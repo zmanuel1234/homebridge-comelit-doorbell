@@ -182,6 +182,9 @@ export class VipEventListener {
     const frame = parseFrame(data);
     if (frame && this.call?.enabled) {
       await this.call.onFrame(frame, msg.addresses).catch((e) => this.log?.warn(`call: ${(e as Error).message}`));
+      if (this.call.isOwnCall(frame.conn0, frame.conn1)) {
+        return; // our own call to the panel (live view without a ring): never a ring or a door event
+      }
     }
 
     if (isRetransmit && prefix === PREFIX_VIDEO_EVENT) {

@@ -149,7 +149,7 @@ function doctor(extra) {
   p.deviceConfig = deviceConfig;
   p.discoverAccessories(deviceConfig);
   const opened = [];
-  p.callHandler = { activeCall: () => ({}), openInCall: async (door, force) => { opened.push([door.name, force]); return { confirmed: true }; } };
+  p.callHandler = { ringingCall: () => ({}), openInCall: async (door, force) => { opened.push([door.name, force]); return { confirmed: true }; } };
   const ring = async () => {
     p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
     await new Promise((r) => setTimeout(r, 20));
@@ -180,9 +180,18 @@ test('doctor mode switch: opens only while the HomeKit switch is on', async () =
   assert.strictEqual(opened.length, 1);
   // a call that is already over (answered on a phone) is not opened
   p.doctorSwitch.accessory.context.on = true;
-  p.callHandler.activeCall = () => undefined;
+  p.callHandler.ringingCall = () => undefined;
   await ring();
   assert.strictEqual(opened.length, 1);
+});
+
+test('doctor mode / Next Visitor: only our own live view call is up (no ring to open in): not opening', async () => {
+  const { opened, ring, p } = doctor({ doctorMode: 'always' });
+  // The call handler has our own call to the panel, but no ring: ringingCall() finds none.
+  p.callHandler.activeCall = () => ({ outbound: true });
+  p.callHandler.ringingCall = () => undefined;
+  await ring();
+  assert.deepStrictEqual(opened, []);
 });
 
 test('cached accessories answer HomeKit before the first connection (beta.26)', async () => {
@@ -290,10 +299,10 @@ test('next visitor: the next ring opens the door, then the switch turns itself o
 test('next visitor: stays on when the open fails or the call was answered elsewhere', async () => {
   const { p, opened, ring } = doctor({ nextVisitorSwitch: true });
   nextOn(p).set(true);
-  p.callHandler.activeCall = () => undefined; // answered on a phone first
+  p.callHandler.ringingCall = () => undefined; // answered on a phone first
   await ring();
   assert.strictEqual(nextOn(p).get(), true);
-  p.callHandler.activeCall = () => ({});
+  p.callHandler.ringingCall = () => ({});
   p.callHandler.openInCall = async () => { throw new Error('Not connected'); };
   await ring();
   assert.strictEqual(nextOn(p).get(), true);

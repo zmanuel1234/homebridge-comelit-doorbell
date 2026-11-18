@@ -25,8 +25,12 @@ interface Keyframe {
   at: number;
 }
 
-/** Where a call's video comes from: the ring preview, then (if answered) the live view. */
-export type VideoSource = 'ring preview' | 'live view';
+/**
+ * Where a call's video comes from: the ring preview, then (if answered) the live view; or the
+ * live view of our own call to the panel (live view without a ring), timed from the call.
+ */
+export type VideoSource = 'ring preview' | 'live view' | 'own call';
+const since = (source: VideoSource) => (source === 'own call' ? 'after the call started' : 'after the ring');
 
 interface SourceTrace {
   /** The keyframe being received (its slices come one unit after another). */
@@ -94,7 +98,7 @@ export class KeyframeTrace {
     const last = t.keyframes.at(-1);
     if (last) {
       this.log(
-        `call: keyframes: ${t.keyframes.length} in this call; the last one ${fmt(last.at)} after the ring, ${last.bytes} bytes, fingerprint ${last.fingerprint}`,
+        `call: keyframes: ${t.keyframes.length} in this call; the last one ${fmt(last.at)} ${since(t.sources.has('own call') ? 'own call' : 'live view')}, ${last.bytes} bytes, fingerprint ${last.fingerprint}`,
       );
       this.previous = t.keyframes;
     }
@@ -114,7 +118,7 @@ export class KeyframeTrace {
       const gap = v.lastLoggedAt === undefined ? '' : `, ${fmt(k.at - v.lastLoggedAt)} after the one before`;
       const old = this.previous.find((p) => p.fingerprint === k.fingerprint);
       const copy = old ? `a copy of the previous call's keyframe from ${fmt(old.at)} after its ring` : 'new';
-      this.log(`call: ${source} keyframe ${v.logged} ${fmt(k.at)} after the ring${gap}, ${k.bytes} bytes, fingerprint ${k.fingerprint} (${copy})`);
+      this.log(`call: ${source} keyframe ${v.logged} ${fmt(k.at)} ${since(source)}${gap}, ${k.bytes} bytes, fingerprint ${k.fingerprint} (${copy})`);
       v.lastLoggedAt = k.at;
     }
     t.keyframes.push(k);

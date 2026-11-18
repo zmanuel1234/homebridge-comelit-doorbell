@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Live view without a ring (experimental, off by default).** With **Live view without a ring** (`liveViewWithoutRing`) on, opening the doorbell camera's live view when nobody is ringing calls the entrance panel, as the Comelit app's camera button does, and shows its video. Closing the view hangs up. Needs the doorbell camera and **Listen for rings**.
+  - The call follows the Comelit app's outgoing call as recorded by PCAP-verified Home Assistant integrations (antoiba86/hass-comelit-intercom-local, used by Jordi-14/ha-component-comelit-intercom, verified on a 6741W), in this plugin's CTP terms: an INVITE of our own (our address, the entrance panel's from the intercom's address book, a session block, "II"), the app's capabilities, then the same audio and video requests as an answered ring, and an empty DATA frame once the panel has sent its media request. No VOICESTATUS: like the app before you tap to talk, it's video only.
+  - Needs the monitor in Kit mode (S3 DIP switch 1 ON): per the 6741W manual, self activation only works in Kit mode.
+  - Our own calls are never recorded (HomeKit Secure Video records rings only), and their frames never count as a ring or a door event. A ring that comes in during the view is followed and answered as before.
+  - The door is never opened inside our own call: doctor mode, the Next Visitor switch and the lock only open inside a ring (`ringingCall()`); with only our call up, the lock opens the normal way and doctor mode / Next Visitor don't open (review).
+  - Some panels take the call but send no video (seen with an EX-7000HW monitor, where self activation fails from the official app too); the README says so (review).
+  - With debug on, the call's frames are in the log as for a ring (`call: calling the entrance panel …`, `call: tx outgoing call (invite): …`).
+  - Tried on a 6741W (2026-11-16, Homebridge on macOS, ffmpeg 8.0): the panel answered the INVITE with an acknowledgement, its capabilities (`000350033b000000`) and a 2-byte SETUP_ACK (`000c`), opened its own RTPC channel and sent its media request; the first picture reached the Home app 2.6 s after the view opened, and 37 s of video (about 16 frames per second, 320x240) came until the view was closed and the plugin hung up (the panel closed its side with a FIN).
+  - The keyframe debug log times our own call from its start (`call: own call keyframe 1 2.75 s after the call started …`).
 - **Buzzes per unlock** (`openRepeat`, default 1) and **Time from one buzz to the next** (`openRepeatSeconds`, default 6). For an entrance behind two doors, each unlock sends the door release several times, so the second door opens too while you walk to it. Applies to every unlock from HomeKit and to doctor mode and Next Visitor. The startup `Settings:` line says `…, 3 buzzes per unlock 6 s apart`, and each extra buzz is logged (`Door 'Entrance lock': buzz 2 of 3`).
 
 ## 2.3.3 (2026-11-13)

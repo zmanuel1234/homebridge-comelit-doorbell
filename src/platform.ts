@@ -83,11 +83,16 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.log.info(
       `Settings: ${s.host || '(no host)'}:${s.port}, user row ${s.subaddress ?? 'from the intercom'}, ${s.enableNotifications ? `refresh ${s.leaseMode} every ${s.leaseRefreshMs / 60_000} min` : `rings off, reconnect every ${s.leaseRecycleMs / 60_000} min`}, ` +
         `unlock ${s.ringWindowMs ? `within ${s.ringWindowMs / 1000} s of a ring` : 'at any time'}, answerMode ${s.answerMode}, camera ${s.camera ? 'on' : 'off'}` +
+        `${s.camera && s.liveViewWithoutRing ? ', live view without a ring' : ''}` +
         `${s.doorbellTriggerUrl ? ', trigger URL set' : ''}${s.doctorMode !== 'off' ? `, doctor mode ${s.doctorMode}` : ''}` +
         `${s.openRepeat > 1 ? `, ${s.openRepeat} buzzes per unlock ${s.openRepeatMs / 1000} s apart` : ''}`,
     );
     if (this.settings.camera && this.settings.answerMode !== 'answer-on-view') {
-      this.log.info("Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.");
+      this.log.info(
+        this.settings.liveViewWithoutRing
+          ? "Doorbell camera: live video during a ring needs answerMode 'answer-on-view'; until then a ring's live view shows the picture."
+          : "Doorbell camera: live video needs answerMode 'answer-on-view'; until then it shows the picture.",
+      );
     }
     api.on('didFinishLaunching', () => {
       this.restoreCached();
@@ -256,6 +261,10 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         startTimeoutMs: s.mediaStartTimeoutMs,
         silenceMs: s.mediaSilenceMs,
         videoRefreshMs: s.videoRefreshMs,
+      }, {
+        // Live view without a ring: our own call to the entrance panel (the first in the address book).
+        liveViewWithoutRing: s.camera && s.liveViewWithoutRing,
+        panelAddress: deviceConfig.callerAddress,
       });
       listener = new VipEventListener(client, deviceConfig, (ev) => this.onEvent(ev), this.log, call);
       call.attach(client);
@@ -526,7 +535,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
           return;
         }
         const call = this.callHandler;
-        if (!call?.activeCall()) {
+        if (!call?.ringingCall()) {
+          // No ring to open in (it ended, or only our own live view call is up): not opening.
           this.log.info(`${label}: the call is over (answered elsewhere or hung up); not opening`);
           return;
         }

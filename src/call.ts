@@ -13,8 +13,20 @@
  *   intercom → RTP: H.264 video, G.711 A-law audio; our talk-back audio goes back as RTP
  *   we → OPEN_DOOR inside the call; RELEASE (0x000E) to hang up
  *
+ * Experimental, live view without a ring: when nobody is ringing, the plugin can place its own
+ * call to the entrance panel, as the Comelit app's camera button does (the outgoing call of
+ * PCAP-verified implementations such as antoiba86/hass-comelit-intercom-local; see placeCall):
+ *
+ *   we → INVITE (SYN): our address, the panel's, a session block, "II"
+ *   intercom → echo/acknowledgement   we → our CAPABILITIES
+ *   intercom → CAPABILITIES, then SETUP_ACK (the panel accepted)
+ *   we → open UDPM + 2 × RTPC, audio and video media requests (no VOICESTATUS: video only)
+ *   intercom → its media request, then RTP;  we → an empty DATA frame ("ready")
+ *   we → RELEASE (0x000E) to hang up when the live view closes
+ *
  * Every frame of a call is logged with the prefix `call:`.
  */
+import { randomBytes } from 'crypto';
 import { KeyframeTrace, type VideoSource } from './keyframes';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
@@ -35,6 +47,19 @@ const AUDIO_STOP = Buffer.from('0011980200000000', 'hex');
 const VIDEO_OFFER = Buffer.from('0011143200000000', 'hex');
 const OP_VOICESTATUS = 0x0070;
 const CALL_MAX_AGE_MS = 120_000;
+/** A waiter for any frame (see CallHandler.wait). */
+const ANY_FRAME = -2;
+/** Live view without a ring: the longest wait for each step of our call to the panel. */
+const OUTBOUND_STEP_MS = 5_000;
+/** The session block of our INVITE starts with these two bytes (as the Comelit app's). */
+const OUTBOUND_SESSION_FLAGS = Buffer.from([0x01, 0x20]);
+
+/** Live view without a ring (setting liveViewWithoutRing, and the panel from the address book). */
+export interface OutboundOptions {
+  liveViewWithoutRing?: boolean;
+  /** The entrance panel's address (the intercom's entrance-address-book). */
+  panelAddress?: string;
+}
 
 /** Media timing (settings mediaStartTimeoutSeconds, mediaSilenceSeconds, videoRefreshSeconds). */
 export interface MediaTiming {
@@ -79,6 +104,10 @@ interface Call {
   panelAudioHandle?: number;
   /** The ring preview: video asked for during the ring, before anyone answers. */
   preview?: RingPreview;
+  /** Our own call to the panel (live view without a ring), not a ring. */
+  outbound?: boolean;
+  /** Outbound: our CAPABILITIES have been sent. */
+  capsSent?: boolean;
 }
 
 interface Waiter {
@@ -146,7 +175,13 @@ export class CallHandler {
     private readonly sendFrame: (frame: Buffer) => Promise<void>,
     private readonly log?: Logging,
     private readonly timing: MediaTiming = DEFAULT_MEDIA_TIMING,
+    private readonly outboundOptions: OutboundOptions = {},
   ) {}
+
+  /** Live view without a ring is on, and the panel to call is known. */
+  get canCallPanel(): boolean {
+    return Boolean(this.outboundOptions.liveViewWithoutRing && this.outboundOptions.panelAddress) && this.enabled;
+  }
 
   get enabled(): boolean {
     return this.mode !== 'off';
@@ -162,16 +197,28 @@ export class CallHandler {
 
   /** A call's video unit, for the listener. */
   callVideo(call: object, unit: Buffer, source: VideoSource = 'live view'): void {
-    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit, source);
-    this.listener?.video(call, unit);
+    const own = (call as Partial<Call>).outbound === true;
+    this.keyframes.video(call, (call as Partial<Call>).born ?? Date.now(), unit, own ? 'own call' : source);
+    if (!own) {
+      this.listener?.video(call, unit); // our own calls to the panel are not rings: not recorded
+    }
   }
   /** A call's sound (A-law), for the listener. */
   callAudio(call: object, data: Buffer): void {
-    this.listener?.audio?.(call, data);
+    if (!(call as Partial<Call>).outbound) {
+      this.listener?.audio?.(call, data);
+    }
   }
   private callEnded(call: Call): void {
     this.keyframes.ended(call);
-    this.listener?.ended(call);
+    if (!call.outbound) {
+      this.listener?.ended(call);
+    }
+  }
+
+  /** Whether a frame from the intercom belongs to one of our own calls to the panel (not a ring). */
+  isOwnCall(conn0: number, conn1: number): boolean {
+    return this.calls.get((conn1 << 8) | conn0)?.outbound === true;
   }
 
   /** Whether a ring starts a ring preview (calls are followed and the preview is on). */
@@ -200,6 +247,15 @@ export class CallHandler {
     return [...this.calls.values()].some(
       (c) => !c.ended && (c.answered || c.answering !== undefined || c.media !== undefined || c.mediaStarting !== undefined || (c.preview !== undefined && !c.preview.done)),
     );
+  }
+
+  /**
+   * The most recent ring still in progress, if any: like activeCall(), but never one of our own
+   * calls to the panel (live view without a ring). Doors are only ever opened inside a ring.
+   */
+  ringingCall(): Call | undefined {
+    this.activeCall(); // drops ended and stale calls
+    return [...this.calls.values()].filter((c) => !c.outbound).pop();
   }
 
   /** The most recent call still in progress, if any. */
@@ -251,7 +307,7 @@ export class CallHandler {
       call.panelAudioHandle = frame.body.readUInt16LE(8);
     }
     for (const w of this.waiters.slice()) {
-      if (w.call === call && (w.opcode === frame.opcode || frame.opcode === Opcode.RELEASE)) {
+      if (w.call === call && (w.opcode === frame.opcode || w.opcode === ANY_FRAME || frame.opcode === Opcode.RELEASE)) {
         this.waiters.splice(this.waiters.indexOf(w), 1);
         w.resolve({ opcode: frame.opcode, body: frame.body });
       }
@@ -276,6 +332,18 @@ export class CallHandler {
       return;
     }
     call.seen.add(tag);
+    if (call.outbound) {
+      // Our call to the panel: the panel's echo of our INVITE and its capabilities are only
+      // acknowledged (placeCall sends our capabilities, unless the panel's come first). Never
+      // a ring preview.
+      if (frame.opcode === Opcode.CAPABILITIES && !call.capsSent) {
+        call.capsSent = true;
+        await this.send(call, Flag.DATA, APP_CAPABILITIES, 'capabilities'); // acknowledges it too
+      } else if (needsAck) {
+        await this.sendAck(call);
+      }
+      return;
+    }
     if (frame.opcode === Opcode.INVITE) {
       await this.send(call, Flag.DATA, Buffer.from(frame.body), 'invite echo');
     } else if (frame.opcode === Opcode.CAPABILITIES) {
@@ -319,7 +387,9 @@ export class CallHandler {
    * Opens `door` inside the ringing call, answering it first if needed, and hangs up afterwards
    * if nobody is watching. In `answer-on-open` and `answer-on-view` mode (so a ring can be let
    * in from the lock without opening the live view); `force` (doctor mode) whatever the mode.
-   * Returns null when there is no call, so the caller opens the normal way.
+   * Returns null when there is no call, so the caller opens the normal way. Only a ring counts:
+   * our own call to the panel (live view without a ring) is never used to open, so doctor mode,
+   * Next Visitor and the lock never open the door inside it (the lock then opens the normal way).
    */
   /**
    * `stillWanted` is asked once more after answering, just before the open (doctor mode and
@@ -327,7 +397,7 @@ export class CallHandler {
    * answered, is hung up and null returned.
    */
   async openInCall(door: Door, force = false, stillWanted?: () => boolean): Promise<OpenResult | null> {
-    const call = this.activeCall();
+    const call = this.ringingCall();
     if (!call || !(force || this.mode === 'answer-on-open' || this.mode === 'answer-on-view')) {
       return null;
     }
@@ -380,8 +450,19 @@ export class CallHandler {
    * no call to answer or answering on view is off.
    */
   async startMedia(hd: boolean): Promise<MediaSession | null> {
-    const call = this.activeCall();
-    if (!call || this.mode !== 'answer-on-view') {
+    let call = this.activeCall();
+    if (!call && this.canCallPanel) {
+      // Nobody is ringing: with live view without a ring, call the panel ourselves. A second
+      // viewer arriving while the call is being placed joins it.
+      if (!this.client) {
+        throw new Error('no connection for media');
+      }
+      this.placing ??= this.placeCall().finally(() => {
+        this.placing = undefined;
+      });
+      call = await this.placing;
+    }
+    if (!call || (!call.outbound && this.mode !== 'answer-on-view')) {
       return null;
     }
     if (!this.client) {
@@ -416,6 +497,88 @@ export class CallHandler {
       call.mediaStarting = undefined;
     });
     return call.mediaStarting;
+  }
+
+  private placing?: Promise<Call>;
+
+  /**
+   * Places our own call to the entrance panel, as the Comelit app's camera button does, and
+   * returns it once the panel has accepted it (its SETUP_ACK). The frames follow the Comelit
+   * app's outgoing call (PCAP-verified by antoiba86/hass-comelit-intercom-local and used by
+   * Jordi-14/ha-component-comelit-intercom on a 6741W), in this plugin's CTP terms: the INVITE
+   * body is our address, the panel's, a session block (0x01 0x20 + 4 random bytes), our address
+   * again and "II".
+   */
+  private async placeCall(): Promise<Call> {
+    const panel = this.outboundOptions.panelAddress;
+    if (!panel) {
+      throw new Error('no entrance panel in the intercom config (entrance-address-book)');
+    }
+    this.activeCall(); // drops ended and stale calls
+    // Our connection id. The intercom's frames on it come with the top bit of the first byte
+    // flipped, and that is how a call is stored (send() flips it back), as for its own calls.
+    let conn0 = 0;
+    let conn1 = 0;
+    do {
+      const id = randomBytes(2);
+      conn0 = id[0] ^ 0x80;
+      conn1 = id[1];
+    } while (this.calls.has((conn1 << 8) | conn0));
+    const start = randomBytes(2);
+    const call: Call = {
+      conn0,
+      conn1,
+      seq: start[0],
+      ack: start[1],
+      peer: panel,
+      caller: panel,
+      born: Date.now(),
+      seen: new Set(),
+      answered: false,
+      ended: false,
+      outbound: true,
+    };
+    this.calls.set((conn1 << 8) | conn0, call);
+    const invite = Buffer.concat([
+      Buffer.from([0x00, Opcode.INVITE]),
+      logicalAddress(this.ourAddress),
+      logicalAddress(panel),
+      OUTBOUND_SESSION_FLAGS,
+      randomBytes(4),
+      logicalAddress(this.ourAddress),
+      Buffer.from('II', 'latin1'),
+    ]);
+    this.log?.debug(`call: calling the entrance panel ${panel} (live view without a ring)`);
+    try {
+      const first = this.wait(call, ANY_FRAME, OUTBOUND_STEP_MS);
+      const accepted = this.wait(call, Opcode.SETUP_ACK, 2 * OUTBOUND_STEP_MS);
+      await this.send(call, Flag.SYN, invite, 'outgoing call (invite)');
+      const reply = await first;
+      if (!reply) {
+        throw new Error('the intercom did not answer our call');
+      }
+      if (reply.opcode === Opcode.RELEASE) {
+        throw new Error(`the intercom refused our call${reply.body.length >= 3 ? ` (cause ${reply.body[2]})` : ''}`);
+      }
+      if (!call.capsSent) {
+        call.capsSent = true;
+        await this.send(call, Flag.DATA, APP_CAPABILITIES, 'capabilities');
+      }
+      const r = await accepted;
+      if (r?.opcode === Opcode.RELEASE || call.ended) {
+        throw new Error(`the intercom ended our call${r && r.body.length >= 3 ? ` (cause ${r.body[2]})` : ''}`);
+      }
+      if (!r) {
+        // The media request that follows tells whether the panel took the call.
+        this.log?.debug(`call: no SETUP_ACK from the panel within ${(2 * OUTBOUND_STEP_MS) / 1000} s; starting the media anyway`);
+      }
+      call.answered = true;
+      call.answerSent = true; // media requests from now on are for this call
+      return call;
+    } catch (e) {
+      await this.hangUp(call);
+      throw e;
+    }
   }
 
   /** Hangs up `call` (RELEASE, cause 0). */
@@ -525,21 +688,11 @@ export class MediaSession extends EventEmitter {
     }
     this.log?.debug(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
 
-    // The intercom usually sends its own audio request right after the answer, before ours:
-    // only wait for it if it hasn't come yet.
-    const panelAudio = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 3000) : undefined;
-    await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(this.audioHandle), Buffer.alloc(2)]), 'audio request');
-    await panelAudio;
-    this.txHandle = this.call.panelAudioHandle;
-    if (this.txHandle !== undefined) {
-      this.log?.debug(`call: intercom takes our audio on channel ${this.txHandle}`);
+    if (this.call.outbound) {
+      await this.startOutbound(this.audioHandle);
     } else {
-      this.log?.warn('call: the intercom sent no audio request; talk-back goes to our audio channel');
+      await this.startAnswered(this.audioHandle);
     }
-    // Without VOICESTATUS the intercom accepts the audio request but sends no audio.
-    await this.voiceStatus(1);
-    await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(this.audioHandle), Buffer.alloc(2)]), 'audio request');
-    await this.requestVideo();
 
     this.timers.push(setInterval(() => void this.requestVideo().catch(() => undefined), this.timing.videoRefreshMs));
     this.timers.push(
@@ -557,6 +710,44 @@ export class MediaSession extends EventEmitter {
         this.log?.debug(`call: media received video=${this.stats.video} audio=${this.stats.audio} other=${this.stats.other} packets; talk-back sent=${this.stats.sent}`);
       }, STATS_INTERVAL_MS),
     );
+  }
+
+  /** An answered ring: the Comelit app's answer (audio request, VOICESTATUS, video request). */
+  private async startAnswered(audioHandle: number): Promise<void> {
+    // The intercom usually sends its own audio request right after the answer, before ours:
+    // only wait for it if it hasn't come yet.
+    const panelAudio = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 3000) : undefined;
+    await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(audioHandle), Buffer.alloc(2)]), 'audio request');
+    await panelAudio;
+    this.txHandle = this.call.panelAudioHandle;
+    if (this.txHandle !== undefined) {
+      this.log?.debug(`call: intercom takes our audio on channel ${this.txHandle}`);
+    } else {
+      this.log?.warn('call: the intercom sent no audio request; talk-back goes to our audio channel');
+    }
+    // Without VOICESTATUS the intercom accepts the audio request but sends no audio.
+    await this.voiceStatus(1);
+    await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(audioHandle), Buffer.alloc(2)]), 'audio request');
+    await this.requestVideo();
+  }
+
+  /**
+   * Our own call to the panel (live view without a ring), as the Comelit app's camera button:
+   * the audio and video requests at once, then the panel's own media request, then an empty
+   * DATA frame that tells the panel we're ready. No VOICESTATUS: the app only opens the sound
+   * when you tap to talk, so this is a video view.
+   */
+  private async startOutbound(audioHandle: number): Promise<void> {
+    const panelMedia = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, OUTBOUND_STEP_MS) : undefined;
+    await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(audioHandle), Buffer.alloc(2)]), 'audio request');
+    await this.requestVideo();
+    const r = await panelMedia;
+    if (r?.opcode === Opcode.RELEASE || this.call.ended) {
+      throw new Error(`the intercom ended our call${r && r.body.length >= 3 ? ` (cause ${r.body[2]})` : ''}`);
+    }
+    this.txHandle = this.call.panelAudioHandle;
+    this.log?.debug(`call: the panel's media request ${this.txHandle !== undefined ? `(channel ${this.txHandle})` : 'did not come within 5 s'}`);
+    await this.handler.send(this.call, Flag.DATA, Buffer.alloc(0), 'ready');
   }
 
   private route(handle: number): void {
@@ -696,7 +887,9 @@ export class MediaSession extends EventEmitter {
       );
     }
     if (!this.call.ended) {
-      await this.voiceStatus(0).catch(() => undefined);
+      if (!this.call.outbound) {
+        await this.voiceStatus(0).catch(() => undefined);
+      }
       if (this.audioHandle !== undefined) {
         await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_STOP, le16(this.audioHandle), Buffer.alloc(2)]), 'audio stop').catch(() => undefined);
       }
