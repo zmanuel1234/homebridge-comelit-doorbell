@@ -549,3 +549,19 @@ test('buzzes per unlock: a refused first open sends no more; the default is one 
   assert.strictEqual(m, 1);
   assert.strictEqual(one.settings.openRepeatMs, 6000);
 });
+
+test('buzzes per unlock: doctor mode spaces its buzzes start to start too', async () => {
+  const { p } = doctor({ doctorMode: 'always', openRepeat: 2, openRepeatSeconds: 1 });
+  const at = [];
+  p.callHandler.openInCall = async () => {
+    at.push(Date.now());
+    await new Promise((r) => setTimeout(r, 400)); // answering and the open's confirmation take a moment
+    return { confirmed: true };
+  };
+  p.openOnce = async () => { at.push(Date.now()); return { confirmed: true }; };
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.strictEqual(at.length, 2);
+  const gap = at[1] - at[0];
+  assert.ok(gap >= 950 && gap < 1250, `about 1 s from the start of the first open (${gap} ms)`);
+});
