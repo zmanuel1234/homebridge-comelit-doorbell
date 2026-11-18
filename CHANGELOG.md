@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.4.0-beta.1 (2026-11-18)
+
+Pre-release. Both new features are off by default: with the default settings the plugin behaves like 2.3.3.
 
 ### Added
 
@@ -10,10 +12,13 @@
   - Our own calls are never recorded (HomeKit Secure Video records rings only), and their frames never count as a ring or a door event. A ring that comes in during the view is followed and answered as before.
   - The door is never opened inside our own call: doctor mode, the Next Visitor switch and the lock only open inside a ring (`ringingCall()`); with only our call up, the lock opens the normal way and doctor mode / Next Visitor don't open (review).
   - Some panels take the call but send no video (seen with an EX-7000HW monitor, where self activation fails from the official app too); the README says so (review).
+  - When our own call ends without any video (not counting closing the view), the plugin warns once per run (`Live view without a ring: the entrance panel took the call but sent no video …`) and points to the Comelit app's Entrance button as the check. The settings screen says the same, with the Kit mode requirement (release review).
   - With debug on, the call's frames are in the log as for a ring (`call: calling the entrance panel …`, `call: tx outgoing call (invite): …`).
   - Tried on a 6741W (2026-11-16, Homebridge on macOS, ffmpeg 8.0): the panel answered the INVITE with an acknowledgement, its capabilities (`000350033b000000`) and a 2-byte SETUP_ACK (`000c`), opened its own RTPC channel and sent its media request; the first picture reached the Home app 2.6 s after the view opened, and 37 s of video (about 16 frames per second, 320x240) came until the view was closed and the plugin hung up (the panel closed its side with a FIN).
   - The keyframe debug log times our own call from its start (`call: own call keyframe 1 2.75 s after the call started …`).
 - **Buzzes per unlock** (`openRepeat`, default 1) and **Time from one buzz to the next** (`openRepeatSeconds`, default 6). For an entrance behind two doors, each unlock sends the door release several times, so the second door opens too while you walk to it. Applies to every unlock from HomeKit and to doctor mode and Next Visitor. The startup `Settings:` line says `…, 3 buzzes per unlock 6 s apart`, and each extra buzz is logged (`Door 'Entrance lock': buzz 2 of 3`).
+  - Doctor mode and Next Visitor space their buzzes start to start too, like HomeKit unlocks (release review).
+  - The time from one buzz to the next is at most 15 s (was 30 s, which let 5 buzzes run for 2 minutes after one unlock); a larger value is logged as not valid and 6 s is used (release review).
 
 ## 2.3.3 (2026-11-13)
 

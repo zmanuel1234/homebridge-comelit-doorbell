@@ -47,7 +47,8 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Doctor mode (always, or with its switch) | ✅ | |
 | Next Visitor switch | ❓ | New in 2.2.0: the same open as doctor mode; covered by the plugin's tests |
 | Recording rings (HomeKit Secure Video) | ✅ | 2.3.0 betas at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. The door's sound is in the clips of answered calls (the intercom sends none before answering); the Home app shows the clips at the exact start time. A Wi-Fi stall can still cost a few seconds of the door's sound in a clip |
-| Live view without a ring | ✅ | Experimental. Tried on a 6741W on 2026-11-16 (Homebridge on macOS, ffmpeg 8.0): the panel accepts the call, first picture in the Home app 2.6 s after opening, 37 s of live video at about 16 frames per second, clean hang-up when the view closed. Video only. See [live view without a ring](#live-view-without-a-ring) |
+| Live view without a ring | ⚠️ | Experimental. **Not on this install:** the panel takes the call but sends no video, and the official Comelit app's Entrance button can't show the entrance without a ring either. Works on other 6741Ws: tried on 2026-11-16 (Homebridge on macOS, ffmpeg 8.0): first picture in the Home app 2.6 s after opening, 37 s of live video at about 16 frames per second, clean hang-up when the view closed; and on a 6741W with firmware 2.1.3. Video only. See [live view without a ring](#live-view-without-a-ring) |
+| Buzzes per unlock | ❓ | New in 2.4.0-beta.1, off by default (1 buzz); tried on another installation with an entrance behind two doors; covered by the plugin's tests |
 | Gate / actuator output | ❓ | Not tested |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
