@@ -210,7 +210,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     nextVisitorSwitch: bool('nextVisitorSwitch', false),
     nextVisitorMs: num('nextVisitorMinutes', 120, (n) => n >= 1 && n <= 1440) * 60_000,
     openRepeat: num('openRepeat', 1, (n) => Number.isInteger(n) && n >= 1 && n <= 5),
-    openRepeatMs: num('openRepeatSeconds', 6, (n) => n >= 1 && n <= 30) * 1000,
+    openRepeatMs: num('openRepeatSeconds', 6, (n) => n >= 1 && n <= 15) * 1000,
     camera: bool('camera', false),
     talkBack: bool('talkBack', true),
     videoQuality: choice('videoQuality', ['sd', 'hd'] as const, 'sd'),

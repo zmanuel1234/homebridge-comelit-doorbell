@@ -148,7 +148,7 @@
         "type": "number",
         "default": 6,
         "minimum": 1,
-        "maximum": 30,
+        "maximum": 15,
         "description": "Seconds from the start of one buzz to the start of the next. Include how long the buzz itself lasts (about 3 s on many installations): 6 s gives a 3 s buzz and a 3 s break."
       },
       "nextVisitorMinutes": {

@@ -565,3 +565,8 @@ test('buzzes per unlock: doctor mode spaces its buzzes start to start too', asyn
   const gap = at[1] - at[0];
   assert.ok(gap >= 950 && gap < 1250, `about 1 s from the start of the first open (${gap} ms)`);
 });
+
+test('buzzes per unlock: the time between buzzes is capped at 15 s', () => {
+  assert.strictEqual(platform({ openRepeatSeconds: 15 }).p.settings.openRepeatMs, 15000);
+  assert.strictEqual(platform({ openRepeatSeconds: 20 }).p.settings.openRepeatMs, 6000, 'over the cap: the default');
+});

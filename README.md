@@ -168,7 +168,7 @@ In JSON, numbers may also be written as plain text (`"subaddress": "3"`). A valu
 | Next Visitor switch (`nextVisitorSwitch`) | `false` | Adds a switch that lets the next visitor in, then turns itself off. See [next visitor](#next-visitor). |
 | Next Visitor: turn off after (`nextVisitorMinutes`) | `120` | If nobody rings, the switch turns itself off after this long (1–1440 minutes). |
 | Buzzes per unlock (`openRepeat`) | `1` | How many times each unlock sends the door release (1–5), for an entrance behind two doors: the first buzz opens the street door, the next ones the inner door while you walk to it. Applies to every unlock from HomeKit (the lock tile, the doorbell notification, Siri, the Apple Watch) and to doctor mode and Next Visitor. The lock shows Unlocked until the last buzz. If the first buzz is refused, no more are sent; a later one that fails is logged and the rest still follow. |
-| Time from one buzz to the next (`openRepeatSeconds`) | `6` | Seconds from the start of one buzz to the start of the next (1–30). Include the buzz itself, about 3 s on many installations: 6 s gives a 3 s buzz and a 3 s break. |
+| Time from one buzz to the next (`openRepeatSeconds`) | `6` | Seconds from the start of one buzz to the start of the next (1–15). Include the buzz itself, about 3 s on many installations: 6 s gives a 3 s buzz and a 3 s break. |
 
 ### Picture and sound
 
