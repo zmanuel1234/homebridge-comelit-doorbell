@@ -83,7 +83,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.log.info(
       `Settings: ${s.host || '(no host)'}:${s.port}, user row ${s.subaddress ?? 'from the intercom'}, ${s.enableNotifications ? `refresh ${s.leaseMode} every ${s.leaseRefreshMs / 60_000} min` : `rings off, reconnect every ${s.leaseRecycleMs / 60_000} min`}, ` +
         `unlock ${s.ringWindowMs ? `within ${s.ringWindowMs / 1000} s of a ring` : 'at any time'}, answerMode ${s.answerMode}, camera ${s.camera ? 'on' : 'off'}` +
-        `${s.camera && s.liveViewWithoutRing ? ', live view without a ring' : ''}` +
+        `${s.camera && s.liveViewWithoutRing ? `, live view without a ring${s.liveViewSound ? ' with sound' : ''}` : ''}` +
         `${s.doorbellTriggerUrl ? ', trigger URL set' : ''}${s.doctorMode !== 'off' ? `, doctor mode ${s.doctorMode}` : ''}` +
         `${s.openRepeat > 1 ? `, ${s.openRepeat} buzzes per unlock ${s.openRepeatMs / 1000} s apart` : ''}`,
     );
@@ -264,6 +264,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }, {
         // Live view without a ring: our own call to the entrance panel (the first in the address book).
         liveViewWithoutRing: s.camera && s.liveViewWithoutRing,
+        liveViewSound: s.camera && s.liveViewWithoutRing && s.liveViewSound,
         panelAddress: deviceConfig.callerAddress,
       });
       listener = new VipEventListener(client, deviceConfig, (ev) => this.onEvent(ev), this.log, call);

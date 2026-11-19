@@ -22,6 +22,8 @@
  *   intercom → CAPABILITIES, then SETUP_ACK (the panel accepted)
  *   we → open UDPM + 2 × RTPC, audio and video media requests (no VOICESTATUS: video only)
  *   intercom → its media request, then RTP;  we → an empty DATA frame ("ready")
+ *   (with Sound in live view without a ring, the media setup is instead an answered ring's:
+ *   audio request, the panel's media request, VOICESTATUS 1, audio request again, video request)
  *   we → RELEASE (0x000E) to hang up when the live view closes
  *
  * Every frame of a call is logged with the prefix `call:`.
@@ -57,6 +59,8 @@ const OUTBOUND_SESSION_FLAGS = Buffer.from([0x01, 0x20]);
 /** Live view without a ring (setting liveViewWithoutRing, and the panel from the address book). */
 export interface OutboundOptions {
   liveViewWithoutRing?: boolean;
+  /** Sound in live view without a ring: our own call opens the sound as an answered ring does. */
+  liveViewSound?: boolean;
   /** The entrance panel's address (the intercom's entrance-address-book). */
   panelAddress?: string;
 }
@@ -178,6 +182,11 @@ export class CallHandler {
     private readonly outboundOptions: OutboundOptions = {},
   ) {}
 
+  /** Sound in live view without a ring is on. */
+  get liveViewSound(): boolean {
+    return Boolean(this.outboundOptions.liveViewSound);
+  }
+
   /** Live view without a ring is on, and the panel to call is known. */
   get canCallPanel(): boolean {
     return Boolean(this.outboundOptions.liveViewWithoutRing && this.outboundOptions.panelAddress) && this.enabled;
@@ -271,8 +280,8 @@ export class CallHandler {
     this.warnedNoVideo = true;
     this.log?.warn(
       `Live view without a ring: the entrance panel took the call but sent no video (${reason}). ` +
-        "Some systems don't support this: if the Comelit app's Entrance button can't show the entrance " +
-        'without a ring either, turn Live view without a ring off.',
+        "Check that the entrance panel is at address 0 (on an EX-DSME, DIP 1-3 OFF) and the monitor in Kit mode; " +
+        "if the Comelit app's Entrance button can't show the entrance without a ring either, turn Live view without a ring off.",
     );
   }
 
@@ -706,7 +715,12 @@ export class MediaSession extends EventEmitter {
     }
     this.log?.debug(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
 
-    if (this.call.outbound) {
+    if (this.call.outbound && this.handler.liveViewSound) {
+      // Sound in live view without a ring: the panel only opens the sound as part of the call's
+      // setup (VOICESTATUS sent mid-call is ignored, 2026-11-19), so our own call is answered
+      // exactly as a ring is, sound both ways from the start.
+      await this.startAnswered(this.audioHandle);
+    } else if (this.call.outbound) {
       await this.startOutbound(this.audioHandle);
     } else {
       await this.startAnswered(this.audioHandle);
@@ -730,13 +744,20 @@ export class MediaSession extends EventEmitter {
     );
   }
 
-  /** An answered ring: the Comelit app's answer (audio request, VOICESTATUS, video request). */
+  /**
+   * An answered ring: the Comelit app's answer (audio request, VOICESTATUS, video request). Also
+   * our own call to the panel with Sound in live view without a ring.
+   */
   private async startAnswered(audioHandle: number): Promise<void> {
+    const own = this.call.outbound === true;
     // The intercom usually sends its own audio request right after the answer, before ours:
-    // only wait for it if it hasn't come yet.
-    const panelAudio = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, 3000) : undefined;
+    // only wait for it if it hasn't come yet. Our own call waits as long as startOutbound does.
+    const panelAudio = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, own ? OUTBOUND_STEP_MS : 3000) : undefined;
     await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(audioHandle), Buffer.alloc(2)]), 'audio request');
-    await panelAudio;
+    const r = await panelAudio;
+    if (own && (r?.opcode === Opcode.RELEASE || this.call.ended)) {
+      throw new Error(`the intercom ended our call${r && r.body.length >= 3 ? ` (cause ${r.body[2]})` : ''}`);
+    }
     this.txHandle = this.call.panelAudioHandle;
     if (this.txHandle !== undefined) {
       this.log?.debug(`call: intercom takes our audio on channel ${this.txHandle}`);
@@ -745,6 +766,9 @@ export class MediaSession extends EventEmitter {
     }
     // Without VOICESTATUS the intercom accepts the audio request but sends no audio.
     await this.voiceStatus(1);
+    if (own) {
+      this.voiceOpen = true; // VOICESTATUS 0 when the view closes
+    }
     await this.handler.send(this.call, Flag.DATA, Buffer.concat([AUDIO_OFFER, le16(audioHandle), Buffer.alloc(2)]), 'audio request');
     await this.requestVideo();
   }
@@ -752,8 +776,8 @@ export class MediaSession extends EventEmitter {
   /**
    * Our own call to the panel (live view without a ring), as the Comelit app's camera button:
    * the audio and video requests at once, then the panel's own media request, then an empty
-   * DATA frame that tells the panel we're ready. No VOICESTATUS: the app only opens the sound
-   * when you tap to talk, so this is a video view.
+   * DATA frame that tells the panel we're ready. No VOICESTATUS, so this is a video view (Sound
+   * in live view without a ring uses startAnswered instead).
    */
   private async startOutbound(audioHandle: number): Promise<void> {
     const panelMedia = this.call.panelAudioHandle === undefined ? this.handler.wait(this.call, Opcode.MEDIA_REQUEST, OUTBOUND_STEP_MS) : undefined;
@@ -865,6 +889,9 @@ export class MediaSession extends EventEmitter {
     await this.handler.send(this.call, Flag.DATA, Buffer.concat([VIDEO_OFFER, le16(this.videoHandle), settings]), 'video request');
   }
 
+  /** Our own call opened the sound (sound in live view without a ring): close it at the end. */
+  private voiceOpen = false;
+
   private async voiceStatus(status: 0 | 1): Promise<void> {
     const body = Buffer.concat([Buffer.from([0x00, OP_VOICESTATUS]), logicalAddress(this.call.caller || this.call.peer), Buffer.from([status, 0])]);
     await this.handler.send(this.call, Flag.DATA, body, `voice status ${status}`);
@@ -908,7 +935,7 @@ export class MediaSession extends EventEmitter {
       );
     }
     if (!this.call.ended) {
-      if (!this.call.outbound) {
+      if (!this.call.outbound || this.voiceOpen) {
         await this.voiceStatus(0).catch(() => undefined);
       }
       if (this.audioHandle !== undefined) {
