@@ -379,3 +379,19 @@ test("sound 'when you talk': a second viewer during the switch joins the view", 
   assert.strictEqual(invites(sent).length, 2);
   await session.end('test');
 });
+
+test("sound 'when you talk': after the switch, the new call's video without a keyframe brings one more video request", async () => {
+  const videoRequests = (sent) => parsed(sent).filter((f) => f.opcode === 0x0011 && f.body[2] === 0x14).length;
+  for (const keyframe of [false, true]) {
+    const { call, client, sent } = setup({ options: talkOptions });
+    const session = await call.startMedia(false);
+    const video = (seq, nal) => client.handlers.get(0x2004)(buildRtp({ marker: true, payloadType: 96, sequence: seq, timestamp: seq, ssrc: 2 }, Buffer.from([nal, 1, 2])));
+    video(1, 0x67); // the silent call's keyframe (SPS): no retry before the switch
+    await session.openSound();
+    const before = videoRequests(sent);
+    video(2, keyframe ? 0x67 : 0x41);
+    await new Promise((r) => setTimeout(r, 1_700));
+    assert.strictEqual(videoRequests(sent) - before, keyframe ? 0 : 1, keyframe ? 'a keyframe came: no extra request' : 'no keyframe yet: asked again');
+    await session.end('viewer closed');
+  }
+});

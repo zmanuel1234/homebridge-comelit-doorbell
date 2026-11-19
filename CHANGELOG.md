@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 2.4.0-beta.3 (2026-11-19)
+
+Pre-release. The setting stays off by default: with the default settings the plugin behaves like 2.4.0-beta.2.
 
 ### Changed
 
 - **Sound in live view without a ring** (`liveViewSound`) is now a choice of three: `off` (video only, the default), **`talk`** (new) and `always` (2.4.0-beta.2's behavior). 2.4.0-beta.2's `true` and `false` still mean `always` and `off`.
-  - **When you talk** (`talk`): the view starts as a silent call. The first sound from the Home app's microphone hangs up that call and places a new one with sound, answered as a ring is, on the same media channels and the same live view: the picture pauses for 2–3 s while the new call is set up. Talk-back waits for the new call; the silence watchdog and the periodic video request pause meanwhile. The new call is tried three times, 0.5 s apart; if the panel refuses them all, the live view ends and the log says why. Closing the view during the switch places no new call, and a second viewer during the switch joins the same view.
+  - **When you talk** (`talk`): the view starts as a silent call. The first sound from the Home app's microphone hangs up that call and places a new one with sound, answered as a ring is, on the same media channels and the same live view: the picture pauses for about 5 s (about 2 s to set up the new call, then about 3 s to the panel's first keyframe). If the new call's video comes without a keyframe, the plugin asks for video again after 1.5 s, as at the start of a view. Talk-back waits for the new call; the silence watchdog and the periodic video request pause meanwhile. The new call is tried three times, 0.5 s apart; if the panel refuses them all, the live view ends and the log says why. Closing the view during the switch places no new call, and a second viewer during the switch joins the same view.
   - Needs **Talk-back** (a warning says so otherwise): without it the Home app has no microphone.
+  - Tried on an EX-7000HW (2026-11-19): the panel took the new call at the first try; the entrance heard in the Home app (936 sound packets, none lost) and talk-back heard at the panel; the picture paused about 5 s.
 
 ## 2.4.0-beta.2 (2026-11-19)
 

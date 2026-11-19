@@ -708,6 +708,8 @@ export class MediaSession extends EventEmitter {
   private firstSpsAt = 0;
   private keyframeAt: number[] = [];
   private keyframeRetry?: NodeJS.Timeout;
+  /** No keyframe yet in this call (at the start, and again after switching to a call with sound). */
+  private awaitingKeyframe = true;
   private videoSize?: string;
   /** A muted handler for channels being closed, so their last packets aren't logged as unknown. */
   private readonly drop = (): void => undefined;
@@ -845,10 +847,13 @@ export class MediaSession extends EventEmitter {
     this.stats.video++;
     if (this.firstVideoAt === 0) {
       this.firstVideoAt = Date.now();
+    }
+    if (this.awaitingKeyframe && !this.keyframeRetry) {
       // Joining a stream that is already running, the first keyframe can be seconds away;
       // until then nothing can be shown. Asking for video again may bring one sooner.
+      // (Armed again when a call is swapped for one with sound.)
       this.keyframeRetry = setTimeout(() => {
-        if (this.firstSpsAt === 0 && !this.ended) {
+        if (this.awaitingKeyframe && !this.ended) {
           this.log?.debug('call: no keyframe yet; asking for video again');
           void this.requestVideo().catch(() => undefined);
         }
@@ -893,9 +898,13 @@ export class MediaSession extends EventEmitter {
   private noteUnit(unit: Buffer): void {
     const type = nalType(unit);
     const now = Date.now();
+    if (type === 7 && this.awaitingKeyframe) {
+      this.awaitingKeyframe = false;
+      clearTimeout(this.keyframeRetry);
+      this.keyframeRetry = undefined;
+    }
     if (type === 7 && this.firstSpsAt === 0) {
       this.firstSpsAt = now;
-      clearTimeout(this.keyframeRetry);
       const sps = parseSps(unit);
       const size = sps ? `${sps.width}x${sps.height}, profile ${sps.profile}, level ${sps.level / 10}` : 'size unknown';
       this.videoSize = sps ? `${sps.width}x${sps.height}` : undefined;
@@ -950,7 +959,7 @@ export class MediaSession extends EventEmitter {
    * panel only opens the sound while a call is being set up (VOICESTATUS later in a call is
    * ignored, 2026-11-19), so when the Home app's microphone is turned on this hangs up the silent
    * call and places a new one, answered as a ring is (sound both ways), on the same channels.
-   * The live view keeps this session throughout: the picture pauses for the 2-3 s it takes.
+   * The live view keeps this session throughout: the picture pauses for the ~5 s it takes (on an EX-7000HW: ~2 s of call setup, then ~3 s to the first keyframe).
    * Once per view; the sound then stays open until the view closes.
    */
   openSound(): Promise<void> {
@@ -1021,6 +1030,9 @@ export class MediaSession extends EventEmitter {
     });
     this.lastMedia = Date.now(); // the pause while switching is not "media stopped"
     this.depacketizer.reset();
+    clearTimeout(this.keyframeRetry);
+    this.keyframeRetry = undefined;
+    this.awaitingKeyframe = true; // the new call's first keyframe: ask again if it's slow
     try {
       await this.startAnswered(this.audioHandle as number);
     } catch (e) {

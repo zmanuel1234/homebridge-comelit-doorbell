@@ -328,7 +328,7 @@
           { "title": "When you talk (turning on the microphone calls the panel again with sound)", "enum": ["talk"] },
           { "title": "Always (sound from the start)", "enum": ["always"] }
         ],
-        "description": "With sound, the call to the panel is answered as a ring is: the Home app hears the entrance (tap its speaker icon) and, with Talk-back, the door hears you while the Home app's microphone is on. The panel only opens the sound when a call starts, so 'When you talk' hangs up the silent call and calls again with sound when you turn on the microphone: the picture pauses for 2–3 s and your first words may be lost. With sound, the panel's microphone stays open until the view closes, so people at the entrance can be heard without ringing."
+        "description": "With sound, the call to the panel is answered as a ring is: the Home app hears the entrance (tap its speaker icon) and, with Talk-back, the door hears you while the Home app's microphone is on. The panel only opens the sound when a call starts, so 'When you talk' hangs up the silent call and calls again with sound when you turn on the microphone: the picture pauses for about 5 s, your first 2 s or so are lost and the entrance is heard a few seconds later. With sound, the panel's microphone stays open until the view closes, so people at the entrance can be heard without ringing."
       },
       "recording": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
