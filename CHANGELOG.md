@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.4.0-beta.2 (2026-11-19)
+
+Pre-release. The new setting is off by default: with the default settings the plugin behaves like 2.4.0-beta.1.
 
 ### Added
 
