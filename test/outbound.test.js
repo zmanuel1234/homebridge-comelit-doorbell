@@ -30,6 +30,7 @@ function fakeClient() {
  */
 function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001' }, mode = 'answer-on-view', script = {} } = {}) {
   const sent = [];
+  const log = quietLog();
   let call;
   const reply = (f, flags, bodyHex) => {
     const seq = 0x50 + sent.length;
@@ -53,10 +54,10 @@ function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001'
     } else if (f.opcode === 0x0011 && f.body[2] === 0x18) {
       if (script.audio?.(f, reply) !== false) reply(f, 0x40, '00111802000000000130');
     }
-  }, quietLog(), { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 60_000 }, options);
+  }, log, { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 60_000 }, options);
   const client = fakeClient();
   call.attach(client);
-  return { call, client, sent };
+  return { call, client, sent, log };
 }
 
 const parsed = (sent) => sent.map((f) => parseFrame(f));
@@ -394,4 +395,52 @@ test("sound 'when you talk': after the switch, the new call's video without a ke
     assert.strictEqual(videoRequests(sent) - before, keyframe ? 0 : 1, keyframe ? 'a keyframe came: no extra request' : 'no keyframe yet: asked again');
     await session.end('viewer closed');
   }
+});
+
+test("sound 'when you talk': a slow setup of the new call doesn't trip the silence watchdog afterwards", async () => {
+  let audioRequests = 0;
+  // the panel never sends its media request for the new call: the setup waits its full 5 s
+  const { call, client, log } = setup({ options: talkOptions, script: { audio: () => ++audioRequests === 1 } });
+  const session = await call.startMedia(false);
+  client.handlers.get(0x2004)(buildRtp({ marker: true, payloadType: 96, sequence: 1, timestamp: 0, ssrc: 2 }, Buffer.from([0x67, 1])));
+  await session.openSound();
+  await new Promise((r) => setTimeout(r, 2_000));
+  assert.strictEqual(session.isEnded, false, `still on 2 s after the switch (${log.lines.filter((l) => /ended/.test(l)).join('; ')})`);
+  await session.end('viewer closed');
+});
+
+test("sound 'when you talk': closing the view during the new call's setup hangs it up, without a warning", async () => {
+  let audioRequests = 0;
+  const { call, sent, log } = setup({ options: talkOptions, script: { audio: () => ++audioRequests === 1 } });
+  const session = await call.startMedia(false);
+  const switching = session.openSound();
+  await new Promise((r) => setTimeout(r, 1_500)); // the new call placed, its setup waiting
+  const next = call.activeCall();
+  await session.end('viewer closed');
+  await switching;
+  assert.ok(next && next.outbound && invites(sent).length === 2);
+  assert.ok(parsed(sent).some((f) => f.conn0 === (next.conn0 ^ 0x80) && f.conn1 === next.conn1 && f.opcode === 0x0e), 'the new call is hung up');
+  assert.deepStrictEqual(log.lines.filter((l) => l.startsWith('W')), [], 'no warning');
+});
+
+test("sound 'when you talk': while someone rings, the microphone doesn't call the panel again", async () => {
+  const { call, sent, log } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await session.openSound();
+  assert.strictEqual(invites(sent).length, 1, 'no new call');
+  assert.strictEqual(session.isEnded, false);
+  assert.ok(log.lines.some((l) => /someone is ringing/.test(l)));
+  await session.end('viewer closed');
+});
+
+test("sound 'when you talk': the intercom counts as busy during the switch (no planned reconnect)", async () => {
+  const { call } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  const switching = session.openSound();
+  await new Promise((r) => setTimeout(r, 100)); // the old call hung up, the new one not placed yet
+  assert.strictEqual(call.busy(), true);
+  await switching;
+  assert.strictEqual(call.busy(), true);
+  await session.end('viewer closed');
 });
