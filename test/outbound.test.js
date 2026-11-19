@@ -49,7 +49,7 @@ function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001'
         reply(f, 0x40, '000c');
       }
     } else if (f.opcode === 0x0011 && f.body[2] === 0x18) {
-      reply(f, 0x40, '00111802000000000130');
+      if (script.audio?.(f, reply) !== false) reply(f, 0x40, '00111802000000000130');
     }
   }, quietLog(), { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 60_000 }, options);
   const client = fakeClient();
@@ -239,6 +239,8 @@ test('sound in live view without a ring: our call is answered like a ring, with 
   const o = ops(sent);
   // invite, capabilities, audio request, voice status 1, audio request again, video request
   assert.deepStrictEqual(o.slice(0, 6), ['1', '3', '11', '70', '11', '11']);
+  const kinds = parsed(sent).filter((f) => f.opcode === 0x11).map((f) => f.body[2].toString(16));
+  assert.deepStrictEqual(kinds.slice(0, 3), ['18', '18', '14'], 'audio, audio again, then video');
   const voice = parsed(sent).find((f) => f.opcode === 0x70);
   assert.strictEqual(voice.body[voice.body.length - 2], 1, 'voice status 1');
   assert.ok(voice.body.includes(Buffer.from('SB100001')), "with the caller's (the panel's) address, as for a ring");
@@ -253,4 +255,27 @@ test('sound in live view without a ring: off by default, and needs live view wit
   assert.strictEqual(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: true }).liveViewSound, true);
   assert.ok(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewSound: true })).some((w) => /needs 'Live view without a ring'/.test(w)));
   assert.deepStrictEqual(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: true })), []);
+});
+
+test('sound in live view without a ring: the panel hanging up during setup ends it with the cause, and nothing more is sent', async () => {
+  const { call, sent } = setup({
+    options: { liveViewWithoutRing: true, liveViewSound: true, panelAddress: 'SB100001' },
+    script: { audio: (f, reply) => { reply(f, 0x40, '000e07'); return false; } },
+  });
+  await assert.rejects(call.startMedia(false), /the intercom ended our call \(cause 7\)/);
+  assert.ok(!ops(sent).includes('70'), 'no voice status on a released call');
+  assert.ok(!parsed(sent).some((f) => f.opcode === 0x11 && f.body[2] === 0x14), 'no video request either');
+});
+
+test('sound in live view without a ring: the sound of our own call never reaches recording', async () => {
+  const { call, client } = setup({ options: { liveViewWithoutRing: true, liveViewSound: true, panelAddress: 'SB100001' } });
+  const heard = [];
+  call.setCallListener({ video: () => heard.push('video'), audio: () => heard.push('audio'), ended: () => heard.push('ended') });
+  const session = await call.startMedia(false);
+  const got = [];
+  session.on('audio', (a) => got.push(a));
+  client.handlers.get(0x2002)(buildRtp({ marker: false, payloadType: 8, sequence: 1, timestamp: 0, ssrc: 3 }, Buffer.alloc(160, 0xd5)));
+  await session.end('test');
+  assert.strictEqual(got.length, 1, 'the live view gets the sound');
+  assert.deepStrictEqual(heard, [], 'recording gets nothing');
 });

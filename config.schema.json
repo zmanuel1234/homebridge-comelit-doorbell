@@ -323,7 +323,7 @@
         "title": "Sound in live view without a ring",
         "type": "boolean",
         "default": false,
-        "description": "The call to the panel opens the sound both ways, as answering a ring does: the Home app can hear the entrance (tap its speaker icon) and, with Talk-back, talk to it. The panel's microphone is open for the whole view, so people at the entrance can be heard without ringing. Off: video only."
+        "description": "The call to the panel opens the sound both ways, as answering a ring does: the Home app can hear the entrance (tap its speaker icon) and, with Talk-back, hear you while the Home app's microphone is on. The panel's microphone is open for the whole view, so people at the entrance can be heard without ringing. Off: video only."
       },
       "recording": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },

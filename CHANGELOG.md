@@ -9,6 +9,7 @@ Pre-release. The new setting is off by default: with the default settings the pl
 - **Sound in live view without a ring** (`liveViewSound`, off by default; needs **Live view without a ring**). The call to the panel is answered exactly as a ring is (audio request, the panel's media request, VOICESTATUS 1, the audio request again, the video request), so the Home app hears the entrance and, with **Talk-back**, the door hears you while the Home app's microphone is on. Closing the view sends VOICESTATUS 0. Without it, these views stay video only, as in 2.4.0-beta.1.
   - The panel only opens the sound while the call is set up: VOICESTATUS sent later in the call (with the panel's address or ours) was ignored, the panel's sound didn't come over UDP either, and the renewal form of VOICESTATUS (DATA_FIN) closed the call (tried on an EX-7000HW, 2026-11-19). So the setting opens the panel's microphone for the whole view; the Home app starts muted.
   - Tried on that EX-7000HW: the entrance heard in the Home app (1,756 sound packets in a 40 s view, none lost), talk-back heard at the panel, video unchanged.
+  - If the panel hangs up while the sound is being set up, the view ends with the cause (`the intercom ended our call (cause …)`) and nothing more is sent on that call, as without sound; our own call waits up to 5 s for the panel's media request, as without sound (release review).
 
 ### Changed
 
