@@ -41,7 +41,9 @@ function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001'
   call = new CallHandler(mode, 'SB0000023', 'SB000002', async (raw) => {
     sent.push(raw);
     const f = parseFrame(raw);
-    if (f.flags === 0xc0 && f.opcode === 0x0001) {
+    if (f.flags === 0x60) {
+      reply(f, 0x20, ''); // the panel answers our hang-up (DATA_FIN) with an empty FIN, as on a real one
+    } else if (f.flags === 0xc0 && f.opcode === 0x0001) {
       if (script.invite?.(f, reply) !== false) reply(f, 0x00, '');
     } else if (f.opcode === 0x0003) {
       if (script.capabilities?.(f, reply) !== false) {
@@ -234,7 +236,7 @@ test('an own call that ends without video warns once per run; closing the view e
 });
 
 test('sound in live view without a ring: our call is answered like a ring, with VOICESTATUS before the video request', async () => {
-  const { call, sent } = setup({ options: { liveViewWithoutRing: true, liveViewSound: true, panelAddress: 'SB100001' } });
+  const { call, sent } = setup({ options: { liveViewWithoutRing: true, liveViewSound: 'always', panelAddress: 'SB100001' } });
   const session = await call.startMedia(false);
   const o = ops(sent);
   // invite, capabilities, audio request, voice status 1, audio request again, video request
@@ -251,15 +253,23 @@ test('sound in live view without a ring: our call is answered like a ring, with 
 });
 
 test('sound in live view without a ring: off by default, and needs live view without a ring', () => {
-  assert.strictEqual(resolveSettings({ platform: 'x' }).liveViewSound, false);
-  assert.strictEqual(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: true }).liveViewSound, true);
-  assert.ok(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewSound: true })).some((w) => /needs 'Live view without a ring'/.test(w)));
-  assert.deepStrictEqual(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: true })), []);
+  const r = (v) => resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: v });
+  assert.strictEqual(resolveSettings({ platform: 'x' }).liveViewSound, 'off');
+  assert.strictEqual(r('talk').liveViewSound, 'talk');
+  assert.strictEqual(r('always').liveViewSound, 'always');
+  assert.strictEqual(r(true).liveViewSound, 'always', "2.4.0-beta.2's true");
+  assert.strictEqual(r(false).liveViewSound, 'off');
+  assert.strictEqual(r('loud').liveViewSound, 'off');
+  assert.ok(r('loud').invalid.some((m) => /liveViewSound/.test(m)), 'an unknown value is reported');
+  assert.ok(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewSound: 'always' })).some((w) => /needs 'Live view without a ring'/.test(w)));
+  assert.ok(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: 'talk', talkBack: false })).some((w) => /needs 'Talk-back'/.test(w)));
+  assert.deepStrictEqual(settingsWarnings(r('talk')), []);
+  assert.deepStrictEqual(settingsWarnings(r('always')), []);
 });
 
 test('sound in live view without a ring: the panel hanging up during setup ends it with the cause, and nothing more is sent', async () => {
   const { call, sent } = setup({
-    options: { liveViewWithoutRing: true, liveViewSound: true, panelAddress: 'SB100001' },
+    options: { liveViewWithoutRing: true, liveViewSound: 'always', panelAddress: 'SB100001' },
     script: { audio: (f, reply) => { reply(f, 0x40, '000e07'); return false; } },
   });
   await assert.rejects(call.startMedia(false), /the intercom ended our call \(cause 7\)/);
@@ -268,7 +278,7 @@ test('sound in live view without a ring: the panel hanging up during setup ends 
 });
 
 test('sound in live view without a ring: the sound of our own call never reaches recording', async () => {
-  const { call, client } = setup({ options: { liveViewWithoutRing: true, liveViewSound: true, panelAddress: 'SB100001' } });
+  const { call, client } = setup({ options: { liveViewWithoutRing: true, liveViewSound: 'always', panelAddress: 'SB100001' } });
   const heard = [];
   call.setCallListener({ video: () => heard.push('video'), audio: () => heard.push('audio'), ended: () => heard.push('ended') });
   const session = await call.startMedia(false);
@@ -278,4 +288,94 @@ test('sound in live view without a ring: the sound of our own call never reaches
   await session.end('test');
   assert.strictEqual(got.length, 1, 'the live view gets the sound');
   assert.deepStrictEqual(heard, [], 'recording gets nothing');
+});
+
+const talkOptions = { liveViewWithoutRing: true, liveViewSound: 'talk', panelAddress: 'SB100001' };
+const invites = (sent) => parsed(sent).filter((f) => f.flags === 0xc0 && f.opcode === 0x0001);
+
+test("sound 'when you talk': the view starts silent; the microphone places the call again with sound, on the same view", async () => {
+  const { call, client, sent } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  assert.ok(!ops(sent).includes('70'), 'silent at first');
+  const first = call.activeCall();
+  let ended = 0;
+  session.on('end', () => ended++);
+  const before = sent.length;
+  await session.openSound();
+  const after = parsed(sent.slice(before));
+  const oldConn = (f) => f.conn0 === (first.conn0 ^ 0x80) && f.conn1 === first.conn1;
+  assert.ok(after.some((f) => oldConn(f) && f.opcode === 0x0e), 'the silent call is hung up');
+  assert.strictEqual(invites(sent).length, 2, 'a new call');
+  const next = call.activeCall();
+  assert.notStrictEqual(next, first);
+  assert.strictEqual(next.media, session, 'the same view, now on the new call');
+  const newFrames = after.filter((f) => !oldConn(f));
+  assert.deepStrictEqual(newFrames.filter((f) => f.body.length).map((f) => f.opcode.toString(16)), ['1', '3', '11', '70', '11', '11'], 'answered as a ring');
+  assert.strictEqual(ended, 0, 'the view did not end');
+  assert.strictEqual(session.isEnded, false);
+  const heard = [];
+  session.on('audio', (a) => heard.push(a));
+  client.handlers.get(0x2002)(buildRtp({ marker: false, payloadType: 8, sequence: 1, timestamp: 0, ssrc: 3 }, Buffer.alloc(160, 0xd5)));
+  assert.strictEqual(heard.length, 1, "the panel's sound reaches the view");
+  const closing = sent.length;
+  await session.end('viewer closed');
+  const last = parsed(sent.slice(closing));
+  assert.ok(last.some((f) => f.opcode === 0x70 && f.body[f.body.length - 2] === 0), 'voice status 0 on close');
+  assert.ok(last.every((f) => !oldConn(f)), 'closing only touches the new call');
+});
+
+test("sound 'when you talk': more microphone sound, or two triggers at once, place one new call only", async () => {
+  const { call, sent } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  await Promise.all([session.openSound(), session.openSound()]);
+  await session.openSound();
+  assert.strictEqual(invites(sent).length, 2);
+  await session.end('test');
+});
+
+test("sound 'off' and 'always': the microphone changes nothing", async () => {
+  for (const mode of ['off', 'always']) {
+    const { call, sent } = setup({ options: { ...talkOptions, liveViewSound: mode } });
+    const session = await call.startMedia(false);
+    await session.openSound();
+    assert.strictEqual(invites(sent).length, 1, mode);
+    await session.end('test');
+  }
+});
+
+test("sound 'when you talk': closing the view during the switch places no new call", async () => {
+  const { call, sent } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  let ended = 0;
+  session.on('end', () => ended++);
+  const switching = session.openSound();
+  await session.end('viewer closed');
+  await switching;
+  assert.strictEqual(invites(sent).length, 1);
+  assert.strictEqual(ended, 1);
+});
+
+test("sound 'when you talk': if the panel refuses the new call three times, the view ends and says why", async () => {
+  let n = 0;
+  const { call, sent } = setup({
+    options: talkOptions,
+    script: { invite: (f, reply) => (++n === 1 ? undefined : (reply(f, 0x40, '000e08'), false)) },
+  });
+  const session = await call.startMedia(false);
+  const why = new Promise((r) => session.once('end', r));
+  await session.openSound();
+  assert.strictEqual(await why, 'could not call the panel again with sound');
+  assert.strictEqual(invites(sent).length, 4, 'the first call, then three tries');
+});
+
+test("sound 'when you talk': a second viewer during the switch joins the view", async () => {
+  const { call, sent } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  const switching = session.openSound();
+  await new Promise((r) => setImmediate(r));
+  const second = await call.startMedia(false);
+  await switching;
+  assert.strictEqual(second, session);
+  assert.strictEqual(invites(sent).length, 2);
+  await session.end('test');
 });

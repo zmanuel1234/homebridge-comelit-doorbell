@@ -63,6 +63,12 @@ export class H264Depacketizer {
   private fragment: Buffer[] | null = null;
   private expected: number | null = null;
 
+  /** Drops a half-received fragment (a new stream starts, as when a call is placed again). */
+  reset(): void {
+    this.fragment = null;
+    this.expected = null;
+  }
+
   push(packet: RtpPacket): Buffer[] {
     const p = packet.payload;
     if (p.length === 0) {

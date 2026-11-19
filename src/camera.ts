@@ -1043,6 +1043,10 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     talk.stdout.on('data', (d: Buffer) => {
       if (frames === 0) {
         this.log.debug('Doorbell camera: talk-back: sound from the Home app microphone is arriving');
+        // Sound in live view without a ring, 'when you talk': the microphone turns the sound on.
+        Promise.resolve()
+          .then(() => media.openSound())
+          .catch((e: Error) => this.log.debug(`Doorbell camera: could not switch to sound (${e.message})`));
       }
       frames++;
       active.stats.micFrames++;

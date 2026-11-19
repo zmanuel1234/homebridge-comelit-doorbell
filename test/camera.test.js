@@ -380,3 +380,19 @@ test('short-lived live view files are kept in Homebridge\'s storage folder; a st
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('talk-back: the first sound from the Home app microphone asks the view to open the sound, once', async () => {
+  const media = fakeMedia();
+  let asked = 0;
+  media.openSound = async () => { asked++; };
+  const cam = camera({ talkBack: true }, media);
+  const active = { stats: { micFrames: 0 } };
+  const p = { address: '127.0.0.1', ipv6: false, audioReturnPort: 50000, audioSrtp: Buffer.alloc(30) };
+  cam.startTalkBack(active, p, media);
+  const talk = cam.spawned.find(([what]) => what === 'talk-back')[1];
+  assert.strictEqual(asked, 0, 'not before the microphone sends sound');
+  talk.stdout.emit('data', Buffer.alloc(160, 0xd5));
+  talk.stdout.emit('data', Buffer.alloc(160, 0xd5));
+  await new Promise((r) => setImmediate(r));
+  assert.strictEqual(asked, 1);
+});
