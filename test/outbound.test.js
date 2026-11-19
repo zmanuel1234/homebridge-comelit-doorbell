@@ -444,3 +444,92 @@ test("sound 'when you talk': the intercom counts as busy during the switch (no p
   assert.strictEqual(call.busy(), true);
   await session.end('viewer closed');
 });
+
+// Street noise through the panel's microphone: A-law around a mean level of a few hundred (16-bit).
+const streetNoise = () => Buffer.from(Array.from({ length: 160 }, (_, i) => (i % 2 ? 0xa5 : 0x25) ^ (Math.random() < 0.5 ? 1 : 0)));
+const voiceOffs = (sent) => parsed(sent).filter((f) => f.opcode === 0x70 && f.body[f.body.length - 2] === 0);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test("sound 'when you talk': the microphone turned off asks the panel to close the sound; turned on again, calls it again with sound", async () => {
+  const { call, sent, log } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  await session.openSound();
+  await session.sendAudio(Buffer.alloc(160, 0xd5)); // talking
+  assert.strictEqual(voiceOffs(sent).length, 0);
+  await wait(3_300); // the microphone quiet for over 2 s (checked every second)
+  assert.strictEqual(voiceOffs(sent).length, 1, 'voice status 0 on the call with sound');
+  assert.strictEqual(session.isEnded, false, 'the view goes on');
+  await wait(3_000); // the panel sent no sound after it
+  assert.ok(log.lines.some((l) => /closed the sound/.test(l)), log.lines.filter((l) => /sound/.test(l)).join('\n'));
+  assert.strictEqual(invites(sent).length, 2);
+  await session.sendAudio(Buffer.alloc(160, 0xd5)); // the microphone on again
+  await wait(1_500);
+  assert.strictEqual(invites(sent).length, 3, 'a new call with sound');
+  await session.end('viewer closed');
+});
+
+test("sound 'when you talk': if the panel keeps the sound open, it stays on, with no new call, and the plugin stops asking", async () => {
+  const { call, client, sent, log } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  await session.openSound();
+  let seq = 1;
+  const panel = setInterval(() => client.handlers.get(0x2002)?.(buildRtp({ marker: false, payloadType: 8, sequence: seq++, timestamp: seq * 160, ssrc: 3 }, streetNoise())), 20);
+  try {
+    await session.sendAudio(Buffer.alloc(160, 0xd5));
+    await wait(6_500); // quiet, voice status 0, then 3 s of the panel's sound
+    assert.strictEqual(voiceOffs(sent).length, 1);
+    assert.ok(log.lines.some((l) => /kept the sound open/.test(l)));
+    await session.sendAudio(Buffer.alloc(160, 0xd5)); // the microphone on again: the sound is still open
+    await wait(3_300); // and quiet again: not asked a second time
+    assert.strictEqual(invites(sent).length, 2, 'no new call');
+    assert.strictEqual(voiceOffs(sent).length, 1, 'not asked again');
+    assert.strictEqual(call.soundOffIgnored, true);
+  } finally {
+    clearInterval(panel);
+  }
+  await session.end('viewer closed');
+});
+
+test("sound 'always': the microphone turned off doesn't close the sound", async () => {
+  const { call, sent } = setup({ options: { liveViewWithoutRing: true, liveViewSound: 'always', panelAddress: 'SB100001' } });
+  const session = await call.startMedia(false);
+  await session.sendAudio(Buffer.alloc(160, 0xd5));
+  await wait(3_300);
+  assert.strictEqual(voiceOffs(sent).length, 0);
+  await session.end('viewer closed');
+});
+
+test("sound 'when you talk': street noise that drops to silence after asking means the panel closed the sound", async () => {
+  const { call, client, sent, log } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  await session.openSound();
+  let seq = 1;
+  let closed = false;
+  const panel = setInterval(() => client.handlers.get(0x2002)?.(buildRtp({ marker: false, payloadType: 8, sequence: seq++, timestamp: seq * 160, ssrc: 3 }, closed ? Buffer.alloc(160, 0xd5) : streetNoise())), 20);
+  try {
+    await session.sendAudio(Buffer.alloc(160, 0xd5));
+    for (const until = Date.now() + 4_000; voiceOffs(sent).length === 0 && Date.now() < until; ) await wait(50);
+    assert.strictEqual(voiceOffs(sent).length, 1, 'asked to close the sound');
+    closed = true; // the panel keeps sending packets, but its microphone is off
+    await wait(3_300);
+    assert.ok(log.lines.some((l) => /the entrance panel closed the sound/.test(l)), log.lines.filter((l) => /sound/.test(l)).join('\n'));
+    assert.strictEqual(call.soundOffIgnored, false);
+  } finally {
+    clearInterval(panel);
+  }
+  await session.end('viewer closed');
+});
+
+test('judging whether the panel closed the sound, from the street noise', () => {
+  const { judgeSoundOff } = require('../dist/call');
+  const { alawLevel } = require('../dist/media');
+  assert.strictEqual(alawLevel(Buffer.alloc(160, 0xd5)), 8, 'A-law digital silence');
+  assert.ok(alawLevel(streetNoise()) > 200, 'street noise');
+  const noisy = { packets: 100, level: 400 };
+  assert.strictEqual(judgeSoundOff(noisy, { packets: 0, level: 0 }, 2), 'closed', 'the stream stopped');
+  assert.strictEqual(judgeSoundOff(noisy, { packets: 100, level: 8 }, 2), 'closed', 'packets go on, but silent');
+  assert.strictEqual(judgeSoundOff(noisy, { packets: 100, level: 380 }, 2), 'open', 'as loud as before');
+  assert.strictEqual(judgeSoundOff({ packets: 100, level: 10 }, { packets: 100, level: 9 }, 2), 'unknown', 'a quiet street: can\'t tell');
+  assert.strictEqual(judgeSoundOff({ packets: 100, level: 10 }, { packets: 100, level: 300 }, 2), 'open', 'quiet before, noise after: open');
+  assert.strictEqual(judgeSoundOff({ packets: 0, level: 0 }, { packets: 100, level: 9 }, 2), 'unknown');
+});
