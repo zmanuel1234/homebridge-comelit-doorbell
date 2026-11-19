@@ -53,14 +53,20 @@ const CALL_MAX_AGE_MS = 120_000;
 const ANY_FRAME = -2;
 /** Live view without a ring: the longest wait for each step of our call to the panel. */
 const OUTBOUND_STEP_MS = 5_000;
+/** Switching a live view to sound: tries to place the new call, and the pause before each. */
+const SOUND_REDIAL_ATTEMPTS = 3;
+const SOUND_REDIAL_PAUSE_MS = 500;
 /** The session block of our INVITE starts with these two bytes (as the Comelit app's). */
 const OUTBOUND_SESSION_FLAGS = Buffer.from([0x01, 0x20]);
 
 /** Live view without a ring (setting liveViewWithoutRing, and the panel from the address book). */
 export interface OutboundOptions {
   liveViewWithoutRing?: boolean;
-  /** Sound in live view without a ring: our own call opens the sound as an answered ring does. */
-  liveViewSound?: boolean;
+  /**
+   * Sound in live view without a ring: 'always' answers our own call as a ring is (sound from the
+   * start); 'talk' places it silent, then again with the sound when the microphone is turned on.
+   */
+  liveViewSound?: 'off' | 'talk' | 'always';
   /** The entrance panel's address (the intercom's entrance-address-book). */
   panelAddress?: string;
 }
@@ -182,9 +188,20 @@ export class CallHandler {
     private readonly outboundOptions: OutboundOptions = {},
   ) {}
 
-  /** Sound in live view without a ring is on. */
-  get liveViewSound(): boolean {
-    return Boolean(this.outboundOptions.liveViewSound);
+  /** Sound in live view without a ring: 'off', 'talk' or 'always'. */
+  get liveViewSound(): 'off' | 'talk' | 'always' {
+    return this.outboundOptions.liveViewSound ?? 'off';
+  }
+
+  /**
+   * Places a new call of our own to the panel (for a live view switching to sound): the same
+   * call as for live view without a ring, outside startMedia.
+   */
+  async placeOwnCall(): Promise<Call> {
+    if (!this.client) {
+      throw new Error('no connection for media');
+    }
+    return this.placeCall();
   }
 
   /** Live view without a ring is on, and the panel to call is known. */
@@ -253,6 +270,9 @@ export class CallHandler {
   /** True while a call is answered, or its media is starting or running. */
   busy(): boolean {
     this.activeCall(); // drops ended and stale calls
+    if (this.placing !== undefined || this.soundSwitch !== undefined) {
+      return true; // our own call is being placed (again, with sound): no call has the view yet
+    }
     return [...this.calls.values()].some(
       (c) => !c.ended && (c.answered || c.answering !== undefined || c.media !== undefined || c.mediaStarting !== undefined || (c.preview !== undefined && !c.preview.done)),
     );
@@ -472,11 +492,22 @@ export class CallHandler {
     return { confirmed: !reply || Boolean(released && reply.body[2] === 0) };
   }
 
+  /** A live view whose own call is being placed again with sound (MediaSession.openSound). */
+  soundSwitch?: MediaSession;
+
   /**
    * Answers the ringing call (if any) and starts video and audio. Returns null when there is
    * no call to answer or answering on view is off.
    */
   async startMedia(hd: boolean): Promise<MediaSession | null> {
+    const switching = this.soundSwitch;
+    if (switching) {
+      // A second viewer while a view switches to sound joins that view, not a call of its own.
+      await switching.openSound();
+      if (!switching.isEnded) {
+        return switching;
+      }
+    }
     let call = this.activeCall();
     if (!call && this.canCallPanel) {
       // Nobody is ringing: with live view without a ring, call the panel ourselves. A second
@@ -671,6 +702,8 @@ export class MediaSession extends EventEmitter {
     return this.ended;
   }
   private lastMedia = 0;
+  /** When the silence watchdog's "no media yet" time starts: the view's start, or the switch to a call with sound. */
+  private watchStart = 0;
   private stats = { video: 0, audio: 0, other: 0, sent: 0 };
   /** The intercom's sound, for the log: packets missing by sequence number, and the longest pause. */
   private readonly sound = { lastSeq: -1, lastAt: 0, lost: 0, pauseMs: 0, pauseAt: 0 };
@@ -680,6 +713,8 @@ export class MediaSession extends EventEmitter {
   private firstSpsAt = 0;
   private keyframeAt: number[] = [];
   private keyframeRetry?: NodeJS.Timeout;
+  /** No keyframe yet in this call (at the start, and again after switching to a call with sound). */
+  private awaitingKeyframe = true;
   private videoSize?: string;
   /** A muted handler for channels being closed, so their last packets aren't logged as unknown. */
   private readonly drop = (): void => undefined;
@@ -694,7 +729,7 @@ export class MediaSession extends EventEmitter {
   constructor(
     private readonly handler: CallHandler,
     private readonly client: IconaBridgeClient,
-    private readonly call: Call,
+    private call: Call,
     private readonly hd: boolean,
     private readonly log?: Logging,
     private readonly timing: MediaTiming = DEFAULT_MEDIA_TIMING,
@@ -703,8 +738,8 @@ export class MediaSession extends EventEmitter {
   }
 
   async start(): Promise<void> {
-    const started = Date.now();
-    this.startedAt = started;
+    this.watchStart = Date.now();
+    this.startedAt = this.watchStart;
     this.client.on('channel', this.onChannel);
     this.udpHandle = (await this.client.openChannel('UDPM', ChannelType.UAUT)).serverChannelId;
     this.audioHandle = (await this.client.openChannel('RTPC-audio', ChannelType.UAUT, undefined, 0, 'RTPC')).serverChannelId;
@@ -715,7 +750,7 @@ export class MediaSession extends EventEmitter {
     }
     this.log?.debug(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
 
-    if (this.call.outbound && this.handler.liveViewSound) {
+    if (this.call.outbound && this.handler.liveViewSound === 'always') {
       // Sound in live view without a ring: the panel only opens the sound as part of the call's
       // setup (VOICESTATUS sent mid-call is ignored, 2026-11-19), so our own call is answered
       // exactly as a ring is, sound both ways from the start.
@@ -726,11 +761,20 @@ export class MediaSession extends EventEmitter {
       await this.startAnswered(this.audioHandle);
     }
 
-    this.timers.push(setInterval(() => void this.requestVideo().catch(() => undefined), this.timing.videoRefreshMs));
     this.timers.push(
       setInterval(() => {
+        if (!this.switching) {
+          void this.requestVideo().catch(() => undefined); // (while switching, the new call's setup asks for video in its own order)
+        }
+      }, this.timing.videoRefreshMs),
+    );
+    this.timers.push(
+      setInterval(() => {
+        if (this.switching) {
+          return; // a pause while switching to sound is expected (openSound)
+        }
         const now = Date.now();
-        if (this.lastMedia === 0 && now - started > this.timing.startTimeoutMs) {
+        if (this.lastMedia === 0 && now - this.watchStart > this.timing.startTimeoutMs) {
           void this.end('no media from the intercom');
         } else if (this.lastMedia > 0 && now - this.lastMedia > this.timing.silenceMs) {
           void this.end('media stopped');
@@ -814,10 +858,13 @@ export class MediaSession extends EventEmitter {
     this.stats.video++;
     if (this.firstVideoAt === 0) {
       this.firstVideoAt = Date.now();
+    }
+    if (this.awaitingKeyframe && !this.keyframeRetry) {
       // Joining a stream that is already running, the first keyframe can be seconds away;
       // until then nothing can be shown. Asking for video again may bring one sooner.
+      // (Armed again when a call is swapped for one with sound.)
       this.keyframeRetry = setTimeout(() => {
-        if (this.firstSpsAt === 0 && !this.ended) {
+        if (this.awaitingKeyframe && !this.ended) {
           this.log?.debug('call: no keyframe yet; asking for video again');
           void this.requestVideo().catch(() => undefined);
         }
@@ -862,9 +909,13 @@ export class MediaSession extends EventEmitter {
   private noteUnit(unit: Buffer): void {
     const type = nalType(unit);
     const now = Date.now();
+    if (type === 7 && this.awaitingKeyframe) {
+      this.awaitingKeyframe = false;
+      clearTimeout(this.keyframeRetry);
+      this.keyframeRetry = undefined;
+    }
     if (type === 7 && this.firstSpsAt === 0) {
       this.firstSpsAt = now;
-      clearTimeout(this.keyframeRetry);
       const sps = parseSps(unit);
       const size = sps ? `${sps.width}x${sps.height}, profile ${sps.profile}, level ${sps.level / 10}` : 'size unknown';
       this.videoSize = sps ? `${sps.width}x${sps.height}` : undefined;
@@ -882,7 +933,7 @@ export class MediaSession extends EventEmitter {
   }
 
   private async requestVideo(): Promise<void> {
-    if (this.ended || this.videoHandle === undefined) {
+    if (this.ended || this.call.ended || this.videoHandle === undefined) {
       return;
     }
     const settings = this.hd ? videoSettings(HD_RESOLUTION, 1000) : videoSettings(SD_RESOLUTION, 0);
@@ -900,7 +951,7 @@ export class MediaSession extends EventEmitter {
   /** Sends 20 ms of G.711 A-law (160 bytes) to the intercom's speaker. */
   async sendAudio(alaw: Buffer): Promise<void> {
     const handle = this.txHandle ?? this.audioHandle;
-    if (this.ended || handle === undefined) {
+    if (this.ended || this.switching || handle === undefined) {
       return;
     }
     const packet = buildRtp({ marker: this.tx.first, payloadType: ALAW_PAYLOAD_TYPE, sequence: this.tx.seq, timestamp: this.tx.ts, ssrc: this.tx.ssrc }, alaw);
@@ -909,6 +960,110 @@ export class MediaSession extends EventEmitter {
     this.tx.ts = (this.tx.ts + alaw.length) >>> 0;
     this.stats.sent++;
     await this.client.sendOnHandle(handle, packet);
+  }
+
+  /** While our own call is being placed again with the sound (see openSound). */
+  private switching?: Promise<void>;
+
+  /**
+   * Sound in live view without a ring, 'when you talk': the view starts as a silent call. The
+   * panel only opens the sound while a call is being set up (VOICESTATUS later in a call is
+   * ignored, 2026-11-19), so when the Home app's microphone is turned on this hangs up the silent
+   * call and places a new one, answered as a ring is (sound both ways), on the same channels.
+   * The live view keeps this session throughout: the picture pauses for the ~5 s it takes (on an EX-7000HW: ~2 s of call setup, then ~3 s to the first keyframe).
+   * Once per view; the sound then stays open until the view closes.
+   */
+  openSound(): Promise<void> {
+    if (!this.call.outbound || this.handler.liveViewSound !== 'talk' || this.voiceOpen || this.ended) {
+      return Promise.resolve();
+    }
+    if (!this.switching && this.handler.ringingCall()) {
+      // Calling the panel while it rings the flat would be refused, or might cut the ring short.
+      this.log?.info('Doorbell camera: microphone on, but someone is ringing: the view stays silent (close it and open it again to answer the ring)');
+      return Promise.resolve();
+    }
+    this.switching ??= this.switchToSound().finally(() => {
+      this.switching = undefined;
+    });
+    return this.switching;
+  }
+
+  private async switchToSound(): Promise<void> {
+    const old = this.call;
+    this.handler.soundSwitch = this;
+    try {
+      await this.placeAgainWithSound(old);
+    } finally {
+      if (this.handler.soundSwitch === this) {
+        this.handler.soundSwitch = undefined;
+      }
+    }
+  }
+
+  private async placeAgainWithSound(old: Call): Promise<void> {
+    this.log?.info('Doorbell camera: microphone on: calling the entrance panel again with sound (the picture pauses for a moment)');
+    // The old call is no longer this view's: its hang-up must not end the view.
+    old.media = undefined;
+    this.txHandle = undefined; // talk-back waits for the new call
+    if (!old.ended) {
+      if (this.audioHandle !== undefined) {
+        await this.handler.send(old, Flag.DATA, Buffer.concat([AUDIO_STOP, le16(this.audioHandle), Buffer.alloc(2)]), 'audio stop').catch(() => undefined);
+      }
+      await this.handler.hangUp(old);
+    }
+    let next: Call | undefined;
+    let lastError: Error | undefined;
+    for (let attempt = 1; attempt <= SOUND_REDIAL_ATTEMPTS && !this.ended; attempt++) {
+      await new Promise((r) => setTimeout(r, SOUND_REDIAL_PAUSE_MS));
+      if (this.ended) {
+        break;
+      }
+      try {
+        next = await this.handler.placeOwnCall();
+        break;
+      } catch (e) {
+        lastError = e as Error;
+        this.log?.debug(`call: calling the panel again with sound, try ${attempt}: ${lastError.message}`);
+      }
+    }
+    if (!next) {
+      if (!this.ended) {
+        this.log?.warn(`Doorbell camera: could not call the entrance panel again with sound (${lastError?.message ?? 'no answer'}); ending the live view`);
+        await this.end('could not call the panel again with sound', false);
+      }
+      return;
+    }
+    if (this.ended) {
+      await this.handler.hangUp(next); // the viewer left meanwhile
+      return;
+    }
+    this.call = next;
+    next.media = this;
+    this.once('end', () => {
+      if (next?.media === this) {
+        next.media = undefined;
+      }
+    });
+    // The new call gets the same "no media yet" time as a new view (not "media stopped").
+    this.lastMedia = 0;
+    this.watchStart = Date.now();
+    this.depacketizer.reset();
+    this.tx.first = true; // a new talk-back stream: marker bit on its first packet
+    clearTimeout(this.keyframeRetry);
+    this.keyframeRetry = undefined;
+    this.awaitingKeyframe = true; // the new call's first keyframe: ask again if it's slow
+    try {
+      await this.startAnswered(this.audioHandle as number);
+    } catch (e) {
+      if (this.ended) {
+        return; // the viewer closed during the setup (end() hung up the new call)
+      }
+      this.log?.warn(`Doorbell camera: the entrance panel's sound didn't start (${(e as Error).message}); ending the live view`);
+      await this.end('the sound did not start'); // hangs up the new call unless the panel already did
+    }
+    if (this.lastMedia === 0) {
+      this.watchStart = Date.now(); // the full "no media yet" time counts from the end of the setup
+    }
   }
 
   /** Stops the media and, with `hangUp`, hangs up (unless the intercom already ended the call). */

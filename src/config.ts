@@ -1,6 +1,9 @@
 import type { PlatformConfig } from 'homebridge';
 import type { AnswerMode } from './call';
 
+/** Sound in live view without a ring. */
+export type LiveViewSound = 'off' | 'talk' | 'always';
+
 export type DoctorMode = 'off' | 'switch' | 'always';
 import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_MS } from './settings';
 
@@ -97,8 +100,11 @@ export interface Settings {
    * entrance panel, as the Comelit app's camera button does, so the view shows the panel's video.
    */
   liveViewWithoutRing: boolean;
-  /** Sound in live view without a ring: our own call to the panel opens the sound both ways, like an answered ring. */
-  liveViewSound: boolean;
+  /**
+   * Sound in live view without a ring: 'off' (video only), 'talk' (the call is placed again with
+   * the sound when the Home app's microphone is turned on) or 'always' (sound from the start).
+   */
+  liveViewSound: LiveViewSound;
   /** HomeKit Secure Video: each ring is recorded (needs the doorbell camera, a home hub and iCloud+). */
   recording: boolean;
   /** Gain on the intercom's audio to the Home app, in dB (0: as is). */
@@ -186,6 +192,17 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     invalid.push(`${String(key)}: ${JSON.stringify(v)} is not valid, using ${fallback}`);
     return fallback;
   };
+  /** Sound in live view without a ring: 2.4.0-beta.2's true/false still mean 'always'/'off'. */
+  const liveViewSound = (): LiveViewSound => {
+    const v = c.liveViewSound;
+    if (v === true || v === 'true') {
+      return 'always';
+    }
+    if (v === false || v === 'false') {
+      return 'off';
+    }
+    return choice('liveViewSound', ['off', 'talk', 'always'] as const, 'off');
+  };
   // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
   const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0 && n <= 600);
   const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0 && n <= 15) : NaN;
@@ -225,7 +242,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     mediaCaptureDir: text('mediaCaptureDir'),
     ringPreview: bool('ringPreview', true),
     liveViewWithoutRing: bool('liveViewWithoutRing', false),
-    liveViewSound: bool('liveViewSound', false),
+    liveViewSound: liveViewSound(),
     recording: bool('recording', false),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
     mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1, 60) * 1000,
@@ -285,8 +302,11 @@ export function settingsWarnings(s: Settings): string[] {
   if (s.liveViewWithoutRing && !s.camera) {
     w.push("'Live view without a ring' (liveViewWithoutRing) needs the doorbell camera (camera: true); it is off.");
   }
-  if (s.liveViewSound && !s.liveViewWithoutRing) {
+  if (s.liveViewSound !== 'off' && !s.liveViewWithoutRing) {
     w.push("'Sound in live view without a ring' (liveViewSound) needs 'Live view without a ring' (liveViewWithoutRing); it is off.");
+  }
+  if (s.liveViewSound === 'talk' && s.liveViewWithoutRing && !s.talkBack) {
+    w.push("'Sound in live view without a ring: when you talk' needs 'Talk-back' (talkBack): without it the Home app has no microphone to turn it on.");
   }
   if (s.liveViewWithoutRing && s.camera && !s.enableNotifications) {
     w.push("'Live view without a ring' (liveViewWithoutRing) needs 'Listen for rings' (enableNotifications): the call to the panel uses that connection.");
