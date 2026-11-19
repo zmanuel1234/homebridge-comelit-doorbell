@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Sound in live view without a ring, When you talk: the microphone off closes the sound** (experimental, not yet tried on a panel). When the Home app's microphone has sent nothing for 3 s (it stops sending when you turn it off), the plugin asks the entrance panel to close its sound (voice status 0) and keeps the video. Turning the microphone on again calls the panel again with sound (about 5 s of paused picture again).
+  - Whether the panel closed it is judged without anyone at the door, from the street noise through the panel's own microphone: the noise floor over the 2 s before asking (from 0.5 s after your last words, so not their echo; the floor is the 25th percentile, so a passing car or a door slam doesn't count) against the 1.5 s after. **Closed**: its sound stops (none for the last 0.4 s, so a panel that stops late still counts), or drops to near silence or under a quarter of the street's. **Open**: at least half the street's; the sound stays on, and after two such verdicts the plugin stops asking until it restarts (a warning says so). **Can't tell** (a quiet street, or in between): treated as closed, and the log says the panel's microphone may still be open.
+  - If the panel's sound stops while the microphone is on (the panel closed it after all), the plugin calls it again with sound.
+  - With debug mode on, gaps of over 0.5 s in the microphone sound are logged, to check that the Home app streams continuously while its microphone is on.
+
+### Fixed
+
+- While someone rings during a view, the microphone logs "someone is ringing" once per ring instead of on every sound frame.
+
 ## 2.4.0-beta.3 (2026-11-19)
 
 Pre-release. The setting stays off by default: with the default settings the plugin behaves like 2.4.0-beta.2.
