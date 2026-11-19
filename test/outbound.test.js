@@ -232,3 +232,25 @@ test('an own call that ends without video warns once per run; closing the view e
   await session.end('the intercom ended the call');
   assert.strictEqual(warns.length, 1, 'only once');
 });
+
+test('sound in live view without a ring: our call is answered like a ring, with VOICESTATUS before the video request', async () => {
+  const { call, sent } = setup({ options: { liveViewWithoutRing: true, liveViewSound: true, panelAddress: 'SB100001' } });
+  const session = await call.startMedia(false);
+  const o = ops(sent);
+  // invite, capabilities, audio request, voice status 1, audio request again, video request
+  assert.deepStrictEqual(o.slice(0, 6), ['1', '3', '11', '70', '11', '11']);
+  const voice = parsed(sent).find((f) => f.opcode === 0x70);
+  assert.strictEqual(voice.body[voice.body.length - 2], 1, 'voice status 1');
+  assert.ok(voice.body.includes(Buffer.from('SB100001')), "with the caller's (the panel's) address, as for a ring");
+  const closing = sent.length;
+  await session.end('viewer closed');
+  const off = parsed(sent.slice(closing)).find((f) => f.opcode === 0x70);
+  assert.ok(off && off.body[off.body.length - 2] === 0, 'voice status 0 when the view closes');
+});
+
+test('sound in live view without a ring: off by default, and needs live view without a ring', () => {
+  assert.strictEqual(resolveSettings({ platform: 'x' }).liveViewSound, false);
+  assert.strictEqual(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: true }).liveViewSound, true);
+  assert.ok(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewSound: true })).some((w) => /needs 'Live view without a ring'/.test(w)));
+  assert.deepStrictEqual(settingsWarnings(resolveSettings({ platform: 'x', camera: true, liveViewWithoutRing: true, liveViewSound: true })), []);
+});

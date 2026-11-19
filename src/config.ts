@@ -34,6 +34,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   mediaCaptureDir?: string;
   ringPreview?: boolean;
   liveViewWithoutRing?: boolean | string;
+  liveViewSound?: boolean | string;
   recording?: boolean | string;
   doorVolume?: number | string;
   mediaStartTimeoutSeconds?: number;
@@ -96,6 +97,8 @@ export interface Settings {
    * entrance panel, as the Comelit app's camera button does, so the view shows the panel's video.
    */
   liveViewWithoutRing: boolean;
+  /** Sound in live view without a ring: our own call to the panel opens the sound both ways, like an answered ring. */
+  liveViewSound: boolean;
   /** HomeKit Secure Video: each ring is recorded (needs the doorbell camera, a home hub and iCloud+). */
   recording: boolean;
   /** Gain on the intercom's audio to the Home app, in dB (0: as is). */
@@ -222,6 +225,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     mediaCaptureDir: text('mediaCaptureDir'),
     ringPreview: bool('ringPreview', true),
     liveViewWithoutRing: bool('liveViewWithoutRing', false),
+    liveViewSound: bool('liveViewSound', false),
     recording: bool('recording', false),
     doorVolumeDb: num('doorVolume', 12, (n) => n >= 0 && n <= 24),
     mediaStartTimeoutMs: pos('mediaStartTimeoutSeconds', 10, 1, 60) * 1000,
@@ -280,6 +284,9 @@ export function settingsWarnings(s: Settings): string[] {
   }
   if (s.liveViewWithoutRing && !s.camera) {
     w.push("'Live view without a ring' (liveViewWithoutRing) needs the doorbell camera (camera: true); it is off.");
+  }
+  if (s.liveViewSound && !s.liveViewWithoutRing) {
+    w.push("'Sound in live view without a ring' (liveViewSound) needs 'Live view without a ring' (liveViewWithoutRing); it is off.");
   }
   if (s.liveViewWithoutRing && s.camera && !s.enableNotifications) {
     w.push("'Live view without a ring' (liveViewWithoutRing) needs 'Listen for rings' (enableNotifications): the call to the panel uses that connection.");

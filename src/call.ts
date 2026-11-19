@@ -57,6 +57,8 @@ const OUTBOUND_SESSION_FLAGS = Buffer.from([0x01, 0x20]);
 /** Live view without a ring (setting liveViewWithoutRing, and the panel from the address book). */
 export interface OutboundOptions {
   liveViewWithoutRing?: boolean;
+  /** Sound in live view without a ring: our own call opens the sound as an answered ring does. */
+  liveViewSound?: boolean;
   /** The entrance panel's address (the intercom's entrance-address-book). */
   panelAddress?: string;
 }
@@ -178,6 +180,11 @@ export class CallHandler {
     private readonly outboundOptions: OutboundOptions = {},
   ) {}
 
+  /** Sound in live view without a ring is on. */
+  get liveViewSound(): boolean {
+    return Boolean(this.outboundOptions.liveViewSound);
+  }
+
   /** Live view without a ring is on, and the panel to call is known. */
   get canCallPanel(): boolean {
     return Boolean(this.outboundOptions.liveViewWithoutRing && this.outboundOptions.panelAddress) && this.enabled;
@@ -271,8 +278,8 @@ export class CallHandler {
     this.warnedNoVideo = true;
     this.log?.warn(
       `Live view without a ring: the entrance panel took the call but sent no video (${reason}). ` +
-        "Some systems don't support this: if the Comelit app's Entrance button can't show the entrance " +
-        'without a ring either, turn Live view without a ring off.',
+        "Check that the entrance panel is at address 0 (on an EX-DSME, DIP 1-3 OFF) and the monitor in Kit mode; " +
+        "if the Comelit app's Entrance button can't show the entrance without a ring either, turn Live view without a ring off.",
     );
   }
 
@@ -706,7 +713,13 @@ export class MediaSession extends EventEmitter {
     }
     this.log?.debug(`call: media channels udp=${this.udpHandle} audio=${this.audioHandle} video=${this.videoHandle}`);
 
-    if (this.call.outbound) {
+    if (this.call.outbound && this.handler.liveViewSound) {
+      // Sound in live view without a ring: the panel only opens the sound as part of the call's
+      // setup (VOICESTATUS sent mid-call is ignored, 2026-11-19), so our own call is answered
+      // exactly as a ring is, sound both ways from the start.
+      this.voiceOpen = true;
+      await this.startAnswered(this.audioHandle);
+    } else if (this.call.outbound) {
       await this.startOutbound(this.audioHandle);
     } else {
       await this.startAnswered(this.audioHandle);
@@ -865,6 +878,9 @@ export class MediaSession extends EventEmitter {
     await this.handler.send(this.call, Flag.DATA, Buffer.concat([VIDEO_OFFER, le16(this.videoHandle), settings]), 'video request');
   }
 
+  /** Our own call opened the sound (sound in live view without a ring): close it at the end. */
+  private voiceOpen = false;
+
   private async voiceStatus(status: 0 | 1): Promise<void> {
     const body = Buffer.concat([Buffer.from([0x00, OP_VOICESTATUS]), logicalAddress(this.call.caller || this.call.peer), Buffer.from([status, 0])]);
     await this.handler.send(this.call, Flag.DATA, body, `voice status ${status}`);
@@ -908,7 +924,7 @@ export class MediaSession extends EventEmitter {
       );
     }
     if (!this.call.ended) {
-      if (!this.call.outbound) {
+      if (!this.call.outbound || this.voiceOpen) {
         await this.voiceStatus(0).catch(() => undefined);
       }
       if (this.audioHandle !== undefined) {
