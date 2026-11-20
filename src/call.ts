@@ -491,6 +491,38 @@ export class CallHandler {
   }
 
   /**
+   * Opens `door` inside our own call to the panel while a live view without a ring shows it: the
+   * panel refuses a separate open while it is in a call with us (cause 8, busy; seen 2026-11-20),
+   * as the Comelit app's open from its entrance view would be. Only for the HomeKit lock (a person
+   * looking at the door), never for doctor mode or Next Visitor. The live view keeps the call.
+   * Returns null when no live view without a ring is open, so the caller opens the normal way.
+   */
+  async openInOwnCall(door: Door): Promise<OpenResult | null> {
+    let call = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop();
+    const switching = this.soundSwitch;
+    if (!call && switching) {
+      // The view is calling the panel again (sound on or off): open in the new call.
+      await switching.settled();
+      call = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop();
+    }
+    if (!call) {
+      return null;
+    }
+    this.log?.debug('call: opening the door inside our own call (live view without a ring)');
+    const output = Number(door.outputIndex) || 1;
+    const openBody = Buffer.concat([Buffer.from([0x00, 0x2d]), logicalAddress(door.aptAddress), Buffer.from([output & 0xff])]);
+    const replyWait = this.wait(call, Opcode.OPEN_DOOR, 4000);
+    await this.send(call, Flag.DATA, openBody, 'open in our own call');
+    const reply = await replyWait;
+    this.log?.debug(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
+    const released = reply && reply.opcode === Opcode.RELEASE && reply.body.length >= 3;
+    if (released && reply.body[2] !== 0) {
+      throw new Error(`intercom refused the open in the live view's call (cause ${reply.body[2]})`);
+    }
+    return { confirmed: !reply || Boolean(released && reply.body[2] === 0) };
+  }
+
+  /**
    * Opens `door` inside the ringing call, answering it first if needed, and hangs up afterwards
    * if nobody is watching. In `answer-on-open` and `answer-on-view` mode (so a ring can be let
    * in from the lock without opening the live view); `force` (doctor mode) whatever the mode.
@@ -1207,6 +1239,11 @@ export class MediaSession extends EventEmitter {
     }
     clearTimeout(this.soundCheck);
     return this.switchCall(false);
+  }
+
+  /** Resolves when no switch of this view's call is in progress (whatever its outcome). */
+  async settled(): Promise<void> {
+    await this.switching?.catch(() => undefined);
   }
 
   /** Places this view's call again, with or without sound, keeping the view (one switch at a time). */

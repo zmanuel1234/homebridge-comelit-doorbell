@@ -49,7 +49,9 @@ async function openCtppChannel(client: IconaBridgeClient, config: DeviceConfig):
 }
 
 async function openDoorOnChannel(client: IconaBridgeClient, channel: Channel, config: DeviceConfig, door: Door, ctx: OpenContext): Promise<OpenResult> {
-  const inCall = await ctx.call?.openInCall(door);
+  // A ring: open inside it. A live view without a ring (the panel in a call with us, so busy for
+  // a separate open): inside our own call. Only the lock opens through here.
+  const inCall = (await ctx.call?.openInCall(door)) ?? (await ctx.call?.openInOwnCall(door));
   if (inCall) {
     return inCall;
   }
@@ -90,7 +92,7 @@ async function openEntrance(client: IconaBridgeClient, channel: Channel, ourAddr
     return { confirmed: false };
   }
   if (cause !== 0) {
-    throw new DoorOpenError(`intercom refused (cause ${cause}${cause === CAUSE_BUSY ? ', busy: a call is ringing and was not answered' : ''})`);
+    throw new DoorOpenError(`intercom refused (cause ${cause}${cause === CAUSE_BUSY ? ', busy: the intercom is in a call, e.g. a ring nobody answered' : ''})`);
   }
   return { confirmed: true };
 }

@@ -717,3 +717,39 @@ test("sound 'when you talk': the panel hanging up with the sound open still ends
     await t.stop();
   }
 });
+
+test('the lock during a live view without a ring opens inside our own call (the panel is busy for a separate open), and the view goes on', async () => {
+  const { call, sent } = setup();
+  const session = await call.startMedia(false);
+  const before = sent.length;
+  const result = await call.openInOwnCall({ aptAddress: 'SB100001', outputIndex: 1 });
+  assert.deepStrictEqual(result, { confirmed: true });
+  const after = parsed(sent.slice(before));
+  const open = after.find((f) => f.opcode === 0x002d);
+  assert.ok(open, 'an open sent');
+  assert.ok(call.isOwnCall(open.conn0 ^ 0x80, open.conn1), 'on our own call');
+  assert.ok(!after.some((f) => f.flags === 0x60), 'no hang-up: the view keeps the call');
+  assert.strictEqual(session.isEnded, false);
+  await session.end('viewer closed');
+  assert.strictEqual(await call.openInOwnCall({ aptAddress: 'SB100001', outputIndex: 1 }), null, 'no live view: null (open the normal way)');
+});
+
+test('the lock: a ring is opened inside the ring, a live view without a ring inside our own call, otherwise the normal way', async () => {
+  const { openDoor } = require('../dist/door');
+  const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
+  const door = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };
+  const client = { getChannel: () => ({}), sendBinary: async () => { throw new Error('separate open sent'); }, removeChannel() {} };
+  const order = [];
+  const ctx = (ring, view) => ({
+    call: {
+      openInCall: async () => (order.push('ring'), ring ? { confirmed: true } : null),
+      openInOwnCall: async () => (order.push('view'), view ? { confirmed: true } : null),
+    },
+  });
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(true, true)), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring'], 'a ring first');
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(false, true)), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring', 'view']);
+  await assert.rejects(openDoor(client, config, door, ctx(false, false)), /separate open sent/, 'neither: the normal way');
+});
