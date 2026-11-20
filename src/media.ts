@@ -377,24 +377,3 @@ export function parseSps(unit: Buffer): SpsInfo | undefined {
     return undefined;
   }
 }
-
-/** G.711 A-law to 16-bit linear (ITU-T G.711). */
-export function alawToLinear(byte: number): number {
-  const a = byte ^ 0x55;
-  const exponent = (a & 0x70) >> 4;
-  let mantissa = a & 0x0f;
-  mantissa = exponent === 0 ? (mantissa << 4) + 8 : ((mantissa << 4) + 0x108) << (exponent - 1);
-  return a & 0x80 ? mantissa : -mantissa;
-}
-
-/** How loud a block of A-law is: the mean absolute 16-bit sample (digital silence is 8). */
-export function alawLevel(alaw: Buffer): number {
-  if (alaw.length === 0) {
-    return 0;
-  }
-  let sum = 0;
-  for (const b of alaw) {
-    sum += Math.abs(alawToLinear(b));
-  }
-  return sum / alaw.length;
-}

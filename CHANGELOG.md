@@ -2,20 +2,19 @@
 
 ## Unreleased
 
-### Added
-
-- **Sound in live view without a ring, When you talk: the microphone off closes the sound** (experimental, not yet tried on a panel). When the Home app's microphone has sent nothing for 3 s (it stops sending when you turn it off), the plugin asks the entrance panel to close its sound (voice status 0) and keeps the video. Turning the microphone on again calls the panel again with sound (about 5 s of paused picture again).
-  - Whether the panel closed it is judged without anyone at the door, from the street noise through the panel's own microphone: the noise floor over the 2 s before asking (from 0.5 s after your last words, so not their echo; the floor is the 25th percentile, so a passing car or a door slam doesn't count) against the 1.5 s after. **Closed**: its sound stops (none for the last 0.4 s, so a panel that stops late still counts), or drops to near silence or under a quarter of the street's. **Open**: at least half the street's; the sound stays on, and after two such verdicts the plugin stops asking until it restarts (a warning says so). **Can't tell** (a quiet street, or in between): treated as closed, and the log says the panel's microphone may still be open.
-  - If the panel hangs up within 15 s of being asked (the Comelit app's sound-off button ends its call a few seconds later, so the panel may do the same for us), the view goes on: the plugin calls the panel again without sound (another short pause in the picture). From then on, until the plugin restarts, turning the microphone off goes straight to a new silent call without asking.
-  - If the panel's sound stops while the microphone is on (the panel closed it after all), the plugin calls it again with sound.
-  - With debug mode on, gaps of over 0.5 s in the microphone sound are logged, to check that the Home app streams continuously while its microphone is on.
+Pre-release. With the default settings the plugin behaves like 2.4.0-beta.3.
 
 ### Fixed
 
 - **Unlocking from HomeKit during a live view without a ring** was refused by the intercom (`cause 8, busy`): the panel is in a call with the plugin and takes no separate open, and it ignores one sent inside the plugin's silent call (both seen on an EX-7000HW kit, 2026-11-20). The lock now hangs up the live view's call for a moment, opens the door the normal way (once more a second later if the intercom is still busy), and calls the panel again: the view goes on after a short pause in the picture. Only the lock does this, never doctor mode or Next Visitor, and **Unlock allowed for** still applies (with the default 90 s, a live view without a ring is not a ring: set it to 0 to open from a live view at any time).
-- Noted: on an EX-7000HW kit the panel ends a silent live view without a ring after about 31 s (a normal hang-up, cause 0): the Home app's view then stops. Views with sound ran longer (36 and 43 s, closed by the viewer).
 - The busy refusal's log message no longer says a call is ringing: `busy: the intercom is in a call, e.g. a ring nobody answered`.
-- While someone rings during a view, the microphone logs "someone is ringing" once per ring instead of on every sound frame.
+- While someone rings during a live view without a ring, "someone is ringing" is logged once per ring.
+- Internal: a switch of the live view's call no longer adds an event listener each time.
+
+### Notes from door tests (EX-7000HW kit, 2026-11-20)
+
+- The panel ends a **silent** live view without a ring after about 31 s (a normal hang-up): the Home app's picture then freezes, close the view. A view **with sound** isn't cut short (95 s, closed by the viewer).
+- **Turning the microphone off doesn't turn the sound off.** The panel ignores a request to close the sound in the middle of a call (and the video stalled for a while after it), and the Comelit app's own sound-off button ends its call. So with **When you talk**, once the microphone has turned the sound on, it stays on until you close the view: closing the view is how to turn it off.
 
 ## 2.4.0-beta.3 (2026-11-19)
 

@@ -53,8 +53,6 @@ function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001'
       }
     } else if (f.opcode === 0x0011 && f.body[2] === 0x18) {
       if (script.audio?.(f, reply) !== false) reply(f, 0x40, '00111802000000000130');
-    } else if (f.opcode === 0x0070) {
-      script.voice?.(f, reply);
     }
   }, log, { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 60_000 }, options);
   const client = fakeClient();
@@ -447,275 +445,26 @@ test("sound 'when you talk': the intercom counts as busy during the switch (no p
   await session.end('viewer closed');
 });
 
-// The panel's sound in tests: real-sounding levels, as A-law (G.711 encoder, for the test only).
-function linearToAlaw(x) {
-  let sign = 0x80;
-  if (x < 0) { sign = 0; x = -x - 1; }
-  x = Math.min(x, 32635);
-  let exp = 7;
-  for (let m = 0x4000; (x & m) === 0 && exp > 0; m >>= 1) exp--;
-  const mant = exp === 0 ? (x >> 4) & 0x0f : (x >> (exp + 3)) & 0x0f;
-  return (sign | (exp << 4) | mant) ^ 0x55;
-}
-const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
-/** 20 ms of noise at about `dbfs` (street noise through the panel: about -45 dBFS; a passing car: -25). */
-const noise = (dbfs) => Buffer.from(Array.from({ length: 160 }, () => linearToAlaw(Math.round(gauss() * 32768 * 10 ** (dbfs / 20)))));
-const SILENCE = Buffer.alloc(160, 0xd5);
-const voiceOffs = (sent) => parsed(sent).filter((f) => f.opcode === 0x70 && f.body[f.body.length - 2] === 0);
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (cond, ms, what) => {
-  for (const end = Date.now() + ms; !cond(); ) {
-    assert.ok(Date.now() < end, `timed out waiting: ${what}`);
-    await wait(50);
-  }
-};
-
-/**
- * A 'when you talk' view switched to sound, with the panel sending `panel(msSinceVoiceOff)` every
- * 20 ms (null: nothing), and the microphone sending while `mic()` is true.
- */
-async function talkView({ panel, mic = () => false, script = {} }) {
-  const t = setup({ options: talkOptions, script });
-  const session = await t.call.startMedia(false);
-  await session.openSound();
-  let seq = 1;
-  let offAt = 0;
-  const timer = setInterval(() => {
-    if (!offAt && voiceOffs(t.sent).length) offAt = Date.now();
-    const payload = panel(offAt ? Date.now() - offAt : -1);
-    if (payload) t.client.handlers.get(0x2002)?.(buildRtp({ marker: false, payloadType: 8, sequence: seq++, timestamp: seq * 160, ssrc: 3 }, payload));
-    if (mic()) void session.sendAudio(SILENCE);
-  }, 20);
-  t.session = session;
-  t.stop = async () => { clearInterval(timer); await session.end('viewer closed'); };
-  return t;
-}
-const verdictLine = (log) => log.lines.find((l) => /closed the sound|kept the sound open|can't tell/.test(l));
-
-test("sound 'when you talk': the microphone off asks the panel to close the sound; a silent panel means closed; the microphone on again calls it again", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: (since) => (since < 0 ? noise(-45) : SILENCE), mic: () => micOn });
-  try {
-    await wait(500);
-    micOn = false;
-    await until(() => voiceOffs(t.sent).length === 1, 5_000, 'voice status 0');
-    assert.strictEqual(t.session.isEnded, false, 'the view goes on');
-    await until(() => verdictLine(t.log), 5_000, 'the verdict');
-    assert.match(verdictLine(t.log), /closed the sound/);
-    assert.strictEqual(invites(t.sent).length, 2);
-    micOn = true;
-    await until(() => invites(t.sent).length === 3, 3_000, 'a new call with sound');
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': a panel that stops its sound 2.2 s late still counts as closed", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: (since) => (since < 2_200 ? noise(-45) : null), mic: () => micOn });
-  try {
-    await wait(300);
-    micOn = false;
-    await until(() => verdictLine(t.log), 9_000, 'the verdict');
-    assert.match(verdictLine(t.log), /closed the sound/);
-    assert.strictEqual(t.call.soundOffOpenVerdicts, 0);
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': a car passing just before doesn't make an ignored request look closed", async () => {
-  let micOn = true;
-  let micOffAt = 0;
-  // street noise throughout (the panel ignores the request), and a car for 0.8 s in the street sample taken before asking
-  const car = (t) => voiceOffs(t.sent).length === 0 && micOffAt && Date.now() - micOffAt > 2_200 && Date.now() - micOffAt < 3_000;
-  let t;
-  t = await talkView({ panel: () => (t && car(t) ? noise(-25) : noise(-45)), mic: () => micOn });
-  try {
-    await wait(300);
-    micOn = false;
-    micOffAt = Date.now();
-    await until(() => verdictLine(t.log), 9_000, 'the verdict');
-    assert.match(verdictLine(t.log), /kept the sound open/);
-    assert.strictEqual(t.call.soundOffIgnored, false, 'one verdict is not enough to stop asking');
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': a quiet street can't tell, and says the microphone may be open", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: () => noise(-70), mic: () => micOn });
-  try {
-    await wait(300);
-    micOn = false;
-    await until(() => verdictLine(t.log), 9_000, 'the verdict');
-    assert.match(verdictLine(t.log), /can't tell.*may still be open/);
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': two 'kept open' verdicts stop the asking, with a warning", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: () => noise(-45), mic: () => micOn });
-  try {
-    for (const n of [1, 2]) {
-      micOn = true;
-      await wait(300);
-      micOn = false;
-      await until(() => t.call.soundOffOpenVerdicts === n, 9_000, `verdict ${n}`);
-    }
-    assert.strictEqual(t.call.soundOffIgnored, true);
-    assert.ok(t.log.lines.some((l) => l.startsWith('W') && /ignore the request/.test(l)));
-    micOn = true;
-    await wait(300);
-    micOn = false;
-    await wait(4_500);
-    assert.strictEqual(voiceOffs(t.sent).length, 2, 'not asked a third time');
-    assert.strictEqual(invites(t.sent).length, 2, 'no new calls: the sound stayed open');
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': if the panel's sound stops while the microphone is on, it calls again with sound", async () => {
-  let stopped = false;
-  const t = await talkView({ panel: () => (stopped ? null : noise(-45)), mic: () => true });
-  try {
-    await wait(500);
-    stopped = true;
-    await until(() => invites(t.sent).length === 3, 6_000, 'a new call with sound');
-    assert.ok(t.log.lines.some((l) => /stopped its sound while the microphone is on/.test(l)));
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': the microphone back during the check calls again, with no verdict on the old call", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: () => noise(-45), mic: () => micOn });
-  try {
-    await wait(300);
-    micOn = false;
-    await until(() => voiceOffs(t.sent).length === 1, 5_000, 'voice status 0');
-    await wait(500);
-    micOn = true;
-    await until(() => invites(t.sent).length === 3, 3_000, 'a new call with sound');
-    await wait(3_000);
-    assert.strictEqual(verdictLine(t.log), undefined, 'no verdict');
-    assert.strictEqual(t.call.soundOffOpenVerdicts, 0);
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': closing and opening the sound doesn't pile up listeners", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: (since) => (since < 0 ? noise(-45) : SILENCE), mic: () => micOn });
-  try {
-    const start = t.session.listenerCount('end');
-    for (let i = 0; i < 2; i++) {
-      micOn = true;
-      await wait(300);
-      micOn = false;
-      await until(() => voiceOffs(t.sent).length === i + 1, 6_000, 'voice status 0');
-      await until(() => verdictLine(t.log) && t.log.lines.filter((l) => /closed the sound/.test(l)).length === i + 1, 6_000, 'the verdict');
-      micOn = true;
-      await until(() => invites(t.sent).length === 3 + i, 4_000, 'a new call');
-    }
-    assert.strictEqual(t.session.listenerCount('end'), start);
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'when you talk': while someone rings, the microphone after a close doesn't flood the log", async () => {
-  let micOn = true;
-  const t = await talkView({ panel: (since) => (since < 0 ? noise(-45) : SILENCE), mic: () => micOn });
-  try {
-    await wait(300);
-    micOn = false;
-    await until(() => verdictLine(t.log), 9_000, 'the verdict');
-    await t.call.onFrame(parseFrame(frames.invite), ['SB100001']);
-    micOn = true;
-    await wait(1_000);
-    assert.strictEqual(t.log.lines.filter((l) => /someone is ringing/.test(l)).length, 1);
-    assert.strictEqual(invites(t.sent).length, 2, 'no new call');
-  } finally {
-    await t.stop();
-  }
-});
-
-test("sound 'always': the microphone turned off doesn't close the sound", async () => {
-  const { call, sent } = setup({ options: { liveViewWithoutRing: true, liveViewSound: 'always', panelAddress: 'SB100001' } });
+test("sound 'when you talk': while someone rings, 'someone is ringing' is logged once per ring", async () => {
+  const { call, log } = setup({ options: talkOptions });
   const session = await call.startMedia(false);
-  await session.sendAudio(SILENCE);
-  await wait(4_500);
-  assert.strictEqual(voiceOffs(sent).length, 0);
+  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await session.openSound();
+  await session.openSound();
+  assert.strictEqual(log.lines.filter((l) => /someone is ringing/.test(l)).length, 1);
   await session.end('viewer closed');
 });
 
-test('judging whether the panel closed the sound, from the street noise', () => {
-  const { judgeSoundOff, soundLevelOf } = require('../dist/call');
-  const { alawLevel, alawToLinear } = require('../dist/media');
-  assert.deepStrictEqual([0xd5, 0x55, 0x80, 0xaa, 0x2a].map(alawToLinear), [8, -8, 5504, 32256, -32256]);
-  assert.strictEqual(alawLevel(SILENCE), 8, 'A-law digital silence');
-  const street = alawLevel(noise(-45));
-  assert.ok(street > 100 && street < 220, `street noise at -45 dBFS: ${street}`);
-  const floor = soundLevelOf([[0, 400], [1, 410], [2, 420], [3, 9000]], 0, 4).floor;
-  assert.strictEqual(floor, 410, 'the noise floor ignores a loud moment');
-  const street400 = { packets: 100, floor: 400 };
-  assert.strictEqual(judgeSoundOff(street400, { packets: 0, floor: 0 }, 3_000), 'closed', 'the stream stopped');
-  assert.strictEqual(judgeSoundOff(street400, { packets: 35, floor: 400 }, 800), 'closed', 'stopped late: none for the last 0.8 s');
-  assert.strictEqual(judgeSoundOff(street400, { packets: 75, floor: 8 }, 20), 'closed', 'packets go on, but silent');
-  assert.strictEqual(judgeSoundOff(street400, { packets: 75, floor: 380 }, 20), 'open', 'as loud as before');
-  assert.strictEqual(judgeSoundOff(street400, { packets: 75, floor: 380 }, 300), 'open', 'a short network pause is not a stop');
-  assert.strictEqual(judgeSoundOff(street400, { packets: 75, floor: 150 }, 20), 'unknown', 'in between');
-  assert.strictEqual(judgeSoundOff({ packets: 100, floor: 10 }, { packets: 75, floor: 9 }, 20), 'unknown', 'a quiet street');
-  assert.strictEqual(judgeSoundOff({ packets: 100, floor: 10 }, { packets: 75, floor: 300 }, 20), 'open', 'quiet before, loud after');
-});
-
-test("sound 'when you talk': if the panel hangs up after the sound is closed (as for the Comelit app), the view goes on with a silent call", async () => {
-  let micOn = true;
-  // voice status 0 (body ends 00 00): the panel hangs up 2 s later, as it does for the Comelit app
-  const script = { voice: (f, reply) => f.body[f.body.length - 2] === 0 && setTimeout(() => reply(f, 0x40, '000e10'), 2_000) };
-  const t = await talkView({ panel: () => noise(-45), mic: () => micOn, script });
-  try {
-    await wait(300);
-    micOn = false;
-    await until(() => invites(t.sent).length === 3, 9_000, 'a silent call after the panel hung up');
-    assert.strictEqual(t.session.isEnded, false, 'the view goes on');
-    assert.ok(t.log.lines.some((l) => /hung up .* after being asked to close the sound/.test(l)));
-    await wait(500);
-    const third = t.call.activeCall();
-    assert.ok(third && third.outbound && !third.ended);
-    const onThird = parsed(t.sent).filter((f) => f.conn0 === (third.conn0 ^ 0x80) && f.conn1 === third.conn1);
-    assert.ok(!onThird.some((f) => f.opcode === 0x70), 'the new call is silent: no voice status');
-    assert.strictEqual(verdictLine(t.log), undefined, 'no verdict on a hung-up call');
-    // the microphone on again: sound again; off again: straight to a silent call, without asking
-    micOn = true;
-    await until(() => invites(t.sent).length === 4, 4_000, 'a call with sound');
-    await wait(300);
-    micOn = false;
-    await until(() => invites(t.sent).length === 5, 9_000, 'straight to a silent call');
-    assert.strictEqual(voiceOffs(t.sent).length, 1, 'not asked again: the panel would hang up');
-    assert.strictEqual(t.session.isEnded, false);
-  } finally {
-    await t.stop();
+test("the lock during a live view, again and again, doesn't pile up listeners", async () => {
+  const { call } = setup();
+  const session = await call.startMedia(false);
+  const start = session.listenerCount('end');
+  for (let i = 0; i < 4; i++) {
+    await call.openWithLiveViewPaused(async () => ({ confirmed: true }));
   }
-});
-
-test("sound 'when you talk': the panel hanging up with the sound open still ends the view", async () => {
-  const t = await talkView({ panel: () => noise(-45), mic: () => false });
-  try {
-    const current = t.call.activeCall();
-    await t.call.onFrame({ flags: 0x40, conn0: current.conn0, conn1: current.conn1, seq: 0x70, ack: 0, body: Buffer.from('000e10', 'hex'), opcode: 0x000e }, ['SB100001']);
-    await until(() => t.session.isEnded, 2_000, 'the view ends');
-    assert.strictEqual(invites(t.sent).length, 2, 'no new call');
-  } finally {
-    await t.stop();
-  }
+  assert.strictEqual(session.listenerCount('end'), start);
+  assert.strictEqual(session.isEnded, false);
+  await session.end('viewer closed');
 });
 
 test('the lock during a live view without a ring: the view\'s call hangs up, the door opens, the view calls the panel again', async () => {

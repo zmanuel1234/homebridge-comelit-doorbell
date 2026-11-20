@@ -36,7 +36,7 @@ import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
 import { RECORDING_MAX_MS } from './settings';
-import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps, alawLevel } from './media';
+import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
@@ -56,66 +56,6 @@ const OUTBOUND_STEP_MS = 5_000;
 /** Switching a live view to sound: tries to place the new call, and the pause before each. */
 const SOUND_REDIAL_ATTEMPTS = 3;
 const SOUND_REDIAL_PAUSE_MS = 500;
-/** 'When you talk': no microphone sound this long means the Home app's microphone was turned off. */
-const MIC_QUIET_MS = 3_000;
-/** A gap in the microphone sound longer than this is logged (debug): to check the Home app streams while its microphone is on. */
-const MIC_GAP_LOG_MS = 500;
-/** After asking the panel to close the sound, when to judge whether it did. */
-const SOUND_OFF_CHECK_MS = 3_000;
-/** The panel's sound is compared from this long after asking (packets on their way, a slow panel). */
-const SOUND_OFF_SETTLE_MS = 1_500;
-/** The sound stopped if none came for this long before the check (it runs at 50 packets a second; pauses seen: up to 0.3 s): a panel that stops late still counts. */
-const SOUND_OFF_STOPPED_MS = 400;
-/** The street before asking: at most this long, and only from this long after the last microphone sound (its echo). */
-const SOUND_OFF_BEFORE_MS = 2_000;
-const MIC_ECHO_MS = 500;
-/** Below this noise floor (16-bit, about -53 dBFS), the entrance is too quiet to tell an open microphone from a closed one. */
-const QUIET_LEVEL = 60;
-/** 'Open' verdicts before the plugin stops asking the panel to close the sound (until it restarts). */
-const SOUND_OFF_OPEN_LATCH = 2;
-/** The panel hanging up this soon after being asked to close the sound counts as its answer to it (MediaSession.intercomEnded). */
-const SOUND_OFF_HANGUP_MS = 15_000;
-/** With the sound open and the microphone on, no sound from the panel this long means the panel closed it. */
-const PANEL_SOUND_GONE_MS = 2_000;
-
-export type SoundLevel = { packets: number; floor: number };
-
-/**
- * The panel's sound between two times: how many packets, and its noise floor (the 25th percentile of
- * the per-packet levels, so a passing car or a door slam doesn't count; a closed microphone is
- * silent all the time).
- */
-export function soundLevelOf(log: ReadonlyArray<[number, number]>, from: number, to: number): SoundLevel {
-  const levels = log.filter(([at]) => at >= from && at < to).map(([, l]) => l).sort((a, b) => a - b);
-  return { packets: levels.length, floor: levels.length ? levels[Math.floor(levels.length / 4)] : 0 };
-}
-
-function describeLevel(s: SoundLevel): string {
-  return `${s.packets} packets, noise floor ${Math.round(s.floor)}`;
-}
-
-/**
- * Did the panel close the sound after VOICESTATUS 0? Judged from the street noise through the
- * panel's microphone, so nobody has to be at the door:
- * - closed: its sound stopped (none in the last 0.4 s of the check), or its noise floor fell to near
- *   silence, or to under a quarter of the street's;
- * - open: the noise floor is at least half the street's (or loud when the street was quiet);
- * - unknown: in between, or the street was too quiet to tell (a quiet street and a closed
- *   microphone sound the same).
- */
-export function judgeSoundOff(before: SoundLevel, after: SoundLevel, silentForMs: number): 'open' | 'closed' | 'unknown' {
-  if (silentForMs >= SOUND_OFF_STOPPED_MS) {
-    return 'closed'; // the stream stopped (it runs at 50 packets a second while open)
-  }
-  if (before.packets < 10 || before.floor < QUIET_LEVEL) {
-    return after.floor >= QUIET_LEVEL * 2 ? 'open' : 'unknown';
-  }
-  if (after.floor < QUIET_LEVEL || after.floor < before.floor / 4) {
-    return 'closed';
-  }
-  return after.floor >= before.floor / 2 ? 'open' : 'unknown';
-}
-
 /** The session block of our INVITE starts with these two bytes (as the Comelit app's). */
 const OUTBOUND_SESSION_FLAGS = Buffer.from([0x01, 0x20]);
 
@@ -422,7 +362,7 @@ export class CallHandler {
     if (frame.opcode === Opcode.RELEASE || frame.flags & Flag.FIN) {
       call.ended = true;
       this.callEnded(call);
-      void call.media?.intercomEnded('the intercom ended the call');
+      call.media?.end('the intercom ended the call');
       void call.preview?.stop(`the intercom ended the call${frame.body.length >= 3 && frame.opcode === Opcode.RELEASE ? ` (cause ${frame.body[2]})` : ''}`);
       return;
     }
@@ -570,11 +510,6 @@ export class CallHandler {
     return { confirmed: !reply || Boolean(released && reply.body[2] === 0) };
   }
 
-  /** The panel ignored a VOICESTATUS 0 mid-call (MediaSession.closeSound) this often, and whether to stop asking (until a restart). */
-  soundOffOpenVerdicts = 0;
-  soundOffIgnored = false;
-  /** The panel hangs up after being asked to close the sound (MediaSession.intercomEnded): close it with a new silent call instead. */
-  soundOffHangsUp = false;
 
   /** A live view whose own call is being placed again with sound (MediaSession.openSound). */
   soundSwitch?: MediaSession;
@@ -858,18 +793,6 @@ export class MediaSession extends EventEmitter {
           return; // a pause while switching to sound is expected (openSound)
         }
         const now = Date.now();
-        if (this.lastMicAt > 0 && now - this.lastMicAt > MIC_QUIET_MS) {
-          const lastMic = this.lastMicAt;
-          this.lastMicAt = 0;
-          void this.closeSound(lastMic).catch(() => undefined);
-        } else if (this.panelSoundGone(now)) {
-          // The panel closed its sound by itself (or late, after a request judged 'open'): talking
-          // now would go nowhere, so place the call again with sound.
-          this.log?.info('Doorbell camera: the entrance panel stopped its sound while the microphone is on: calling it again with sound');
-          this.voiceOpen = false;
-          this.soundClosedAt = now;
-          void this.openSound().catch(() => undefined);
-        }
         if (this.lastMedia === 0 && now - this.watchStart > this.timing.startTimeoutMs) {
           void this.end('no media from the intercom');
         } else if (this.lastMedia > 0 && now - this.lastMedia > this.timing.silenceMs) {
@@ -947,16 +870,6 @@ export class MediaSession extends EventEmitter {
     if (rtp.payloadType === ALAW_PAYLOAD_TYPE) {
       this.stats.audio++;
       this.noteSound(rtp.sequence);
-      if (this.call.outbound && this.handler.liveViewSound === 'talk') {
-        const now = Date.now();
-        this.panelSoundAt = now;
-        const entry: [number, number] = [now, alawLevel(rtp.payload)];
-        this.recentLevels.push(entry);
-        while (this.recentLevels.length && this.recentLevels[0][0] < now - SOUND_OFF_BEFORE_MS - MIC_QUIET_MS) {
-          this.recentLevels.shift();
-        }
-        this.levelLog?.push(entry);
-      }
       this.emit('audio', rtp.payload);
       this.handler.callAudio(this.call, rtp.payload);
       return;
@@ -1054,22 +967,12 @@ export class MediaSession extends EventEmitter {
     await this.handler.send(this.call, Flag.DATA, body, `voice status ${status}`);
   }
 
-  /** 'When you talk': when the Home app's microphone last sent sound (0: not since the sound closed). */
-  private lastMicAt = 0;
+  /** The ring already logged as keeping the view silent (logged once per ring). */
+  private ringNoted?: object;
 
   /** Sends 20 ms of G.711 A-law (160 bytes) to the intercom's speaker. */
   async sendAudio(alaw: Buffer): Promise<void> {
     const handle = this.txHandle ?? this.audioHandle;
-    if (this.call.outbound && this.handler.liveViewSound === 'talk' && !this.ended) {
-      const now = Date.now();
-      if (this.lastMicAt > 0 && now - this.lastMicAt > MIC_GAP_LOG_MS) {
-        this.log?.debug(`call: talk-back: ${((now - this.lastMicAt) / 1000).toFixed(1)} s without microphone sound`);
-      }
-      this.lastMicAt = now;
-      if (!this.voiceOpen && !this.switching && this.soundClosedAt > 0) {
-        void this.openSound().catch(() => undefined); // the microphone is on again: sound again
-      }
-    }
     if (this.ended || this.switching || handle === undefined) {
       return;
     }
@@ -1081,97 +984,6 @@ export class MediaSession extends EventEmitter {
     await this.client.sendOnHandle(handle, packet);
   }
 
-  /** While checking whether the panel closed the sound: when each of its sound packets came, and how loud. */
-  private levelLog?: Array<[number, number]>;
-  /** 'When you talk': the panel's sound over the last few seconds (time, level). */
-  private recentLevels: Array<[number, number]> = [];
-  /** 'When you talk': when the panel's sound last came in this call (0: not yet). */
-  private panelSoundAt = 0;
-  /** The pending check after asking the panel to close the sound. */
-  private soundCheck?: NodeJS.Timeout;
-  /** The ring already logged as keeping the view silent (logged once per ring). */
-  private ringNoted?: object;
-
-  /** 'When you talk': the panel's sound came, then stopped, while the sound is open and the microphone on. */
-  private panelSoundGone(now: number): boolean {
-    return Boolean(
-      this.call.outbound &&
-      this.handler.liveViewSound === 'talk' &&
-      this.voiceOpen &&
-      this.panelSoundAt > 0 &&
-      now - this.panelSoundAt > PANEL_SOUND_GONE_MS &&
-      this.lastMicAt > 0 &&
-      now - this.lastMicAt < 1_000
-    );
-  }
-
-  /** When the sound was last closed because the microphone went quiet (0: never). */
-  private soundClosedAt = 0;
-
-  /**
-   * 'When you talk', experimental (2026-11-19): the Home app's microphone was turned off, so ask the
-   * panel to close the sound (VOICESTATUS 0) and keep the video. A VOICESTATUS 1 later in a call is
-   * ignored, but 0 may not be: the log says whether the panel's sound stopped. The next microphone
-   * sound places the call again with sound (openSound).
-   */
-  private async closeSound(lastMic: number): Promise<void> {
-    if (!this.call.outbound || this.handler.liveViewSound !== 'talk' || !this.voiceOpen || this.ended || this.switching || this.handler.soundOffIgnored) {
-      return;
-    }
-    this.voiceOpen = false;
-    this.soundClosedAt = Date.now();
-    const call = this.call;
-    if (this.handler.soundOffHangsUp) {
-      // The panel hangs up a few seconds after being asked (intercomEnded): don't wait for it.
-      this.log?.info('Doorbell camera: microphone off: calling the entrance panel again without sound');
-      await this.switchCall(false);
-      return;
-    }
-    this.log?.info('Doorbell camera: microphone off: asking the entrance panel to close the sound (experimental)');
-    // The street through the panel's microphone just before: not the echo of the last words.
-    const now = Date.now();
-    const before = soundLevelOf(this.recentLevels, Math.max(lastMic + MIC_ECHO_MS, now - SOUND_OFF_BEFORE_MS), now + 1);
-    const log: Array<[number, number]> = [];
-    this.levelLog = log;
-    await this.voiceStatus(0);
-    const sentAt = Date.now();
-    clearTimeout(this.soundCheck);
-    this.soundCheck = setTimeout(() => {
-      if (this.levelLog === log) {
-        this.levelLog = undefined;
-      }
-      if (this.call !== call || call.ended || this.ended || this.voiceOpen || this.switching) {
-        return; // the view ended, or the microphone came back and the sound is being opened again
-      }
-      const after = soundLevelOf(log, sentAt + SOUND_OFF_SETTLE_MS, sentAt + SOUND_OFF_CHECK_MS + 1);
-      const checkedAt = Date.now();
-      const silentFor = checkedAt - (log.length ? log[log.length - 1][0] : sentAt);
-      const verdict = judgeSoundOff(before, after, silentFor);
-      const detail = `the street before: ${describeLevel(before)}; after: ${describeLevel(after)}, ${silentFor >= SOUND_OFF_STOPPED_MS ? `none for the last ${(silentFor / 1000).toFixed(1)} s` : 'still coming'}`;
-      if (verdict === 'open') {
-        // Ignored, it seems: the sound is still open, so leave it on (talking again needs no new call).
-        this.voiceOpen = true;
-        this.soundClosedAt = 0;
-        const times = ++this.handler.soundOffOpenVerdicts;
-        if (times >= SOUND_OFF_OPEN_LATCH) {
-          this.handler.soundOffIgnored = true;
-          this.log?.warn(
-            `Doorbell camera: the entrance panel kept the sound open again (${detail}): it seems to ignore the request, so the sound now stays on until a live view closes (until the plugin restarts)`,
-          );
-        } else {
-          this.log?.info(`Doorbell camera: the entrance panel kept the sound open, it seems (${detail}): the sound stays on for now`);
-        }
-      } else if (verdict === 'closed') {
-        this.log?.info(`Doorbell camera: the entrance panel closed the sound (${detail}); the next microphone sound calls it again with sound`);
-      } else {
-        // Can't tell: treat it as closed (at worst the next microphone sound costs a new call), but say so.
-        this.log?.info(
-          `Doorbell camera: can't tell whether the entrance panel closed the sound (${detail}): its microphone may still be open; treated as closed until the view closes`,
-        );
-      }
-    }, SOUND_OFF_CHECK_MS);
-  }
-
   /** While our own call is being placed again with the sound (see openSound). */
   private switching?: Promise<void>;
 
@@ -1181,7 +993,7 @@ export class MediaSession extends EventEmitter {
    * ignored, 2026-11-19), so when the Home app's microphone is turned on this hangs up the silent
    * call and places a new one, answered as a ring is (sound both ways), on the same channels.
    * The live view keeps this session throughout: the picture pauses for the ~5 s it takes (on an EX-7000HW: ~2 s of call setup, then ~3 s to the first keyframe).
-   * Again after closeSound closed the sound (the microphone off), when the microphone comes back.
+   * Once per view; the sound then stays open until the view closes.
    */
   openSound(): Promise<void> {
     if (!this.call.outbound || this.handler.liveViewSound !== 'talk' || this.voiceOpen || this.ended) {
@@ -1197,34 +1009,6 @@ export class MediaSession extends EventEmitter {
       return Promise.resolve();
     }
     return this.switchCall(true);
-  }
-
-  /**
-   * The intercom ended this view's call. After the sound was closed (closeSound), the panel may hang
-   * up a few seconds later, as it does for the Comelit app when its sound is turned off: then the
-   * view goes on with a new silent call instead of ending.
-   */
-  async intercomEnded(reason: string): Promise<void> {
-    const afterSoundOff =
-      this.call.outbound &&
-      this.handler.liveViewSound === 'talk' &&
-      !this.voiceOpen &&
-      this.soundClosedAt > 0 &&
-      Date.now() - this.soundClosedAt < SOUND_OFF_HANGUP_MS &&
-      !this.switching &&
-      !this.ended;
-    if (!afterSoundOff) {
-      return this.end(reason);
-    }
-    if (!this.handler.soundOffHangsUp) {
-      this.handler.soundOffHangsUp = true;
-      this.log?.info(
-        `Doorbell camera: the entrance panel hung up ${((Date.now() - this.soundClosedAt) / 1000).toFixed(1)} s after being asked to close the sound (as with the Comelit app): ` +
-          'calling it again without sound, and from now on doing that straight away when the microphone goes off',
-      );
-    }
-    clearTimeout(this.soundCheck);
-    return this.switchCall(false);
   }
 
   /** Resolves when no switch of this view's call is in progress (whatever its outcome). */
@@ -1325,7 +1109,6 @@ export class MediaSession extends EventEmitter {
     }
     this.call = next;
     next.media = this; // (end() clears it)
-    this.panelSoundAt = 0;
     // The new call gets the same "no media yet" time as a new view (not "media stopped").
     this.lastMedia = 0;
     this.watchStart = Date.now();
@@ -1359,8 +1142,6 @@ export class MediaSession extends EventEmitter {
     }
     this.timers = [];
     clearTimeout(this.keyframeRetry);
-    clearTimeout(this.soundCheck);
-    this.levelLog = undefined;
     if (this.call.media === this) {
       this.call.media = undefined;
     }
