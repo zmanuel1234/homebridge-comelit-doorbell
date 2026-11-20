@@ -444,3 +444,119 @@ test("sound 'when you talk': the intercom counts as busy during the switch (no p
   assert.strictEqual(call.busy(), true);
   await session.end('viewer closed');
 });
+
+test("sound 'when you talk': while someone rings, 'someone is ringing' is logged once per ring", async () => {
+  const { call, log } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await session.openSound();
+  await session.openSound();
+  assert.strictEqual(log.lines.filter((l) => /someone is ringing/.test(l)).length, 1);
+  await session.end('viewer closed');
+});
+
+test("the lock during a live view, again and again, doesn't pile up listeners", async () => {
+  const { call } = setup();
+  const session = await call.startMedia(false);
+  const start = session.listenerCount('end');
+  for (let i = 0; i < 4; i++) {
+    await call.openWithLiveViewPaused(async () => ({ confirmed: true }));
+  }
+  assert.strictEqual(session.listenerCount('end'), start);
+  assert.strictEqual(session.isEnded, false);
+  await session.end('viewer closed');
+});
+
+test('the lock during a live view without a ring: the view\'s call hangs up, the door opens, the view calls the panel again', async () => {
+  const { call, sent, log } = setup();
+  const session = await call.startMedia(false);
+  const first = call.activeCall();
+  const events = [];
+  const result = await call.openWithLiveViewPaused(async () => {
+    events.push(['open', first.ended, invites(sent).length]);
+    return { confirmed: true };
+  });
+  assert.deepStrictEqual(result, { confirmed: true });
+  assert.deepStrictEqual(events, [['open', true, 1]], 'opened after the hang-up, before calling again');
+  assert.strictEqual(invites(sent).length, 2, 'called again');
+  assert.ok(!parsed(sent).some((f) => f.opcode === 0x002d), 'nothing opened inside a call');
+  assert.strictEqual(session.isEnded, false, 'the view goes on');
+  assert.ok(call.activeCall() && !call.activeCall().ended && call.activeCall() !== first);
+  assert.ok(log.lines.some((l) => /opening the door: the live view's call pauses/.test(l)));
+  await session.end('viewer closed');
+  assert.strictEqual(await call.openWithLiveViewPaused(async () => ({ confirmed: true })), null, 'no live view: null (open the normal way)');
+});
+
+test('the lock during a live view without a ring: a failed open is reported, and the view still comes back', async () => {
+  const { call, sent } = setup();
+  const session = await call.startMedia(false);
+  await assert.rejects(call.openWithLiveViewPaused(async () => { throw new Error('intercom refused (cause 3)'); }), /cause 3/);
+  assert.strictEqual(invites(sent).length, 2);
+  assert.strictEqual(session.isEnded, false);
+  await session.end('viewer closed');
+});
+
+test('the door: a ring is opened inside the ring, otherwise the normal way; a busy refusal is retried once only when asked', async () => {
+  const { openDoor } = require('../dist/door');
+  const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
+  const door = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };
+  const order = [];
+  const client = { getChannel: () => ({}), sendBinary: async () => { order.push('send'); }, removeChannel() {} };
+  const listener = (causes) => ({ waitForRelease: () => ({ result: Promise.resolve(causes.shift()), cancel() {} }) });
+  const ctx = (ring, causes = [0], retryBusy = false) => ({
+    listener: listener(causes),
+    retryBusy,
+    call: { openInCall: async () => (order.push('ring'), ring ? { confirmed: true } : null) },
+  });
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(true)), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring'], 'a ring: inside it');
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(false)), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring', 'send'], 'no ring: the normal way');
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(false, [8, 0], true)), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring', 'send', 'send'], 'still busy just after the pause: once more');
+  order.length = 0;
+  await assert.rejects(openDoor(client, config, door, ctx(false, [8, 8], true)), /cause 8/, 'busy twice: refused');
+  await assert.rejects(openDoor(client, config, door, ctx(false, [8])), /cause 8/, 'without retryBusy: not retried');
+});
+
+test('the lock during a live view: the microphone turned on during the pause gets sound after it', async () => {
+  const { call, sent } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  let release;
+  const opening = call.openWithLiveViewPaused(() => new Promise((r) => (release = r)));
+  await new Promise((r) => setTimeout(r, 700)); // the pause: hung up, the open running
+  const sound = session.openSound();
+  release({ confirmed: true });
+  await opening;
+  await sound;
+  assert.strictEqual(invites(sent).length, 3, 'placed again silent, then with sound');
+  assert.ok(parsed(sent).some((f) => f.opcode === 0x70 && f.body[f.body.length - 2] === 1), 'voice status 1 sent');
+  await session.end('viewer closed');
+});
+
+test('the lock during a live view: a ring during the pause ends the view instead of calling the panel', async () => {
+  const { call, sent, log } = setup();
+  const session = await call.startMedia(false);
+  const result = await call.openWithLiveViewPaused(async () => {
+    await call.onFrame(parseFrame(frames.invite), ['SB100001']); // someone rings meanwhile
+    return { confirmed: true };
+  });
+  assert.deepStrictEqual(result, { confirmed: true });
+  assert.strictEqual(invites(sent).length, 1, 'not called again');
+  assert.strictEqual(session.isEnded, true);
+  assert.ok(log.lines.some((l) => /someone rang while the door was opening/.test(l)));
+});
+
+test('the lock during a live view: the viewer closing during the pause still opens, and leaves no call', async () => {
+  const { call, sent } = setup();
+  const session = await call.startMedia(false);
+  const result = await call.openWithLiveViewPaused(async () => {
+    await session.end('viewer closed');
+    return { confirmed: true };
+  });
+  assert.deepStrictEqual(result, { confirmed: true });
+  assert.strictEqual(invites(sent).length, 1);
+  assert.strictEqual(call.activeCall(), undefined);
+});

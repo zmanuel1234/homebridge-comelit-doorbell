@@ -431,6 +431,25 @@ export class CallHandler {
   }
 
   /**
+   * While a live view without a ring shows the panel, the panel is in a call with us: it refuses a
+   * separate open (cause 8, busy) and ignores one sent inside our silent call (both seen
+   * 2026-11-20 on an EX-7000HW kit). So `open` runs with the view's call hung up for a moment,
+   * and the view then calls the panel again. Returns null when no such live view is open (the
+   * caller opens the normal way). Only for the HomeKit lock, never doctor mode or Next Visitor.
+   */
+  async openWithLiveViewPaused<T>(open: () => Promise<T>): Promise<T | null> {
+    // A view still being set up: wait for it, so the open isn't sent into its new call.
+    await this.placing?.catch(() => undefined);
+    await Promise.all([...this.calls.values()].filter((c) => c.outbound).map((c) => c.mediaStarting?.catch(() => undefined)));
+    await this.soundSwitch?.settled();
+    const session = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop()?.media;
+    if (!session) {
+      return null;
+    }
+    return session.openPaused(open);
+  }
+
+  /**
    * Opens `door` inside the ringing call, answering it first if needed, and hangs up afterwards
    * if nobody is watching. In `answer-on-open` and `answer-on-view` mode (so a ring can be let
    * in from the lock without opening the live view); `force` (doctor mode) whatever the mode.
@@ -503,7 +522,7 @@ export class CallHandler {
     const switching = this.soundSwitch;
     if (switching) {
       // A second viewer while a view switches to sound joins that view, not a call of its own.
-      await switching.openSound();
+      await switching.settled(); // a switch of its call (sound, or the lock's pause): join the view after it
       if (!switching.isEnded) {
         return switching;
       }
@@ -948,6 +967,9 @@ export class MediaSession extends EventEmitter {
     await this.handler.send(this.call, Flag.DATA, body, `voice status ${status}`);
   }
 
+  /** The ring already logged as keeping the view silent (logged once per ring). */
+  private ringNoted?: object;
+
   /** Sends 20 ms of G.711 A-law (160 bytes) to the intercom's speaker. */
   async sendAudio(alaw: Buffer): Promise<void> {
     const handle = this.txHandle ?? this.audioHandle;
@@ -977,31 +999,95 @@ export class MediaSession extends EventEmitter {
     if (!this.call.outbound || this.handler.liveViewSound !== 'talk' || this.voiceOpen || this.ended) {
       return Promise.resolve();
     }
-    if (!this.switching && this.handler.ringingCall()) {
+    const ring = this.switching ? undefined : this.handler.ringingCall();
+    if (ring) {
       // Calling the panel while it rings the flat would be refused, or might cut the ring short.
-      this.log?.info('Doorbell camera: microphone on, but someone is ringing: the view stays silent (close it and open it again to answer the ring)');
+      if (this.ringNoted !== ring) {
+        this.ringNoted = ring;
+        this.log?.info('Doorbell camera: microphone on, but someone is ringing: the view stays silent (close it and open it again to answer the ring)');
+      }
       return Promise.resolve();
     }
-    this.switching ??= this.switchToSound().finally(() => {
+    if (this.switching && !this.switchingWithSound) {
+      // The view's call is being placed again without sound (the lock's pause): then with sound.
+      return this.switching.catch(() => undefined).then(() => this.openSound());
+    }
+    return this.switchCall(true);
+  }
+
+  /** Whether the switch in progress places the call again with sound. */
+  private switchingWithSound = false;
+
+  /** Resolves when no switch of this view's call is in progress (whatever its outcome). */
+  async settled(): Promise<void> {
+    await this.switching?.catch(() => undefined);
+  }
+
+  /**
+   * Hangs up this view's call, runs `open` (the door, while the panel is idle) and calls the panel
+   * again as before (with sound if it had it), keeping the view. Returns or throws what `open` does.
+   */
+  async openPaused<T>(open: () => Promise<T>): Promise<T> {
+    await this.settled();
+    let result: { value: T } | { error: unknown } | undefined;
+    const between = async (): Promise<void> => {
+      try {
+        result = { value: await open() };
+      } catch (error) {
+        result = { error };
+      }
+    };
+    while (!result && !this.ended) {
+      // Another switch may have started just now: wait for it, then pause the call ourselves.
+      await this.settled();
+      try {
+        await this.switchCall(this.voiceOpen, between);
+      } catch (e) {
+        if (!result) {
+          throw e;
+        }
+        this.log?.warn(`Doorbell camera: the door opened, but the live view could not go on (${(e as Error).message})`);
+      }
+    }
+    if (!result) {
+      await between(); // the view ended meanwhile: the panel is idle, open the normal way
+    }
+    if (result && 'error' in result) {
+      throw result.error;
+    }
+    return (result as { value: T }).value;
+  }
+
+  /** Places this view's call again, with or without sound, keeping the view (one switch at a time). */
+  private switchCall(withSound: boolean, between?: () => Promise<void>): Promise<void> {
+    if (!this.switching) {
+      this.switchingWithSound = withSound;
+    }
+    this.switching ??= (async () => {
+      const old = this.call;
+      this.handler.soundSwitch = this;
+      try {
+        await this.placeAgain(old, withSound, between);
+      } finally {
+        if (this.handler.soundSwitch === this) {
+          this.handler.soundSwitch = undefined;
+        }
+      }
+    })().finally(() => {
       this.switching = undefined;
     });
     return this.switching;
   }
 
-  private async switchToSound(): Promise<void> {
-    const old = this.call;
-    this.handler.soundSwitch = this;
-    try {
-      await this.placeAgainWithSound(old);
-    } finally {
-      if (this.handler.soundSwitch === this) {
-        this.handler.soundSwitch = undefined;
-      }
-    }
-  }
-
-  private async placeAgainWithSound(old: Call): Promise<void> {
-    this.log?.info('Doorbell camera: microphone on: calling the entrance panel again with sound (the picture pauses for a moment)');
+  private async placeAgain(old: Call, withSound: boolean, between?: () => Promise<void>): Promise<void> {
+    const what = withSound ? 'with sound' : 'without sound';
+    this.log?.info(
+      between
+        ? "Doorbell camera: opening the door: the live view's call pauses for a moment (the panel takes no open while in a call with us)"
+        : withSound
+          ? 'Doorbell camera: microphone on: calling the entrance panel again with sound (the picture pauses for a moment)'
+          : 'Doorbell camera: calling the entrance panel again without sound (the picture pauses for a moment)',
+    );
     // The old call is no longer this view's: its hang-up must not end the view.
     old.media = undefined;
     this.txHandle = undefined; // talk-back waits for the new call
@@ -1010,6 +1096,16 @@ export class MediaSession extends EventEmitter {
         await this.handler.send(old, Flag.DATA, Buffer.concat([AUDIO_STOP, le16(this.audioHandle), Buffer.alloc(2)]), 'audio stop').catch(() => undefined);
       }
       await this.handler.hangUp(old);
+    }
+    if (between) {
+      await new Promise((r) => setTimeout(r, SOUND_REDIAL_PAUSE_MS)); // the panel back to idle
+      await between();
+      if (!this.ended && this.handler.ringingCall()) {
+        // Someone rang meanwhile: calling the panel now would be refused or cut the ring short.
+        this.log?.info('Doorbell camera: someone rang while the door was opening: the live view ends (open it again to answer the ring)');
+        await this.end('a ring came in', false);
+        return;
+      }
     }
     let next: Call | undefined;
     let lastError: Error | undefined;
@@ -1023,13 +1119,13 @@ export class MediaSession extends EventEmitter {
         break;
       } catch (e) {
         lastError = e as Error;
-        this.log?.debug(`call: calling the panel again with sound, try ${attempt}: ${lastError.message}`);
+        this.log?.debug(`call: calling the panel again ${what}, try ${attempt}: ${lastError.message}`);
       }
     }
     if (!next) {
       if (!this.ended) {
-        this.log?.warn(`Doorbell camera: could not call the entrance panel again with sound (${lastError?.message ?? 'no answer'}); ending the live view`);
-        await this.end('could not call the panel again with sound', false);
+        this.log?.warn(`Doorbell camera: could not call the entrance panel again ${what} (${lastError?.message ?? 'no answer'}); ending the live view`);
+        await this.end(`could not call the panel again ${what}`, false);
       }
       return;
     }
@@ -1038,12 +1134,7 @@ export class MediaSession extends EventEmitter {
       return;
     }
     this.call = next;
-    next.media = this;
-    this.once('end', () => {
-      if (next?.media === this) {
-        next.media = undefined;
-      }
-    });
+    next.media = this; // (end() clears it)
     // The new call gets the same "no media yet" time as a new view (not "media stopped").
     this.lastMedia = 0;
     this.watchStart = Date.now();
@@ -1053,13 +1144,13 @@ export class MediaSession extends EventEmitter {
     this.keyframeRetry = undefined;
     this.awaitingKeyframe = true; // the new call's first keyframe: ask again if it's slow
     try {
-      await this.startAnswered(this.audioHandle as number);
+      await (withSound ? this.startAnswered(this.audioHandle as number) : this.startOutbound(this.audioHandle as number));
     } catch (e) {
       if (this.ended) {
         return; // the viewer closed during the setup (end() hung up the new call)
       }
-      this.log?.warn(`Doorbell camera: the entrance panel's sound didn't start (${(e as Error).message}); ending the live view`);
-      await this.end('the sound did not start'); // hangs up the new call unless the panel already did
+      this.log?.warn(`Doorbell camera: the entrance panel's ${withSound ? 'sound' : 'video'} didn't start again (${(e as Error).message}); ending the live view`);
+      await this.end(withSound ? 'the sound did not start' : 'the video did not start again'); // hangs up the new call unless the panel already did
     }
     if (this.lastMedia === 0) {
       this.watchStart = Date.now(); // the full "no media yet" time counts from the end of the setup
@@ -1077,6 +1168,9 @@ export class MediaSession extends EventEmitter {
     }
     this.timers = [];
     clearTimeout(this.keyframeRetry);
+    if (this.call.media === this) {
+      this.call.media = undefined;
+    }
     this.client.off('channel', this.onChannel);
     this.log?.debug(`call: media ended (${reason}); video=${this.stats.video} audio=${this.stats.audio} packets; talk-back sent=${this.stats.sent}`);
     if (this.call.outbound && this.stats.video === 0 && (reason === 'no media from the intercom' || reason === 'the intercom ended the call')) {
