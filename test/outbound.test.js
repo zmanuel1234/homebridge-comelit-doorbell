@@ -53,6 +53,8 @@ function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001'
       }
     } else if (f.opcode === 0x0011 && f.body[2] === 0x18) {
       if (script.audio?.(f, reply) !== false) reply(f, 0x40, '00111802000000000130');
+    } else if (f.opcode === 0x0070) {
+      script.voice?.(f, reply);
     }
   }, log, { startTimeoutMs: 10_000, silenceMs: 5_000, videoRefreshMs: 60_000 }, options);
   const client = fakeClient();
@@ -472,8 +474,8 @@ const until = async (cond, ms, what) => {
  * A 'when you talk' view switched to sound, with the panel sending `panel(msSinceVoiceOff)` every
  * 20 ms (null: nothing), and the microphone sending while `mic()` is true.
  */
-async function talkView({ panel, mic = () => false }) {
-  const t = setup({ options: talkOptions });
+async function talkView({ panel, mic = () => false, script = {} }) {
+  const t = setup({ options: talkOptions, script });
   const session = await t.call.startMedia(false);
   await session.openSound();
   let seq = 1;
@@ -672,4 +674,46 @@ test('judging whether the panel closed the sound, from the street noise', () => 
   assert.strictEqual(judgeSoundOff(street400, { packets: 75, floor: 150 }, 20), 'unknown', 'in between');
   assert.strictEqual(judgeSoundOff({ packets: 100, floor: 10 }, { packets: 75, floor: 9 }, 20), 'unknown', 'a quiet street');
   assert.strictEqual(judgeSoundOff({ packets: 100, floor: 10 }, { packets: 75, floor: 300 }, 20), 'open', 'quiet before, loud after');
+});
+
+test("sound 'when you talk': if the panel hangs up after the sound is closed (as for the Comelit app), the view goes on with a silent call", async () => {
+  let micOn = true;
+  // voice status 0 (body ends 00 00): the panel hangs up 2 s later, as it does for the Comelit app
+  const script = { voice: (f, reply) => f.body[f.body.length - 2] === 0 && setTimeout(() => reply(f, 0x40, '000e10'), 2_000) };
+  const t = await talkView({ panel: () => noise(-45), mic: () => micOn, script });
+  try {
+    await wait(300);
+    micOn = false;
+    await until(() => invites(t.sent).length === 3, 9_000, 'a silent call after the panel hung up');
+    assert.strictEqual(t.session.isEnded, false, 'the view goes on');
+    assert.ok(t.log.lines.some((l) => /hung up .* after being asked to close the sound/.test(l)));
+    await wait(500);
+    const third = t.call.activeCall();
+    assert.ok(third && third.outbound && !third.ended);
+    const onThird = parsed(t.sent).filter((f) => f.conn0 === (third.conn0 ^ 0x80) && f.conn1 === third.conn1);
+    assert.ok(!onThird.some((f) => f.opcode === 0x70), 'the new call is silent: no voice status');
+    assert.strictEqual(verdictLine(t.log), undefined, 'no verdict on a hung-up call');
+    // the microphone on again: sound again; off again: straight to a silent call, without asking
+    micOn = true;
+    await until(() => invites(t.sent).length === 4, 4_000, 'a call with sound');
+    await wait(300);
+    micOn = false;
+    await until(() => invites(t.sent).length === 5, 9_000, 'straight to a silent call');
+    assert.strictEqual(voiceOffs(t.sent).length, 1, 'not asked again: the panel would hang up');
+    assert.strictEqual(t.session.isEnded, false);
+  } finally {
+    await t.stop();
+  }
+});
+
+test("sound 'when you talk': the panel hanging up with the sound open still ends the view", async () => {
+  const t = await talkView({ panel: () => noise(-45), mic: () => false });
+  try {
+    const current = t.call.activeCall();
+    await t.call.onFrame({ flags: 0x40, conn0: current.conn0, conn1: current.conn1, seq: 0x70, ack: 0, body: Buffer.from('000e10', 'hex'), opcode: 0x000e }, ['SB100001']);
+    await until(() => t.session.isEnded, 2_000, 'the view ends');
+    assert.strictEqual(invites(t.sent).length, 2, 'no new call');
+  } finally {
+    await t.stop();
+  }
 });
