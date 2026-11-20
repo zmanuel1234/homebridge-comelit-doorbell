@@ -570,3 +570,38 @@ test('buzzes per unlock: the time between buzzes is capped at 15 s', () => {
   assert.strictEqual(platform({ openRepeatSeconds: 15 }).p.settings.openRepeatMs, 15000);
   assert.strictEqual(platform({ openRepeatSeconds: 20 }).p.settings.openRepeatMs, 6000, 'over the cap: the default');
 });
+
+test('the lock during a live view without a ring: all its buzzes inside one pause of the view, with the busy retry', async () => {
+  const { p } = platform({ openRepeat: 3, openRepeatSeconds: 1 });
+  const events = [];
+  p.callHandler = {
+    ringingCall: () => undefined,
+    openWithLiveViewPaused: async (open) => { events.push('pause'); const r = await open(); events.push('resume'); return r; },
+  };
+  p.openOnce = async (door, retryBusy) => { events.push(`open retry=${retryBusy}`); return { confirmed: true }; };
+  assert.deepStrictEqual(await p.openDoor(deviceConfig.doors[0]), { confirmed: true });
+  assert.deepStrictEqual(events, ['pause', 'open retry=true', 'open retry=true', 'open retry=true', 'resume']);
+});
+
+test('the lock: a ring is not paused around (opened inside the ring); no live view: the normal way', async () => {
+  for (const [ring, paused] of [[{}, null], [undefined, null]]) {
+    const { p } = platform();
+    const events = [];
+    p.callHandler = { ringingCall: () => ring, openWithLiveViewPaused: async (open) => (events.push('pause'), paused === null ? null : open()) };
+    p.openOnce = async (door, retryBusy) => { events.push(`open retry=${retryBusy}`); return { confirmed: true }; };
+    await p.openDoor(deviceConfig.doors[0]);
+    assert.deepStrictEqual(events, ring ? ['open retry=false'] : ['pause', 'open retry=false']);
+  }
+});
+
+test("doctor mode's extra buzzes never pause a live view", async () => {
+  const { p } = doctor({ doctorMode: 'always', openRepeat: 2, openRepeatSeconds: 1 });
+  let paused = 0;
+  p.callHandler.openWithLiveViewPaused = async () => { paused++; return null; };
+  const retries = [];
+  p.openOnce = async (door, retryBusy) => { retries.push(retryBusy); return { confirmed: true }; };
+  p.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.deepStrictEqual(retries, [false]);
+  assert.strictEqual(paused, 0);
+});

@@ -566,20 +566,32 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }, delay);
   }
 
+  /**
+   * The HomeKit lock. During a live view without a ring the panel is in a call with us and takes
+   * no open (cause 8, busy; and it ignores one sent inside that call: door tests 2026-11-20), so
+   * the view's call is hung up for the open and all its buzzes, then placed again
+   * (CallHandler.openWithLiveViewPaused). Only the lock does this: doctor mode and Next Visitor
+   * open inside the ring, and their extra buzzes never pause a live view.
+   */
   async openDoor(door: Door): Promise<OpenResult> {
     const started = Date.now();
-    const result = await this.openOnce(door);
-    await this.extraBuzzes(door, `Door '${door.name}'`, started);
-    return result;
+    const all = async (retryBusy: boolean): Promise<OpenResult> => {
+      const result = await this.openOnce(door, retryBusy);
+      await this.extraBuzzes(door, `Door '${door.name}'`, started, retryBusy);
+      return result;
+    };
+    const call = this.callHandler;
+    const paused = call && !call.ringingCall() ? await call.openWithLiveViewPaused?.(() => all(true)) : null;
+    return paused ?? all(false);
   }
 
-  private async openOnce(door: Door): Promise<OpenResult> {
+  private async openOnce(door: Door, retryBusy = false): Promise<OpenResult> {
     if (!this.client || !this.deviceConfig) {
       throw new Error('Not connected');
     }
     this.opening++;
     try {
-      return await openDoor(this.client, this.deviceConfig, door, { listener: this.vipListener, call: this.callHandler, log: this.log });
+      return await openDoor(this.client, this.deviceConfig, door, { listener: this.vipListener, call: this.callHandler, log: this.log, retryBusy });
     } finally {
       this.opening--;
     }
@@ -591,14 +603,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
    * for an entrance behind two doors. A later buzz that fails is logged and the rest still
    * follow; the first open's result is what counts. `firstAt`: when the first open was sent.
    */
-  async extraBuzzes(door: Door, label: string, firstAt = Date.now()): Promise<void> {
+  async extraBuzzes(door: Door, label: string, firstAt = Date.now(), retryBusy = false): Promise<void> {
     const total = this.settings.openRepeat;
     let last = firstAt;
     for (let n = 2; n <= total; n++) {
       await new Promise((r) => setTimeout(r, Math.max(0, last + this.settings.openRepeatMs - Date.now())));
       last = Date.now();
       try {
-        await this.openOnce(door);
+        await this.openOnce(door, retryBusy);
         this.log.info(`${label}: buzz ${n} of ${total}`);
       } catch (e) {
         this.log.warn(`${label}: buzz ${n} of ${total} failed: ${(e as Error).message}`);

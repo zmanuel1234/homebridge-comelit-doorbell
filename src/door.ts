@@ -21,6 +21,11 @@ export interface OpenContext {
   /** Used to answer a ringing call first (`answerMode: answer-on-open`). */
   call?: CallHandler;
   log?: Logging;
+  /**
+   * The intercom may still be busy for a moment (a live view's call just hung up for this open,
+   * see the platform's openDoor): if it refuses as busy, try once more a second later.
+   */
+  retryBusy?: boolean;
 }
 
 export async function openDoor(client: IconaBridgeClient, config: DeviceConfig, door: Door, ctx: OpenContext = {}): Promise<OpenResult> {
@@ -49,17 +54,14 @@ async function openCtppChannel(client: IconaBridgeClient, config: DeviceConfig):
 }
 
 async function openDoorOnChannel(client: IconaBridgeClient, channel: Channel, config: DeviceConfig, door: Door, ctx: OpenContext): Promise<OpenResult> {
-  // A ring: open inside it. Only the lock opens through here.
+  // A ring: open inside it.
   const inCall = await ctx.call?.openInCall(door);
   if (inCall) {
     return inCall;
   }
   const open = (): Promise<OpenResult> =>
     door.isActuator ? openActuator(client, channel, config.aptAddress, door) : openEntrance(client, channel, `${config.aptAddress}${config.aptSubaddress}`, door, ctx.listener);
-  // A live view without a ring: the panel is in a call with us, so the open waits for that call
-  // to be hung up for a moment (CallHandler.openWithLiveViewPaused).
-  const paused = await ctx.call?.openWithLiveViewPaused(() => openRetryingBusy(open, ctx.log));
-  return paused ?? open();
+  return ctx.retryBusy ? openRetryingBusy(open, ctx.log) : open();
 }
 
 /** Opens; if the intercom is still busy (the call only just hung up), once more a second later. */

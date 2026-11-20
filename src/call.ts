@@ -438,6 +438,9 @@ export class CallHandler {
    * caller opens the normal way). Only for the HomeKit lock, never doctor mode or Next Visitor.
    */
   async openWithLiveViewPaused<T>(open: () => Promise<T>): Promise<T | null> {
+    // A view still being set up: wait for it, so the open isn't sent into its new call.
+    await this.placing?.catch(() => undefined);
+    await Promise.all([...this.calls.values()].filter((c) => c.outbound).map((c) => c.mediaStarting?.catch(() => undefined)));
     await this.soundSwitch?.settled();
     const session = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop()?.media;
     if (!session) {
@@ -519,7 +522,7 @@ export class CallHandler {
     const switching = this.soundSwitch;
     if (switching) {
       // A second viewer while a view switches to sound joins that view, not a call of its own.
-      await switching.openSound();
+      await switching.settled(); // a switch of its call (sound, or the lock's pause): join the view after it
       if (!switching.isEnded) {
         return switching;
       }
@@ -1005,8 +1008,15 @@ export class MediaSession extends EventEmitter {
       }
       return Promise.resolve();
     }
+    if (this.switching && !this.switchingWithSound) {
+      // The view's call is being placed again without sound (the lock's pause): then with sound.
+      return this.switching.catch(() => undefined).then(() => this.openSound());
+    }
     return this.switchCall(true);
   }
+
+  /** Whether the switch in progress places the call again with sound. */
+  private switchingWithSound = false;
 
   /** Resolves when no switch of this view's call is in progress (whatever its outcome). */
   async settled(): Promise<void> {
@@ -1027,10 +1037,20 @@ export class MediaSession extends EventEmitter {
         result = { error };
       }
     };
-    await this.switchCall(this.voiceOpen, between);
+    while (!result && !this.ended) {
+      // Another switch may have started just now: wait for it, then pause the call ourselves.
+      await this.settled();
+      try {
+        await this.switchCall(this.voiceOpen, between);
+      } catch (e) {
+        if (!result) {
+          throw e;
+        }
+        this.log?.warn(`Doorbell camera: the door opened, but the live view could not go on (${(e as Error).message})`);
+      }
+    }
     if (!result) {
-      // The view ended before the open (or another switch was running): open anyway.
-      await between();
+      await between(); // the view ended meanwhile: the panel is idle, open the normal way
     }
     if (result && 'error' in result) {
       throw result.error;
@@ -1040,6 +1060,9 @@ export class MediaSession extends EventEmitter {
 
   /** Places this view's call again, with or without sound, keeping the view (one switch at a time). */
   private switchCall(withSound: boolean, between?: () => Promise<void>): Promise<void> {
+    if (!this.switching) {
+      this.switchingWithSound = withSound;
+    }
     this.switching ??= (async () => {
       const old = this.call;
       this.handler.soundSwitch = this;
@@ -1077,6 +1100,12 @@ export class MediaSession extends EventEmitter {
     if (between) {
       await new Promise((r) => setTimeout(r, SOUND_REDIAL_PAUSE_MS)); // the panel back to idle
       await between();
+      if (!this.ended && this.handler.ringingCall()) {
+        // Someone rang meanwhile: calling the panel now would be refused or cut the ring short.
+        this.log?.info('Doorbell camera: someone rang while the door was opening: the live view ends (open it again to answer the ring)');
+        await this.end('a ring came in', false);
+        return;
+      }
     }
     let next: Call | undefined;
     let lastError: Error | undefined;
