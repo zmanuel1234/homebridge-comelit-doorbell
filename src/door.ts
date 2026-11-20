@@ -54,8 +54,10 @@ async function openCtppChannel(client: IconaBridgeClient, config: DeviceConfig):
 }
 
 async function openDoorOnChannel(client: IconaBridgeClient, channel: Channel, config: DeviceConfig, door: Door, ctx: OpenContext): Promise<OpenResult> {
-  // A ring: open inside it.
-  const inCall = await ctx.call?.openInCall(door);
+  // A ring: open the entrance inside it. Not an actuator: the open inside a call is the
+  // entrance's command, which the panel accepts but an actuator ignores (seen on a 6741W,
+  // 2026-11-19, #59); an actuator always gets its own command.
+  const inCall = door.isActuator ? null : await ctx.call?.openInCall(door);
   if (inCall) {
     return inCall;
   }

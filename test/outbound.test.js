@@ -560,3 +560,24 @@ test('the lock during a live view: the viewer closing during the pause still ope
   assert.strictEqual(invites(sent).length, 1);
   assert.strictEqual(call.activeCall(), undefined);
 });
+
+test('an actuator during a ring gets its own command, never the entrance open inside the call', async () => {
+  const { openDoor } = require('../dist/door');
+  const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
+  const actuator = { name: 'Actuator', aptAddress: 'SB100001', outputIndex: 1, isActuator: true, moduleIndex: 0 };
+  const entrance = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };
+  const order = [];
+  const client = {
+    getChannel: () => ({}),
+    sendBinary: async () => { order.push('send'); },
+    readResponse: async () => Buffer.alloc(0),
+    removeChannel() {},
+  };
+  const ctx = { call: { openInCall: async () => (order.push('ring'), { confirmed: true }) } };
+  assert.deepStrictEqual(await openDoor(client, config, actuator, ctx), { confirmed: false });
+  assert.ok(!order.includes('ring'), 'not opened inside the ring');
+  assert.ok(order.filter((o) => o === 'send').length >= 2, "the actuator's own command");
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, entrance, ctx), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring'], 'the entrance still opens inside the ring');
+});

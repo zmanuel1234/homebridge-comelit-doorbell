@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.0-beta.5 (2026-11-20)
+
+Pre-release. Only installations with an actuator (a second door or gate output) see a difference.
+
+### Fixed
+
+- **An actuator didn't open during an answered ring** (#59, seen on a 6741W). During a ring, the plugin opened every door inside the call with the entrance's command: the panel accepted it and the Home app showed it opened, but an actuator needs its own command, so nothing moved. An actuator now always gets its own command, during a ring too. The entrance lock still opens inside the ring, as before.
+- An actuator's open no longer logs the warning `open sent, but the intercom did not confirm it`: actuators never send a confirmation, so the door opening without one is normal. It's now an info line, `open sent (an actuator gives no confirmation)`.
+
+### Notes
+
+- A live view without a ring is ended by the panel itself after about 30–40 s (about 31 s on an EX-7000HW kit, 37 s on a 6741W): the picture freezes, close the view and open it again.
+
 ## 2.4.0-beta.4 (2026-11-20)
 
 Pre-release. With the default settings the plugin behaves like 2.4.0-beta.3.
