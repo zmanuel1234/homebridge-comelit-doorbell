@@ -718,38 +718,61 @@ test("sound 'when you talk': the panel hanging up with the sound open still ends
   }
 });
 
-test('the lock during a live view without a ring opens inside our own call (the panel is busy for a separate open), and the view goes on', async () => {
-  const { call, sent } = setup();
+test('the lock during a live view without a ring: the view\'s call hangs up, the door opens, the view calls the panel again', async () => {
+  const { call, sent, log } = setup();
   const session = await call.startMedia(false);
-  const before = sent.length;
-  const result = await call.openInOwnCall({ aptAddress: 'SB100001', outputIndex: 1 });
+  const first = call.activeCall();
+  const events = [];
+  const result = await call.openWithLiveViewPaused(async () => {
+    events.push(['open', first.ended, invites(sent).length]);
+    return { confirmed: true };
+  });
   assert.deepStrictEqual(result, { confirmed: true });
-  const after = parsed(sent.slice(before));
-  const open = after.find((f) => f.opcode === 0x002d);
-  assert.ok(open, 'an open sent');
-  assert.ok(call.isOwnCall(open.conn0 ^ 0x80, open.conn1), 'on our own call');
-  assert.ok(!after.some((f) => f.flags === 0x60), 'no hang-up: the view keeps the call');
-  assert.strictEqual(session.isEnded, false);
+  assert.deepStrictEqual(events, [['open', true, 1]], 'opened after the hang-up, before calling again');
+  assert.strictEqual(invites(sent).length, 2, 'called again');
+  assert.ok(!parsed(sent).some((f) => f.opcode === 0x002d), 'nothing opened inside a call');
+  assert.strictEqual(session.isEnded, false, 'the view goes on');
+  assert.ok(call.activeCall() && !call.activeCall().ended && call.activeCall() !== first);
+  assert.ok(log.lines.some((l) => /opening the door: the live view's call pauses/.test(l)));
   await session.end('viewer closed');
-  assert.strictEqual(await call.openInOwnCall({ aptAddress: 'SB100001', outputIndex: 1 }), null, 'no live view: null (open the normal way)');
+  assert.strictEqual(await call.openWithLiveViewPaused(async () => ({ confirmed: true })), null, 'no live view: null (open the normal way)');
 });
 
-test('the lock: a ring is opened inside the ring, a live view without a ring inside our own call, otherwise the normal way', async () => {
-  const { openDoor } = require('../dist/door');
+test('the lock during a live view without a ring: a failed open is reported, and the view still comes back', async () => {
+  const { call, sent } = setup();
+  const session = await call.startMedia(false);
+  await assert.rejects(call.openWithLiveViewPaused(async () => { throw new Error('intercom refused (cause 3)'); }), /cause 3/);
+  assert.strictEqual(invites(sent).length, 2);
+  assert.strictEqual(session.isEnded, false);
+  await session.end('viewer closed');
+});
+
+test('the lock: a ring is opened inside the ring, a live view without a ring with the view paused, otherwise the normal way; busy once is tried again', async () => {
+  const { openDoor, DoorOpenError } = require('../dist/door');
   const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
   const door = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };
-  const client = { getChannel: () => ({}), sendBinary: async () => { throw new Error('separate open sent'); }, removeChannel() {} };
   const order = [];
-  const ctx = (ring, view) => ({
+  const client = { getChannel: () => ({}), sendBinary: async () => { order.push('send'); }, removeChannel() {} };
+  const listener = (causes) => ({ waitForRelease: () => ({ result: Promise.resolve(causes.shift()), cancel() {} }) });
+  const ctx = (ring, view, causes = [0]) => ({
+    listener: listener(causes),
     call: {
       openInCall: async () => (order.push('ring'), ring ? { confirmed: true } : null),
-      openInOwnCall: async () => (order.push('view'), view ? { confirmed: true } : null),
+      openWithLiveViewPaused: async (open) => (order.push('view'), view ? open() : null),
     },
   });
   assert.deepStrictEqual(await openDoor(client, config, door, ctx(true, true)), { confirmed: true });
-  assert.deepStrictEqual(order, ['ring'], 'a ring first');
+  assert.deepStrictEqual(order, ['ring'], 'a ring: inside it, nothing else');
   order.length = 0;
   assert.deepStrictEqual(await openDoor(client, config, door, ctx(false, true)), { confirmed: true });
-  assert.deepStrictEqual(order, ['ring', 'view']);
-  await assert.rejects(openDoor(client, config, door, ctx(false, false)), /separate open sent/, 'neither: the normal way');
+  assert.deepStrictEqual(order, ['ring', 'view', 'send'], 'a live view: opened while it is paused');
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(false, false)), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring', 'view', 'send'], 'neither: the normal way');
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, door, ctx(false, true, [8, 0])), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring', 'view', 'send', 'send'], 'still busy just after the hang-up: once more');
+  order.length = 0;
+  await assert.rejects(openDoor(client, config, door, ctx(false, false, [8])), /cause 8/, 'busy without a live view: not retried');
+  assert.ok(DoorOpenError);
 });

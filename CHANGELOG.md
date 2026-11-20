@@ -12,7 +12,8 @@
 
 ### Fixed
 
-- **Unlocking from HomeKit during a live view without a ring** was refused by the intercom (`cause 8, busy`): the panel is in a call with the plugin and takes no separate open. The lock now opens the door inside the live view's own call, and the view goes on. Only the lock does this, never doctor mode or Next Visitor, and **Unlock allowed for** still applies (with the default 90 s, a live view without a ring is not a ring: set it to 0 to open from a live view at any time). Seen on an EX-7000HW kit, 2026-11-20.
+- **Unlocking from HomeKit during a live view without a ring** was refused by the intercom (`cause 8, busy`): the panel is in a call with the plugin and takes no separate open, and it ignores one sent inside the plugin's silent call (both seen on an EX-7000HW kit, 2026-11-20). The lock now hangs up the live view's call for a moment, opens the door the normal way (once more a second later if the intercom is still busy), and calls the panel again: the view goes on after a short pause in the picture. Only the lock does this, never doctor mode or Next Visitor, and **Unlock allowed for** still applies (with the default 90 s, a live view without a ring is not a ring: set it to 0 to open from a live view at any time).
+- Noted: on an EX-7000HW kit the panel ends a silent live view without a ring after about 31 s (a normal hang-up, cause 0): the Home app's view then stops. Views with sound ran longer (36 and 43 s, closed by the viewer).
 - The busy refusal's log message no longer says a call is ringing: `busy: the intercom is in a call, e.g. a ring nobody answered`.
 - While someone rings during a view, the microphone logs "someone is ringing" once per ring instead of on every sound frame.
 

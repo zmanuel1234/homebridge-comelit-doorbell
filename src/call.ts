@@ -491,36 +491,22 @@ export class CallHandler {
   }
 
   /**
-   * Opens `door` inside our own call to the panel while a live view without a ring shows it: the
-   * panel refuses a separate open while it is in a call with us (cause 8, busy; seen 2026-11-20),
-   * as the Comelit app's open from its entrance view would be. Only for the HomeKit lock (a person
-   * looking at the door), never for doctor mode or Next Visitor. The live view keeps the call.
-   * Returns null when no live view without a ring is open, so the caller opens the normal way.
+   * While a live view without a ring shows the panel, the panel is in a call with us: it refuses a
+   * separate open (cause 8, busy) and ignores one sent inside our silent call (both seen
+   * 2026-11-20 on an EX-7000HW kit). So `open` runs with the view's call hung up for a moment,
+   * and the view then calls the panel again. Returns null when no such live view is open (the
+   * caller opens the normal way). Only for the HomeKit lock, never doctor mode or Next Visitor.
    */
-  async openInOwnCall(door: Door): Promise<OpenResult | null> {
-    let call = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop();
-    const switching = this.soundSwitch;
-    if (!call && switching) {
-      // The view is calling the panel again (sound on or off): open in the new call.
-      await switching.settled();
-      call = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop();
-    }
-    if (!call) {
+  async openWithLiveViewPaused<T>(open: () => Promise<T>): Promise<T | null> {
+    await this.soundSwitch?.settled();
+    const session = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop()?.media;
+    if (!session) {
       return null;
     }
-    this.log?.debug('call: opening the door inside our own call (live view without a ring)');
-    const output = Number(door.outputIndex) || 1;
-    const openBody = Buffer.concat([Buffer.from([0x00, 0x2d]), logicalAddress(door.aptAddress), Buffer.from([output & 0xff])]);
-    const replyWait = this.wait(call, Opcode.OPEN_DOOR, 4000);
-    await this.send(call, Flag.DATA, openBody, 'open in our own call');
-    const reply = await replyWait;
-    this.log?.debug(`call: open reply ${reply ? `op=0x${reply.opcode.toString(16)} body=${hex(reply.body)}` : 'none within 4 s (not refused)'}`);
-    const released = reply && reply.opcode === Opcode.RELEASE && reply.body.length >= 3;
-    if (released && reply.body[2] !== 0) {
-      throw new Error(`intercom refused the open in the live view's call (cause ${reply.body[2]})`);
-    }
-    return { confirmed: !reply || Boolean(released && reply.body[2] === 0) };
+    return session.openPaused(open);
   }
+
+
 
   /**
    * Opens `door` inside the ringing call, answering it first if needed, and hangs up afterwards
@@ -1246,13 +1232,38 @@ export class MediaSession extends EventEmitter {
     await this.switching?.catch(() => undefined);
   }
 
+  /**
+   * Hangs up this view's call, runs `open` (the door, while the panel is idle) and calls the panel
+   * again as before (with sound if it had it), keeping the view. Returns or throws what `open` does.
+   */
+  async openPaused<T>(open: () => Promise<T>): Promise<T> {
+    await this.settled();
+    let result: { value: T } | { error: unknown } | undefined;
+    const between = async (): Promise<void> => {
+      try {
+        result = { value: await open() };
+      } catch (error) {
+        result = { error };
+      }
+    };
+    await this.switchCall(this.voiceOpen, between);
+    if (!result) {
+      // The view ended before the open (or another switch was running): open anyway.
+      await between();
+    }
+    if (result && 'error' in result) {
+      throw result.error;
+    }
+    return (result as { value: T }).value;
+  }
+
   /** Places this view's call again, with or without sound, keeping the view (one switch at a time). */
-  private switchCall(withSound: boolean): Promise<void> {
+  private switchCall(withSound: boolean, between?: () => Promise<void>): Promise<void> {
     this.switching ??= (async () => {
       const old = this.call;
       this.handler.soundSwitch = this;
       try {
-        await this.placeAgain(old, withSound);
+        await this.placeAgain(old, withSound, between);
       } finally {
         if (this.handler.soundSwitch === this) {
           this.handler.soundSwitch = undefined;
@@ -1264,12 +1275,14 @@ export class MediaSession extends EventEmitter {
     return this.switching;
   }
 
-  private async placeAgain(old: Call, withSound: boolean): Promise<void> {
+  private async placeAgain(old: Call, withSound: boolean, between?: () => Promise<void>): Promise<void> {
     const what = withSound ? 'with sound' : 'without sound';
     this.log?.info(
-      withSound
-        ? 'Doorbell camera: microphone on: calling the entrance panel again with sound (the picture pauses for a moment)'
-        : 'Doorbell camera: calling the entrance panel again without sound (the picture pauses for a moment)',
+      between
+        ? "Doorbell camera: opening the door: the live view's call pauses for a moment (the panel takes no open while in a call with us)"
+        : withSound
+          ? 'Doorbell camera: microphone on: calling the entrance panel again with sound (the picture pauses for a moment)'
+          : 'Doorbell camera: calling the entrance panel again without sound (the picture pauses for a moment)',
     );
     // The old call is no longer this view's: its hang-up must not end the view.
     old.media = undefined;
@@ -1279,6 +1292,10 @@ export class MediaSession extends EventEmitter {
         await this.handler.send(old, Flag.DATA, Buffer.concat([AUDIO_STOP, le16(this.audioHandle), Buffer.alloc(2)]), 'audio stop').catch(() => undefined);
       }
       await this.handler.hangUp(old);
+    }
+    if (between) {
+      await new Promise((r) => setTimeout(r, SOUND_REDIAL_PAUSE_MS)); // the panel back to idle
+      await between();
     }
     let next: Call | undefined;
     let lastError: Error | undefined;
