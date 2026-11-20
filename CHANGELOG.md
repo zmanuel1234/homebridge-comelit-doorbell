@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.4.0 (unreleased)
+
+Everything new is off by default: with the default settings, 2.4.0 behaves like 2.3.3. The 2.4.0-beta sections below have the details and the door-test notes.
+
+### Added
+
+- **Live view without a ring** (`liveViewWithoutRing`, off by default). Opening the doorbell camera's live view when nobody is ringing calls the entrance panel, as the Comelit app's camera button does, and shows its video. Closing the view hangs up. Thanks to Sam0711er (#63).
+  - **Needs** the doorbell camera, **Listen for rings**, the monitor in Kit mode (S3 DIP switch 1 ON) and the entrance panel at address 0 (on an EX-DSME, DIP 1–3 OFF). If the Comelit app's Entrance button can't show the entrance without a ring, this can't either.
+  - The panel ends a silent view by itself after about 30–40 s: the picture freezes, close the view and open it again.
+  - These calls are never recorded, and doctor mode and Next Visitor never act on them.
+- **Sound in live view without a ring** (`liveViewSound`: `off`, `talk` or `always`; default `off`). `always`: sound both ways from the start, the call answered as a ring is. `talk` (experimental): the view starts silent, and turning on the Home app's microphone calls the panel again with sound (the picture pauses about 5 s). Either way, once on, the panel's microphone stays open until the view closes: turning the Home app's microphone off doesn't close it.
+- **Unlocking during a live view without a ring.** The panel takes no door release while it's in a call with the plugin, so the lock hangs up the view's call for a moment, opens the door, and calls the panel again: the picture comes back after a few seconds. With **Buzzes per unlock**, all buzzes happen in one pause. Only the lock does this, never doctor mode or Next Visitor.
+- **A live view counts like a ring for Unlock allowed for** (`ringWindowSeconds`): unlocking is allowed while a live view without a ring shows the entrance's live picture, and for the window after it. Automations and Siri still need a ring, unless such a view is open. `0` still means at any time.
+- **Buzzes per unlock** (`openRepeat`, default 1) and **Time from one buzz to the next** (`openRepeatSeconds`, default 6, at most 15): for an entrance behind two doors, each unlock sends the door release several times. Thanks to Sam0711er (#64).
+
+### Fixed
+
+- **An actuator (second door or gate output) didn't open during an answered ring**: the plugin sent it the entrance's command inside the call. Actuators now always get their own command (#59; not yet confirmed at a door). An actuator's open is logged as info, since actuators never confirm.
+- **A ring during a live view without a ring could, very rarely (about once in 65,536), be missed**; it now ends the view and comes through as usual.
+- "Someone is ringing" during a live view is logged once per ring. The busy refusal's message no longer says a call is ringing.
+
+### Changed
+
+- Shorter labels in the settings screen's dropdowns (they were cut off on phones); the descriptions under them say the rest. No setting was renamed and no value changed.
+
 ## 2.4.0-beta.6 (2026-11-20)
 
 Pre-release. Only installations with **Live view without a ring** on and **Unlock allowed for** above 0 see a difference.
