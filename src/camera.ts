@@ -823,6 +823,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
       active.media = null;
     }
     const v = request.video;
+    media?.markWatched?.(); // a viewer gets this call's live video (counts for unlocking: platform.isUnlockAllowed)
     this.log.debug(`Doorbell camera: streaming ${v.width}x${v.height} ${v.fps} fps ${v.max_bit_rate} kbps (${media ? 'live from the intercom' : 'still image, no call to show'})`);
 
     const vargs = videoArgs({

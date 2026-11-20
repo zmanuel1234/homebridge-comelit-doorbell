@@ -164,7 +164,7 @@ In JSON, numbers may also be written as plain text (`"subaddress": "3"`). A valu
 
 | Setting | Default | Description |
 |---|---|---|
-| Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. A live view without a ring that shows the entrance counts like a ring: unlocking is allowed while it's open and for this many seconds after it closes. `0` allows unlocking at any time. |
+| Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. A live view without a ring that shows the entrance counts like a ring: unlocking is allowed while it shows the live picture and for this many seconds after. While such a view is open on any device (an iPad left on the camera, say), Siri and automations can unlock too. `0` allows unlocking at any time. |
 | Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
 | Doctor mode and Next Visitor: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). With **Record rings** on, 8 or more gives a clip of who comes in. Turning the switch off cancels the open until the door is actually opened (about 1 s after this delay; if the call was already answered for the open, it is then hung up, unless a live view is showing it). |
 | Next Visitor switch (`nextVisitorSwitch`) | `false` | Adds a switch that lets the next visitor in, then turns itself off. See [next visitor](#next-visitor). |

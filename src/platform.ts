@@ -133,7 +133,6 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     return this.downSince !== undefined && Date.now() - this.downSince > UNREACHABLE_AFTER_MS;
   }
 
-  /** Whether HomeKit may unlock now: within the ring window, or always if the window is 0. */
   /**
    * The lock opens within the window after a ring, and likewise while a live view without a ring
    * shows the entrance's live video and within the window after it: someone is looking at the
