@@ -61,6 +61,17 @@ function setup({ options = { liveViewWithoutRing: true, panelAddress: 'SB100001'
 }
 
 const parsed = (sent) => sent.map((f) => parseFrame(f));
+
+/**
+ * The fixture ring, on a connection id our own call doesn't use. Our call's id is random, so with
+ * the fixture's fixed id they matched about once in 65,536 runs (a CI failure, 2026-11-20); the
+ * plugin's handling of that collision is a separate edge case.
+ */
+const ringFrame = (call) => {
+  const f = parseFrame(frames.invite);
+  while (call.calls.has((f.conn1 << 8) | f.conn0)) f.conn1 = (f.conn1 + 1) & 0xff;
+  return f;
+};
 const ops = (sent) => parsed(sent).filter((f) => f.body.length).map((f) => f.opcode.toString(16));
 
 test('live view without a ring: calls the panel, then asks for video, without VOICESTATUS', async () => {
@@ -116,7 +127,7 @@ test('without the panel address, no call is placed', async () => {
 
 test('a ringing call is answered as before, not replaced by our own call', async () => {
   const { call, sent } = setup();
-  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await call.onFrame(ringFrame(call), ['SB100001']);
   await call.onFrame(parseFrame(frames.capabilities), ['SB100001']);
   const session = await call.startMedia(false);
   assert.ok(session);
@@ -196,7 +207,7 @@ test('a ring arriving during our own live view: the forced open goes into the ri
   const { call, sent } = setup();
   const session = await call.startMedia(false);
   const own = call.activeCall();
-  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await call.onFrame(ringFrame(call), ['SB100001']);
   await call.onFrame(parseFrame(frames.capabilities), ['SB100001']);
   const ringCall = call.ringingCall();
   assert.ok(ringCall && !ringCall.outbound && ringCall !== own);
@@ -426,7 +437,7 @@ test("sound 'when you talk': closing the view during the new call's setup hangs 
 test("sound 'when you talk': while someone rings, the microphone doesn't call the panel again", async () => {
   const { call, sent, log } = setup({ options: talkOptions });
   const session = await call.startMedia(false);
-  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await call.onFrame(ringFrame(call), ['SB100001']);
   await session.openSound();
   assert.strictEqual(invites(sent).length, 1, 'no new call');
   assert.strictEqual(session.isEnded, false);
@@ -448,7 +459,7 @@ test("sound 'when you talk': the intercom counts as busy during the switch (no p
 test("sound 'when you talk': while someone rings, 'someone is ringing' is logged once per ring", async () => {
   const { call, log } = setup({ options: talkOptions });
   const session = await call.startMedia(false);
-  await call.onFrame(parseFrame(frames.invite), ['SB100001']);
+  await call.onFrame(ringFrame(call), ['SB100001']);
   await session.openSound();
   await session.openSound();
   assert.strictEqual(log.lines.filter((l) => /someone is ringing/.test(l)).length, 1);
@@ -540,7 +551,7 @@ test('the lock during a live view: a ring during the pause ends the view instead
   const { call, sent, log } = setup();
   const session = await call.startMedia(false);
   const result = await call.openWithLiveViewPaused(async () => {
-    await call.onFrame(parseFrame(frames.invite), ['SB100001']); // someone rings meanwhile
+    await call.onFrame(ringFrame(call), ['SB100001']); // someone rings meanwhile
     return { confirmed: true };
   });
   assert.deepStrictEqual(result, { confirmed: true });
@@ -559,4 +570,25 @@ test('the lock during a live view: the viewer closing during the pause still ope
   assert.deepStrictEqual(result, { confirmed: true });
   assert.strictEqual(invites(sent).length, 1);
   assert.strictEqual(call.activeCall(), undefined);
+});
+
+test('an actuator during a ring gets its own command, never the entrance open inside the call', async () => {
+  const { openDoor } = require('../dist/door');
+  const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
+  const actuator = { name: 'Actuator', aptAddress: 'SB100001', outputIndex: 1, isActuator: true, moduleIndex: 0 };
+  const entrance = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };
+  const order = [];
+  const client = {
+    getChannel: () => ({}),
+    sendBinary: async () => { order.push('send'); },
+    readResponse: async () => Buffer.alloc(0),
+    removeChannel() {},
+  };
+  const ctx = { call: { openInCall: async () => (order.push('ring'), { confirmed: true }) } };
+  assert.deepStrictEqual(await openDoor(client, config, actuator, ctx), { confirmed: false });
+  assert.ok(!order.includes('ring'), 'not opened inside the ring');
+  assert.ok(order.filter((o) => o === 'send').length >= 2, "the actuator's own command");
+  order.length = 0;
+  assert.deepStrictEqual(await openDoor(client, config, entrance, ctx), { confirmed: true });
+  assert.deepStrictEqual(order, ['ring'], 'the entrance still opens inside the ring');
 });

@@ -605,3 +605,18 @@ test("doctor mode's extra buzzes never pause a live view", async () => {
   assert.deepStrictEqual(retries, [false]);
   assert.strictEqual(paused, 0);
 });
+
+test("an actuator's unconfirmed open is logged as info (actuators never confirm), an entrance's as a warning", async () => {
+  const lines = [];
+  const log = Object.assign((...a) => lines.push(['log', a.join(' ')]), {
+    info: (m) => lines.push(['info', m]), warn: (m) => lines.push(['warn', m]), error: (m) => lines.push(['error', m]), debug: () => undefined, success: () => undefined,
+  });
+  const api = fakeApi();
+  const p = new ComelitIntercomPlatform(log, { platform: 'ComelitIntercom', name: 'Comelit Intercom' }, api);
+  p.discoverAccessories({ ...deviceConfig, doors: [{ ...deviceConfig.doors[0], name: 'Actuator', isActuator: true }] });
+  const lock = [...p.lockAccessories.values()][0];
+  p.openDoor = async () => ({ confirmed: false });
+  await lock.triggerOpen();
+  assert.ok(lines.some(([l, m]) => l === 'info' && /Actuator': open sent \(an actuator gives no confirmation\)/.test(m)), JSON.stringify(lines));
+  assert.ok(!lines.some(([l]) => l === 'warn'));
+});

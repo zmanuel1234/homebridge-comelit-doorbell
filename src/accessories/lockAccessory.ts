@@ -118,6 +118,8 @@ export class LockAccessory {
       const result = await this.platform.openDoor(this.door);
       if (result.confirmed) {
         this.platform.log.info(`Door '${this.door.name}' opened`);
+      } else if (this.door.isActuator) {
+        this.platform.log.info(`Door '${this.door.name}': open sent (an actuator gives no confirmation)`);
       } else {
         this.platform.log.warn(`Door '${this.door.name}': open sent, but the intercom did not confirm it`);
       }

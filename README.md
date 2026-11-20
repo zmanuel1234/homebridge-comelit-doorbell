@@ -49,7 +49,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Recording rings (HomeKit Secure Video) | ✅ | 2.3.0 betas at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. The door's sound is in the clips of answered calls (the intercom sends none before answering); the Home app shows the clips at the exact start time. A Wi-Fi stall can still cost a few seconds of the door's sound in a clip |
 | Live view without a ring | ✅ | Experimental. Here (2-apartment kit, EX-7000HW, firmware 2.1.0), once the entrance panel's address was set to 0 (see [live view without a ring](#live-view-without-a-ring)). Also tried on another 6741W on 2026-11-16 (Homebridge on macOS, ffmpeg 8.0): first picture in the Home app 2.6 s after opening, 37 s of live video at about 16 frames per second, clean hang-up when the view closed; and on a 6741W with firmware 2.1.3. With **Sound in live view without a ring** (2.4.0-beta.2): the entrance heard in the Home app (1,756 sound packets in a 40 s view, none lost) and talk-back heard at the panel, 2026-11-19 |
 | Buzzes per unlock | ❓ | New in 2.4.0-beta.1, off by default (1 buzz); tried on another installation with an entrance behind two doors; covered by the plugin's tests |
-| Gate / actuator output | ❓ | Not tested |
+| Gate / actuator output | ❓ | On a 6741W (#59): opens with no call (actuators never confirm, so no confirmation is normal). During an answered ring it didn't open before 2.4.0-beta.5; the fix is not yet confirmed there |
 | Phones stop ringing when HomeKit answers | ❓ | Expected (the intercom gives the call to whoever answers), not yet observed |
 
 Other ViP devices may work. You'll find the model id and firmware on the intercom's web page, under **Device info**. Please open an issue with them, whether it works or not.
@@ -225,7 +225,7 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 |---|---|
 | `off` | The plugin never takes part in the call. Unlocking during a ring is refused as busy. |
 | `handshake` | The plugin replies to the call without answering it, for testing. Phones keep ringing. |
-| `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices should stop ringing. |
+| `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices should stop ringing. An actuator (a second door or gate output) opens with its own command instead and doesn't answer the ring. |
 | `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Unlocking during a ring **without** the live view (from the notification, the Watch, Control Centre or Siri) answers the call, opens the door and hangs up. Needs the doorbell camera. |
 
 Every message of the call is logged with the prefix `call:` at debug level: turn on **debug mode** for the child bridge to see them.
@@ -271,7 +271,7 @@ The Comelit app's camera button shows the entrance at any time: the app calls th
   - **When you talk** (`talk`): the view starts silent. When you turn on the Home app's microphone, the plugin hangs up the silent call and calls the panel again, this time with sound, keeping the same live view. The picture pauses for about 5 s (about 2 s to set up the new call, then the panel's first keyframe), what you say in the first 2 s or so is lost, and the entrance is heard a few seconds after that. If the panel doesn't take the new call (three tries), the live view ends and the log says why. If someone is ringing at that moment, the view stays silent: close it and open it again to answer the ring.
   - **Always** (`always`): sound from the start of the view.
   - Either way, once the sound is on the panel's microphone stays open until the view closes, so people at the entrance can be heard without ringing. Turning the Home app's microphone off doesn't close it (the panel ignores that in the middle of a call): close the view.
-  - Without sound, the panel ends the view after about 30 s (seen on an EX-7000HW kit): the picture freezes, close the view and open it again. With sound, it isn't cut short.
+  - Without sound, the panel ends the view after about 30–40 s (about 31 s on an EX-7000HW kit, 37 s on a 6741W): the picture freezes, close the view and open it again. With sound, it wasn't cut short on the EX-7000HW.
   - The lock works during the view: the plugin hangs up the view's call for a moment (the panel takes no open while in a call), opens the door, and calls the panel again, so the picture pauses for a few seconds. **Unlock allowed for** still applies: a live view without a ring is not a ring.
 - These calls are never recorded (recording is for rings) and never count as a ring. If someone rings while you watch, the ring comes through as usual.
 - Snapshots (the camera's tile) never call the panel; only opening the live view does. What you saw becomes the camera's picture, as after a call, for **Show the last visitor for**.
