@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.4.0-beta.4 (2026-11-20)
+
+Pre-release. With the default settings the plugin behaves like 2.4.0-beta.3.
+
+### Fixed
+
+- **Unlocking from HomeKit during a live view without a ring** was refused by the intercom (`cause 8, busy`): the panel is in a call with the plugin and takes no separate open, and it ignores one sent inside the plugin's silent call (both seen on an EX-7000HW kit, 2026-11-20). The lock now hangs up the live view's call for a moment, opens the door the normal way (once more a second later if the intercom is still busy), and calls the panel again: the view goes on after a short pause in the picture. Only the lock does this, never doctor mode or Next Visitor, and **Unlock allowed for** still applies (with the default 90 s, a live view without a ring is not a ring: set it to 0 to open from a live view at any time).
+- The busy refusal's log message no longer says a call is ringing: `busy: the intercom is in a call, e.g. a ring nobody answered`.
+- While someone rings during a live view without a ring, "someone is ringing" is logged once per ring.
+- Internal: a switch of the live view's call no longer adds an event listener each time.
+
+### Notes from door tests (EX-7000HW kit, 2026-11-20)
+
+- If the panel's video gets stuck (it accepts the call but sends little or no video), opening the entrance once in the Comelit app, or power-cycling the panel, brings it back. Seen after the experiment below; the call to the panel itself is unchanged since 2.4.0-beta.1.
+- The panel ends a **silent** live view without a ring after about 31 s (a normal hang-up): the Home app's picture then freezes, close the view. A view **with sound** isn't cut short (95 s, closed by the viewer).
+- **Turning the microphone off doesn't turn the sound off.** The panel ignores a request to close the sound in the middle of a call (and the video stalled for a while after it), and the Comelit app's own sound-off button ends its call. So with **When you talk**, once the microphone has turned the sound on, it stays on until you close the view: closing the view is how to turn it off.
+
 ## 2.4.0-beta.3 (2026-11-19)
 
 Pre-release. The setting stays off by default: with the default settings the plugin behaves like 2.4.0-beta.2.

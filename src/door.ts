@@ -49,14 +49,31 @@ async function openCtppChannel(client: IconaBridgeClient, config: DeviceConfig):
 }
 
 async function openDoorOnChannel(client: IconaBridgeClient, channel: Channel, config: DeviceConfig, door: Door, ctx: OpenContext): Promise<OpenResult> {
+  // A ring: open inside it. Only the lock opens through here.
   const inCall = await ctx.call?.openInCall(door);
   if (inCall) {
     return inCall;
   }
-  if (door.isActuator) {
-    return openActuator(client, channel, config.aptAddress, door);
+  const open = (): Promise<OpenResult> =>
+    door.isActuator ? openActuator(client, channel, config.aptAddress, door) : openEntrance(client, channel, `${config.aptAddress}${config.aptSubaddress}`, door, ctx.listener);
+  // A live view without a ring: the panel is in a call with us, so the open waits for that call
+  // to be hung up for a moment (CallHandler.openWithLiveViewPaused).
+  const paused = await ctx.call?.openWithLiveViewPaused(() => openRetryingBusy(open, ctx.log));
+  return paused ?? open();
+}
+
+/** Opens; if the intercom is still busy (the call only just hung up), once more a second later. */
+async function openRetryingBusy(open: () => Promise<OpenResult>, log?: Logging): Promise<OpenResult> {
+  try {
+    return await open();
+  } catch (e) {
+    if (!(e instanceof DoorOpenError) || !/cause 8\b/.test(e.message)) {
+      throw e;
+    }
+    log?.debug('door: the intercom was still busy after the live view paused; trying again');
+    await new Promise((r) => setTimeout(r, 1_000));
+    return open();
   }
-  return openEntrance(client, channel, `${config.aptAddress}${config.aptSubaddress}`, door, ctx.listener);
 }
 
 /**
@@ -90,7 +107,7 @@ async function openEntrance(client: IconaBridgeClient, channel: Channel, ourAddr
     return { confirmed: false };
   }
   if (cause !== 0) {
-    throw new DoorOpenError(`intercom refused (cause ${cause}${cause === CAUSE_BUSY ? ', busy: a call is ringing and was not answered' : ''})`);
+    throw new DoorOpenError(`intercom refused (cause ${cause}${cause === CAUSE_BUSY ? ', busy: the intercom is in a call, e.g. a ring nobody answered' : ''})`);
   }
   return { confirmed: true };
 }
