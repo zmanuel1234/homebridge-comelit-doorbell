@@ -542,7 +542,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
           return;
         }
         const started = Date.now();
-        const result = await call.openInCall(door, true, armed);
+        // An actuator (only on a setup with no entrance door) gets its own command, never the
+        // entrance's open inside the call (#59).
+        const result = door.isActuator ? await this.openOnce(door) : await call.openInCall(door, true, armed);
         if (!result && !armed()) {
           // Turned off while the call was being answered: not opened.
           this.log.info(`${label}: the switch was turned off before the door opened; not opening`);

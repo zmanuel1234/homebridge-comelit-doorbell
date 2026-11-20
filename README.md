@@ -225,7 +225,7 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 |---|---|
 | `off` | The plugin never takes part in the call. Unlocking during a ring is refused as busy. |
 | `handshake` | The plugin replies to the call without answering it, for testing. Phones keep ringing. |
-| `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices should stop ringing. |
+| `answer-on-open` | Unlocking from Home answers the ring, opens the door inside the call, then hangs up. Like answering on a phone, the other devices should stop ringing. An actuator (a second door or gate output) opens with its own command instead and doesn't answer the ring. |
 | `answer-on-view` | Opening the doorbell camera's live view answers the ring and shows the intercom's video and audio; unlocking then opens inside that call. Closing the view hangs up. Unlocking during a ring **without** the live view (from the notification, the Watch, Control Centre or Siri) answers the call, opens the door and hangs up. Needs the doorbell camera. |
 
 Every message of the call is logged with the prefix `call:` at debug level: turn on **debug mode** for the child bridge to see them.

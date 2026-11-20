@@ -6,7 +6,7 @@ Pre-release. Only installations with an actuator (a second door or gate output) 
 
 ### Fixed
 
-- **An actuator didn't open during an answered ring** (#59, seen on a 6741W). During a ring, the plugin opened every door inside the call with the entrance's command: the panel accepted it and the Home app showed it opened, but an actuator needs its own command, so nothing moved. An actuator now always gets its own command, during a ring too. The entrance lock still opens inside the ring, as before.
+- **An actuator didn't open during an answered ring** (#59, seen on a 6741W). During a ring, the plugin opened every door inside the call with the entrance's command: the panel accepted it and the Home app showed it opened, but an actuator needs its own command, so nothing moved. An actuator now always gets its own command, during a ring too. The entrance lock still opens inside the ring, as before. An actuator's open doesn't answer the ring (with **Answer the ring** set to `answer-on-open`, the phones keep ringing); it doesn't need to. Not yet confirmed at a door: the actuator's own command during a ring.
 - An actuator's open no longer logs the warning `open sent, but the intercom did not confirm it`: actuators never send a confirmation, so the door opening without one is normal. It's now an info line, `open sent (an actuator gives no confirmation)`.
 
 ### Notes
