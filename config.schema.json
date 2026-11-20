@@ -100,7 +100,7 @@
         "default": 90,
         "minimum": 0,
         "maximum": 600,
-        "description": "Unlock from HomeKit is refused unless a ring happened within this many seconds. 0 allows unlocking at any time."
+        "description": "Unlock from HomeKit is refused unless a ring happened within this many seconds, or a live view without a ring is showing the entrance (or ended within this many seconds). Automations and Siri can't open a live view, so outside a ring they stay refused. 0 allows unlocking at any time."
       },
       "doorbellTriggerUrl": {
         "title": "Doorbell camera trigger URL",

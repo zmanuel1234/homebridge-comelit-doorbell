@@ -620,3 +620,36 @@ test("an actuator's unconfirmed open is logged as info (actuators never confirm)
   assert.ok(lines.some(([l, m]) => l === 'info' && /Actuator': open sent \(an actuator gives no confirmation\)/.test(m)), JSON.stringify(lines));
   assert.ok(!lines.some(([l]) => l === 'warn'));
 });
+
+test('unlock: a live view without a ring counts like a ring (while it shows the entrance, and for the window after)', () => {
+  const { p } = platform(); // window 90 s
+  const live = { showing: false, endedAt: 0 };
+  p.callHandler = { liveViewShowing: () => live.showing, get liveViewEndedAt() { return live.endedAt; }, ringingCall: () => undefined };
+  assert.strictEqual(p.isUnlockAllowed(), false, 'no ring, no live view');
+  live.showing = true;
+  assert.strictEqual(p.isUnlockAllowed(), true, 'a live view showing the entrance');
+  live.showing = false;
+  live.endedAt = Date.now() - 30_000;
+  assert.strictEqual(p.isUnlockAllowed(), true, '30 s after it closed');
+  live.endedAt = Date.now() - 120_000;
+  assert.strictEqual(p.isUnlockAllowed(), false, '2 min after it closed');
+  const any = platform({ ringWindowSeconds: 0 }).p;
+  assert.strictEqual(any.isUnlockAllowed(), true, '0: at any time, as before');
+});
+
+test('unlock: refused outside a ring and a live view (the message says so), allowed while a live view shows the entrance', () => {
+  const { p } = platform();
+  const lock = lockOf(p);
+  const warnings = [];
+  p.log.warn = (m) => warnings.push(m);
+  let opened = 0;
+  lock.triggerOpen = async () => { opened++; };
+  let showing = false;
+  p.callHandler = { liveViewShowing: () => showing, liveViewEndedAt: 0, ringingCall: () => undefined };
+  const target = lock.service.getCharacteristic(p.Characteristic.LockTargetState);
+  assert.throws(() => target.set(0));
+  assert.match(warnings[0], /no ring or live view in the last 90 s/);
+  showing = true;
+  assert.doesNotThrow(() => target.set(0));
+  assert.strictEqual(opened, 1);
+});

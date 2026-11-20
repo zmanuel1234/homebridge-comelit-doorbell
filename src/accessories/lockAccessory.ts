@@ -74,7 +74,7 @@ export class LockAccessory {
       const now = Date.now();
       if (now - this.lastRefusedLog > REFUSED_LOG_INTERVAL_MS) {
         this.lastRefusedLog = now;
-        this.platform.log.warn(`Open refused: no ring in the last ${this.platform.settings.ringWindowMs / 1000} s`);
+        this.platform.log.warn(`Open refused: no ring or live view in the last ${this.platform.settings.ringWindowMs / 1000} s`);
       }
       throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE);
     }

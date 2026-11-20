@@ -56,6 +56,8 @@ const OUTBOUND_STEP_MS = 5_000;
 /** Switching a live view to sound: tries to place the new call, and the pause before each. */
 const SOUND_REDIAL_ATTEMPTS = 3;
 const SOUND_REDIAL_PAUSE_MS = 500;
+/** A live view whose video stopped this long ago no longer counts as showing the entrance (unlocking). */
+const LIVE_VIDEO_STALE_MS = 10_000;
 /** The session block of our INVITE starts with these two bytes (as the Comelit app's). */
 const OUTBOUND_SESSION_FLAGS = Buffer.from([0x01, 0x20]);
 
@@ -323,6 +325,20 @@ export class CallHandler {
     }
     const key = (frame.conn1 << 8) | frame.conn0;
     let call = this.calls.get(key);
+    if (call?.outbound && frame.flags === Flag.SYN && frame.opcode === Opcode.INVITE) {
+      // A ring on the connection id our own call (a live view without a ring) happens to use:
+      // the intercom picks a ring's id itself, so about once in 65,536 rings during a live view
+      // they match. The id is the ring's now: our call is dropped without sending anything more on
+      // it, the view ends, and the ring is taken as usual. (Should the panel still send its own
+      // end of our old call on this id, it would end the ring's call here: unavoidable.)
+      this.log?.info('Doorbell camera: a ring came in on the live view\'s connection: the live view ends so the ring comes through');
+      const own = call;
+      own.ended = true;
+      this.calls.delete(key);
+      void own.media?.end('a ring came in', false).catch(() => undefined);
+      this.callEnded(own);
+      call = undefined;
+    }
     if (!call && frame.flags === Flag.SYN && frame.opcode === Opcode.INVITE) {
       this.activeCall(); // drops ended and stale calls, so they don't pile up
       call = {
@@ -513,6 +529,21 @@ export class CallHandler {
 
   /** A live view whose own call is being placed again with sound (MediaSession.openSound). */
   soundSwitch?: MediaSession;
+
+  /** When a live view without a ring that showed the entrance's video last ended (0: never). */
+  liveViewEndedAt = 0;
+
+  /**
+   * A live view without a ring is showing the entrance's live video now (also while its call is
+   * placed again: the lock's pause or the switch to sound). The still picture shown outside a
+   * call doesn't count: nobody sees the entrance live.
+   */
+  liveViewShowing(): boolean {
+    if (this.soundSwitch && !this.soundSwitch.isEnded && this.soundSwitch.sawPicture) {
+      return true; // the picture pauses while the view's call is placed again
+    }
+    return [...this.calls.values()].some((c) => c.outbound && !c.ended && c.media !== undefined && !c.media.isEnded && c.media.showingPicture);
+  }
 
   /**
    * Answers the ringing call (if any) and starts video and audio. Returns null when there is
@@ -716,6 +747,26 @@ export class MediaSession extends EventEmitter {
   private timers: NodeJS.Timeout[] = [];
   private ended = false;
 
+  /** A viewer was given this session's live video (the camera started streaming it). */
+  private watched = false;
+  /** When the last video packet came (0: none yet). */
+  private lastVideoAt = 0;
+
+  /** The camera streams this session's live video to a viewer (not the still picture). */
+  markWatched(): void {
+    this.watched = true;
+  }
+
+  /** A viewer saw the entrance's live picture: streamed to them, and a keyframe arrived. */
+  get sawPicture(): boolean {
+    return this.watched && this.firstSpsAt > 0;
+  }
+
+  /** A viewer sees the entrance's live picture now: as sawPicture, with video still coming. */
+  get showingPicture(): boolean {
+    return this.sawPicture && Date.now() - this.lastVideoAt < LIVE_VIDEO_STALE_MS;
+  }
+
   /** True once the session has ended (by us or the intercom). */
   get isEnded(): boolean {
     return this.ended;
@@ -875,6 +926,7 @@ export class MediaSession extends EventEmitter {
       return;
     }
     this.stats.video++;
+    this.lastVideoAt = Date.now();
     if (this.firstVideoAt === 0) {
       this.firstVideoAt = Date.now();
     }
@@ -1114,6 +1166,12 @@ export class MediaSession extends EventEmitter {
       if (this.ended) {
         break;
       }
+      if (this.handler.ringingCall()) {
+        // Someone rang meanwhile: calling the panel now would be refused or cut the ring short.
+        this.log?.info('Doorbell camera: someone rang while the live view was calling the panel again: the live view ends (open it again to answer the ring)');
+        await this.end('a ring came in', false);
+        return;
+      }
       try {
         next = await this.handler.placeOwnCall();
         break;
@@ -1163,6 +1221,10 @@ export class MediaSession extends EventEmitter {
       return;
     }
     this.ended = true;
+    if (this.call.outbound && this.sawPicture) {
+      // The unlock window counts from the last live picture (platform.isUnlockAllowed).
+      this.handler.liveViewEndedAt = Math.max(this.handler.liveViewEndedAt, this.lastVideoAt);
+    }
     for (const t of this.timers) {
       clearInterval(t);
     }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.0-beta.6 (2026-11-20)
+
+Pre-release. Only installations with **Live view without a ring** on and **Unlock allowed for** above 0 see a difference.
+
+### Changed
+
+- **A live view without a ring now counts like a ring for unlocking.** With **Unlock allowed for** at its default (90 s), the HomeKit lock was refused during a live view without a ring, though you're looking at the entrance: unlocking needed a ring, or the setting at 0 (at any time). Now unlocking is also allowed while a live view without a ring shows the entrance's live video, and for the same number of seconds after it closes. Automations and Siri can't open a live view, so outside a ring they stay refused; the still picture shown outside a call (live view without a ring off) doesn't count. It counts only once a viewer gets the live picture (a keyframe arrived), stops counting 10 s after the picture freezes, and the window after it counts from the last picture. While such a view is open on any device, Siri and automations can unlock too. With the setting at 0 nothing changes. The refusal message now reads `no ring or live view in the last 90 s`.
+
+### Fixed
+
+- **A ring during a live view without a ring could be missed**, very rarely. The plugin's call to the panel gets a random connection id, and the intercom picks a ring's id itself: about once in 65,536 rings during a live view they matched, and the ring was taken as part of the plugin's own call (no doorbell notification, no recording). Now such a ring ends the live view and comes through as usual. Found by a test that failed once on CI.
+- A ring while the live view was calling the panel again (for sound, or after the lock's pause) no longer gets the panel called during the ring: the view ends, open it again to answer the ring.
+
 ## 2.4.0-beta.5 (2026-11-20)
 
 Pre-release. Only installations with an actuator (a second door or gate output) see a difference.
