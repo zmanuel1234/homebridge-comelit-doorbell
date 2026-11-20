@@ -592,3 +592,51 @@ test('an actuator during a ring gets its own command, never the entrance open in
   assert.deepStrictEqual(await openDoor(client, config, entrance, ctx), { confirmed: true });
   assert.deepStrictEqual(order, ['ring'], 'the entrance still opens inside the ring');
 });
+
+test('a live view without a ring counts as showing the entrance once its video arrives, and records when it ended', async () => {
+  const { call, client } = setup();
+  const session = await call.startMedia(false);
+  assert.strictEqual(call.liveViewShowing(), false, 'no video yet: nobody sees the entrance');
+  client.handlers.get(0x2004)(buildRtp({ marker: true, payloadType: 96, sequence: 1, timestamp: 0, ssrc: 2 }, Buffer.from([0x67, 1])));
+  assert.strictEqual(call.liveViewShowing(), true);
+  assert.strictEqual(call.liveViewEndedAt, 0);
+  const before = Date.now();
+  await session.end('viewer closed');
+  assert.strictEqual(call.liveViewShowing(), false);
+  assert.ok(call.liveViewEndedAt >= before, 'the window counts from the end');
+});
+
+test('a live view without a ring that never showed video does not count for unlocking', async () => {
+  const { call } = setup();
+  const session = await call.startMedia(false);
+  await session.end('no media from the intercom');
+  assert.strictEqual(call.liveViewEndedAt, 0);
+});
+
+test('the lock pause keeps the live view counting as showing the entrance', async () => {
+  const { call, client } = setup();
+  const session = await call.startMedia(false);
+  client.handlers.get(0x2004)(buildRtp({ marker: true, payloadType: 96, sequence: 1, timestamp: 0, ssrc: 2 }, Buffer.from([0x67, 1])));
+  let during;
+  await call.openWithLiveViewPaused(async () => { during = call.liveViewShowing(); return { confirmed: true }; });
+  assert.strictEqual(during, true);
+  assert.strictEqual(call.liveViewEndedAt, 0, 'the pause is not the end of the view');
+  await session.end('viewer closed');
+});
+
+test('a ring on the live view\'s own connection id (about once in 65,536 rings) ends the view and comes through as a ring', async () => {
+  const { call, sent, log } = setup({ options: talkOptions });
+  const session = await call.startMedia(false);
+  const own = call.activeCall();
+  const ring = parseFrame(frames.invite);
+  ring.conn0 = own.conn0; // the panel picked the id our call uses
+  ring.conn1 = own.conn1;
+  const before = sent.length;
+  await call.onFrame(ring, ['SB100001']);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.strictEqual(session.isEnded, true, 'the live view ends');
+  const ringing = call.ringingCall();
+  assert.ok(ringing && !ringing.outbound, 'the ring is taken as a ring');
+  assert.ok(!parsed(sent.slice(before)).some((f) => f.flags === 0x60 || f.opcode === 0x000e), 'no hang-up sent on the id, now the ring\'s');
+  assert.ok(log.lines.some((l) => /a ring came in on the live view's connection/.test(l)));
+});

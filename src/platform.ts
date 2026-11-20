@@ -134,9 +134,19 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   }
 
   /** Whether HomeKit may unlock now: within the ring window, or always if the window is 0. */
+  /**
+   * The lock opens within the window after a ring, and likewise while a live view without a ring
+   * shows the entrance's live video and within the window after it: someone is looking at the
+   * door then, as after a ring. Automations and Siri can't open a live view, so they are still
+   * refused outside a ring. 0: at any time.
+   */
   isUnlockAllowed(): boolean {
     const windowMs = this.settings.ringWindowMs;
-    return windowMs === 0 || Date.now() - this.lastRingAt <= windowMs;
+    if (windowMs === 0 || Date.now() - this.lastRingAt <= windowMs) {
+      return true;
+    }
+    const call = this.callHandler;
+    return Boolean(call && (call.liveViewShowing?.() || (call.liveViewEndedAt > 0 && Date.now() - call.liveViewEndedAt <= windowMs)));
   }
 
   // ─── Connection lifecycle ──────────────────────────────────────────────────

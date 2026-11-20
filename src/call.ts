@@ -323,6 +323,19 @@ export class CallHandler {
     }
     const key = (frame.conn1 << 8) | frame.conn0;
     let call = this.calls.get(key);
+    if (call?.outbound && frame.flags === Flag.SYN && frame.opcode === Opcode.INVITE) {
+      // A ring on the connection id our own call (a live view without a ring) happens to use:
+      // the intercom picks a ring's id itself, so about once in 65,536 rings during a live view
+      // they match. The id is the ring's now: our call is dropped without sending anything more on
+      // it (the panel ends it by itself), the view ends, and the ring is taken as usual.
+      this.log?.info('Doorbell camera: a ring came in on the live view\'s connection: the live view ends so the ring comes through');
+      const own = call;
+      own.ended = true;
+      this.calls.delete(key);
+      void own.media?.end('a ring came in', false).catch(() => undefined);
+      this.callEnded(own);
+      call = undefined;
+    }
     if (!call && frame.flags === Flag.SYN && frame.opcode === Opcode.INVITE) {
       this.activeCall(); // drops ended and stale calls, so they don't pile up
       call = {
@@ -513,6 +526,21 @@ export class CallHandler {
 
   /** A live view whose own call is being placed again with sound (MediaSession.openSound). */
   soundSwitch?: MediaSession;
+
+  /** When a live view without a ring that showed the entrance's video last ended (0: never). */
+  liveViewEndedAt = 0;
+
+  /**
+   * A live view without a ring is showing the entrance's live video now (also while its call is
+   * placed again: the lock's pause or the switch to sound). The still picture shown outside a
+   * call doesn't count: nobody sees the entrance live.
+   */
+  liveViewShowing(): boolean {
+    if (this.soundSwitch && !this.soundSwitch.isEnded && this.soundSwitch.showedVideo) {
+      return true;
+    }
+    return [...this.calls.values()].some((c) => c.outbound && !c.ended && c.media !== undefined && !c.media.isEnded && c.media.showedVideo);
+  }
 
   /**
    * Answers the ringing call (if any) and starts video and audio. Returns null when there is
@@ -717,6 +745,11 @@ export class MediaSession extends EventEmitter {
   private ended = false;
 
   /** True once the session has ended (by us or the intercom). */
+  /** The entrance's video reached this view (a live view, not only a call that sent nothing). */
+  get showedVideo(): boolean {
+    return this.firstVideoAt > 0;
+  }
+
   get isEnded(): boolean {
     return this.ended;
   }
@@ -1163,6 +1196,9 @@ export class MediaSession extends EventEmitter {
       return;
     }
     this.ended = true;
+    if (this.call.outbound && this.firstVideoAt > 0) {
+      this.handler.liveViewEndedAt = Date.now(); // the unlock window counts from here (platform.isUnlockAllowed)
+    }
     for (const t of this.timers) {
       clearInterval(t);
     }
