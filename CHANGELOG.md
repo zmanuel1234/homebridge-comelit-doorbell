@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.4.0 (unreleased)
+## 2.4.0 (2026-11-21)
 
 Everything new is off by default: with the default settings, 2.4.0 behaves like 2.3.3. The 2.4.0-beta sections below have the details and the door-test notes.
 
@@ -10,7 +10,7 @@ Everything new is off by default: with the default settings, 2.4.0 behaves like 
   - **Needs** the doorbell camera, **Listen for rings**, the monitor in Kit mode (S3 DIP switch 1 ON) and the entrance panel at address 0 (on an EX-DSME, DIP 1–3 OFF). If the Comelit app's Entrance button can't show the entrance without a ring, this can't either.
   - The panel ends a silent view by itself after about 30–40 s: the picture freezes, close the view and open it again.
   - These calls are never recorded, and doctor mode and Next Visitor never act on them.
-- **Sound in live view without a ring** (`liveViewSound`: `off`, `talk` or `always`; default `off`). `always`: sound both ways from the start, the call answered as a ring is. `talk` (experimental): the view starts silent, and turning on the Home app's microphone calls the panel again with sound (the picture pauses about 5 s). Either way, once on, the panel's microphone stays open until the view closes: turning the Home app's microphone off doesn't close it.
+- **Sound in live view without a ring** (`liveViewSound`: `off`, `talk` or `always`; default `off`). `always`: sound both ways from the start, the call answered as a ring is. `talk`: the view starts silent, and turning on the Home app's microphone calls the panel again with sound (the picture pauses about 5 s). Either way, once on, the panel's microphone stays open until the view closes: turning the Home app's microphone off doesn't close it.
 - **Unlocking during a live view without a ring.** The panel takes no door release while it's in a call with the plugin, so the lock hangs up the view's call for a moment, opens the door, and calls the panel again: the picture comes back after a few seconds. Confirmed on an EX-7000HW kit and on a 6741W (entrance lock and actuator). With **Buzzes per unlock**, all buzzes happen in one pause. Only the lock does this, never doctor mode or Next Visitor.
 - **A live view counts like a ring for Unlock allowed for** (`ringWindowSeconds`): unlocking is allowed while a live view without a ring shows the entrance's live picture, and for the window after it. Automations and Siri still need a ring, unless such a view is open. `0` still means at any time.
 - **Buzzes per unlock** (`openRepeat`, default 1) and **Time from one buzz to the next** (`openRepeatSeconds`, default 6, at most 15): for an entrance behind two doors, each unlock sends the door release several times. Thanks to Sam0711er (#64).
@@ -20,6 +20,14 @@ Everything new is off by default: with the default settings, 2.4.0 behaves like 
 - **An actuator (second door or gate output) didn't open during an answered ring**: the plugin sent it the entrance's command inside the call. Actuators now always get their own command (#59; confirmed on a 6741W: during an answered ring, while it rings, during a live view and with no call). An actuator's open is logged as info, since actuators never confirm.
 - **A ring during a live view without a ring could, very rarely (about once in 65,536), be missed**; it now ends the view and comes through as usual.
 - "Someone is ringing" during a live view is logged once per ring. The busy refusal's message no longer says a call is ringing.
+
+### Known limits (seen on an EX-7000HW kit and 6741Ws)
+
+- The panel ends a silent live view without a ring after about 30–40 s. A view with sound isn't cut short.
+- After a view with sound, the panel needs about 20 s before it takes the next call: a view opened sooner may get no picture and ends after about 7 s.
+- After unlocking during a view with sound, the picture and sound come back, then the panel ends the view a few seconds later, as it does for an answered ring.
+- Turning the Home app's microphone off doesn't close the panel's sound: close the view.
+- A ring during a live view without a ring ends the view (the panel rings the flat as usual): open the view again to answer.
 
 ### Changed
 

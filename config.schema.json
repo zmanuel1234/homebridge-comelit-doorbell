@@ -328,7 +328,7 @@
           { "title": "When you talk", "enum": ["talk"] },
           { "title": "Always", "enum": ["always"] }
         ],
-        "description": "Off: video only. When you talk (experimental: tried on one system): the view starts silent; turning on the Home app's microphone calls the panel again with sound (the panel only opens the sound when a call starts), so the picture pauses for about 5 s and your first 2 s or so are lost. Always: sound from the start. With sound, the Home app hears the entrance (tap its speaker icon), the door hears you while the microphone is on (needs Talk-back), and the panel's microphone stays open until the view closes (turning the microphone off doesn't close it)."
+        "description": "Off: video only. When you talk: the view starts silent; turning on the Home app's microphone calls the panel again with sound (the panel only opens the sound when a call starts), so the picture pauses for about 5 s and your first 2 s or so are lost. Always: sound from the start. With sound, the Home app hears the entrance (tap its speaker icon), the door hears you while the microphone is on (needs Talk-back), and the panel's microphone stays open until the view closes (turning the microphone off doesn't close it)."
       },
       "recording": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
