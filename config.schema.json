@@ -70,13 +70,13 @@
             ]
           },
           {
-            "title": "Re-register in place (default)",
+            "title": "In place (default)",
             "enum": [
               "inplace"
             ]
           }
         ],
-        "description": "The intercom stops sending rings to a registration after a few minutes, so it is refreshed regularly. Reconnect: drop and reopen the connection. Re-register in place: renew on the open connection, with no gap."
+        "description": "The intercom stops sending rings to a registration after a few minutes, so it is refreshed regularly. Reconnect: drop and reopen the connection. In place: re-register on the open connection, with no gap."
       },
       "leaseRefreshMinutes": {
         "title": "Registration refresh interval (minutes)",
@@ -114,10 +114,10 @@
         "default": "off",
         "oneOf": [
           { "title": "Off", "enum": ["off"] },
-          { "title": "Always on (every ring opens the door)", "enum": ["always"] },
-          { "title": "With a HomeKit switch (on while the switch is on)", "enum": ["switch"] }
+          { "title": "Always", "enum": ["always"] },
+          { "title": "With a HomeKit switch", "enum": ["switch"] }
         ],
-        "description": "Like a doctor's office: when someone rings, the plugin answers the call and opens the first door after a short delay. Anyone who rings gets in. 'With a HomeKit switch' adds a switch, so you can turn it on only when you expect someone, or by an automation."
+        "description": "Like a doctor's office: when someone rings, the plugin answers the call and opens the first door after a short delay. Anyone who rings gets in. Always: every ring opens the door. With a HomeKit switch: adds a switch, and opens only while it's on, so you can turn it on when you expect someone, or by an automation."
       },
       "doctorModeDelaySeconds": {
         "condition": { "functionBody": "return model.doctorMode === 'always' || model.doctorMode === 'switch' || model.nextVisitorSwitch === true || model.nextVisitorSwitch === 'true';" },
@@ -178,25 +178,25 @@
             ]
           },
           {
-            "title": "Handshake only (doesn't take the call)",
+            "title": "Handshake only",
             "enum": [
               "handshake"
             ]
           },
           {
-            "title": "Answer when unlocking from Home",
+            "title": "Answer when unlocking",
             "enum": [
               "answer-on-open"
             ]
           },
           {
-            "title": "Answer when viewing the camera",
+            "title": "Answer when viewing",
             "enum": [
               "answer-on-view"
             ]
           }
         ],
-        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it (for testing). Answer when unlocking from Home: answer the ring, open the door inside the call, then hang up. Answer when viewing the camera: opening the doorbell camera's live view answers the ring (needs the doorbell camera); unlocking during a ring opens inside the call, answering it first (and hanging up afterwards) if the live view isn't open."
+        "description": "Off: never take part in the call. Handshake only: reply to the call without answering it, so it doesn't take the call (for testing). Answer when unlocking (from Home): answer the ring, open the door inside the call, then hang up. Answer when viewing (the camera): opening the doorbell camera's live view answers the ring (needs the doorbell camera); unlocking during a ring opens inside the call, answering it first (and hanging up afterwards) if the live view isn't open."
       },
       "camera": {
         "title": "Doorbell camera with live video",
@@ -217,19 +217,19 @@
         "default": "sd",
         "oneOf": [
           {
-            "title": "Standard (asks for 320x240)",
+            "title": "Standard (320x240)",
             "enum": [
               "sd"
             ]
           },
           {
-            "title": "High (asks for up to 800x480)",
+            "title": "High (up to 800x480)",
             "enum": [
               "hd"
             ]
           }
         ],
-        "description": "What to ask the intercom for. A 6741W sends 640x240 either way, shown as 4:3."
+        "description": "What to ask the intercom for: Standard asks for 320x240, High for up to 800x480. A 6741W sends 640x240 either way, shown as 4:3."
       },
       "videoCodec": {
         "title": "Video encoder",
@@ -313,7 +313,7 @@
       },
       "liveViewWithoutRing": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
-        "title": "Live view without a ring (experimental)",
+        "title": "Live view without a ring",
         "type": "boolean",
         "default": false,
         "description": "Opening the doorbell camera when nobody is ringing calls the entrance panel, as the Comelit app's camera button does, and shows its video. Closing the view hangs up. Off: outside a call the camera shows a picture. Needs the monitor in Kit mode (S3 DIP 1 ON) and the entrance panel at address 0 (on an EX-DSME, DIP 1–3 OFF). Try the Comelit app's Entrance button first: if the app can't show the entrance without a ring, this can't either."
@@ -328,7 +328,7 @@
           { "title": "When you talk", "enum": ["talk"] },
           { "title": "Always", "enum": ["always"] }
         ],
-        "description": "Off: video only. When you talk: the view starts silent; turning on the Home app's microphone calls the panel again with sound (the panel only opens the sound when a call starts), so the picture pauses for about 5 s and your first 2 s or so are lost. Always: sound from the start. With sound, the Home app hears the entrance (tap its speaker icon), the door hears you while the microphone is on (needs Talk-back), and the panel's microphone stays open until the view closes."
+        "description": "Off: video only. When you talk: the view starts silent; turning on the Home app's microphone calls the panel again with sound (the panel only opens the sound when a call starts), so the picture pauses for about 5 s and your first 2 s or so are lost. Always: sound from the start. With sound, the Home app hears the entrance (tap its speaker icon), the door hears you while the microphone is on (needs Talk-back), and the panel's microphone stays open until the view closes (turning the microphone off doesn't close it)."
       },
       "recording": {
         "condition": { "functionBody": "return model.camera === true || model.camera === 'true';" },
