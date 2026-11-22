@@ -11,6 +11,7 @@ import tseslint from 'typescript-eslint';
 // ---- This repository ----
 const tsFiles = ['src/**/*.ts'];
 const ignores = ['dist/**'];
+const extra = [];
 // -------------------------
 
 export default tseslint.config(
@@ -48,4 +49,5 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+  ...extra,
 );
