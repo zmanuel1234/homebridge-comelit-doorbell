@@ -1,30 +1,49 @@
-# Weekly update PRs for npm packages and GitHub Actions; CI runs on each one.
+# Shared Dependabot setup for homebridge-comelit-doorbell, homebridge-ring-secure-video and
+# wyze-robovac-matterbridge: keep the three copies the same apart from the "This repository" notes.
+# Weekly update pull requests; CI runs on each one, and each still needs a review before merging.
+#
+# This repository: nothing special.
 version: 2
+
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
       day: saturday
+      time: '09:00'
+      timezone: America/New_York
+    cooldown:
+      default-days: 3            # skip releases younger than 3 days (yanked or compromised versions)
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
     ignore:
       # Node's types follow the oldest Node the plugin supports (engines), not the newest Node.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # typescript-eslint supports TypeScript below 6.1 only, and npm can't install a newer
+      # TypeScript next to it. Remove this once a typescript-eslint release supports TypeScript 7.
+      - dependency-name: typescript
+        versions: ['>=6.1.0']
     groups:
-      # Dev tools (TypeScript, ESLint, type packages) in one PR.
-      dev-dependencies:
+      # Minor and patch bumps of the development tools (TypeScript, ESLint, types) in one PR.
+      dev-tools:
         dependency-type: development
         update-types: [minor, patch]
-    commit-message:
-      prefix: deps
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: saturday
-    groups:
-      actions:
-        patterns: ['*']
+      time: '09:00'
+      timezone: America/New_York
+    cooldown:
+      default-days: 3
     commit-message:
       prefix: ci
+    groups:
+      # All action bumps in one PR; Dependabot moves each commit pin and its "# vX" comment together.
+      actions:
+        patterns: ['*']

@@ -1,5 +1,5 @@
 import { ChannelType, ViperMessageId } from './channels';
-import { IconaBridgeClient, ProtocolError } from './client';
+import { type IconaBridgeClient, ProtocolError } from './client';
 import type { DeviceConfig, Door } from './models';
 import type { JsonMessage } from './protocol';
 

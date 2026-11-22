@@ -11,9 +11,9 @@
  * intercom's speaker. The ffmpeg arguments follow homebridge-camera-ffmpeg.
  */
 import { PREBUFFER_MS, RingRecorder, spawnFfmpeg } from './recording';
-import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
-import { createSocket, Socket } from 'dgram';
-import { createWriteStream, existsSync, promises as fs, WriteStream } from 'fs';
+import { type ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import { createSocket, type Socket } from 'dgram';
+import { createWriteStream, existsSync, promises as fs, type WriteStream } from 'fs';
 import os from 'os';
 import path from 'path';
 import type {
@@ -712,7 +712,16 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   // ─── Streaming ─────────────────────────────────────────────────────────────
 
-  async prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback): Promise<void> {
+  // HAP calls these two and ignores what they return: they run the async work and log its errors.
+  prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback): void {
+    this.prepare(request, callback).catch((e) => this.log.error(`Doorbell camera: stream setup failed: ${(e as Error).message}`));
+  }
+
+  handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback): void {
+    this.streamRequest(request, callback).catch((e) => this.log.error(`Doorbell camera: stream request failed: ${(e as Error).message}`));
+  }
+
+  private async prepare(request: PrepareStreamRequest, callback: PrepareStreamCallback): Promise<void> {
     const ipv6 = request.addressVersion === 'ipv6';
     try {
       const hap = this.api.hap;
@@ -744,7 +753,7 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     }
   }
 
-  async handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback): Promise<void> {
+  private async streamRequest(request: StreamingRequest, callback: StreamRequestCallback): Promise<void> {
     if (request.type === 'start') {
       try {
         await this.startStream(request.sessionID, request);

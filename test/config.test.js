@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { callHandlerMode, resolveSettings, settingsWarnings } = require('../dist/config');
+const { resolveSettings, settingsWarnings } = require('../dist/config');
 
 test('defaults', () => {
   const s = resolveSettings({ platform: 'ComelitIntercom', host: 'h', token: 't' });

@@ -14,6 +14,7 @@ export enum ViperMessageId {
   UAUT = 2,
   UCFG = 3,
   SERVER_INFO = 20,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values -- PUSH and UAUT share id 2 on the wire
   PUSH = 2,
 }
 

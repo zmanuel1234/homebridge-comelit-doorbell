@@ -823,6 +823,8 @@ export class RingRecorder implements CameraRecordingDelegate {
         proc.kill('SIGKILL');
       }
     };
+    // Declared before `stop` can be called; assigned below.
+    // eslint-disable-next-line prefer-const
     let feeder: RingFeeder | undefined;
     this.streams.set(streamId, { stop });
     signal?.addEventListener('abort', stop);

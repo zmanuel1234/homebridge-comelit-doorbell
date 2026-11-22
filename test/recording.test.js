@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { EventEmitter } = require('events');
-const { spawnSync, spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 const hap = require('@homebridge/hap-nodejs');
 const { FlvWriter, Mp4Splitter, PREBUFFER_MS, RingFeeder, RingRecorder, RingSource, recordingArgs, spawnFfmpeg } = require('../dist/recording');
 const P = PREBUFFER_MS; // every recording starts with this much of its first picture held still
@@ -426,7 +426,8 @@ test('FlvWriter: an FLV header for video (and sound), and tags with 32-bit times
   w.audio(Buffer.alloc(8, 0xd5), 0x1234567);
   const [tag] = flvTags(out);
   assert.strictEqual(tag.ms, 0x1234567);
-  assert.strictEqual(new FlvWriter((b) => out.push(b), false) && out.at(-1)[4], 1);
+  new FlvWriter((b) => out.push(b), false);
+  assert.strictEqual(out.at(-1)[4], 1);
 });
 
 test('settings: recording follows calls even with answering off, and warns without the camera or rings', () => {

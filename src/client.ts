@@ -5,7 +5,7 @@
 import net from 'net';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
-import { Channel, createChannel } from './channels';
+import { type Channel, createChannel } from './channels';
 import {
   HEADER_SIZE,
   decodeHeader,
@@ -20,7 +20,7 @@ import {
   isCommand,
   isEnd,
   isJsonBody,
-  JsonMessage,
+  type JsonMessage,
   parseCommandResponse,
 } from './protocol';
 import { CONNECT_TIMEOUT_MS, DEAD_CONNECTION_TIMEOUT_MS, ICONA_BRIDGE_PORT, READ_TIMEOUT_MS } from './settings';
@@ -147,18 +147,22 @@ export class IconaBridgeClient extends EventEmitter {
     if (!lease) {
       return;
     }
-    this.leaseTimer = setTimeout(async () => {
-      if (lease.mode === 'inplace' && lease.reregister && Date.now() - this.connectedAt < lease.recycleMs) {
-        try {
-          await lease.reregister();
-          this.scheduleLease();
-          return;
-        } catch (e) {
-          this.log?.warn(`In-place re-register failed (${(e as Error).message}); reconnecting`);
-        }
-      }
-      this.plannedReconnect(lease, Date.now());
+    this.leaseTimer = setTimeout(() => {
+      this.leaseDue(lease).catch((e) => this.log?.warn(`Registration refresh failed: ${(e as Error).message}`));
     }, lease.intervalMs);
+  }
+
+  private async leaseDue(lease: LeaseOptions): Promise<void> {
+    if (lease.mode === 'inplace' && lease.reregister && Date.now() - this.connectedAt < lease.recycleMs) {
+      try {
+        await lease.reregister();
+        this.scheduleLease();
+        return;
+      } catch (e) {
+        this.log?.warn(`In-place re-register failed (${(e as Error).message}); reconnecting`);
+      }
+    }
+    this.plannedReconnect(lease, Date.now());
   }
 
   /** Reconnects for the lease, but not in the middle of a call: then it checks again later. */

@@ -1,6 +1,6 @@
 import type { Logging } from 'homebridge';
 import type { CallHandler } from './call';
-import { ChannelType, Channel } from './channels';
+import { ChannelType, type Channel } from './channels';
 import type { IconaBridgeClient } from './client';
 import { buildFrame, CAUSE_BUSY, Flag, logicalAddress, Opcode } from './ctp';
 import { ctppInitSequence } from './ctpp';
