@@ -7,6 +7,10 @@ updates:
       interval: weekly
       day: saturday
     open-pull-requests-limit: 5
+    ignore:
+      # Node's types follow the oldest Node the plugin supports (engines), not the newest Node.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       # Dev tools (TypeScript, ESLint, type packages) in one PR.
       dev-dependencies:
