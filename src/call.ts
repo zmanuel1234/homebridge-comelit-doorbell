@@ -34,7 +34,7 @@ import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
 import { ChannelType } from './channels';
 import type { IconaBridgeClient } from './client';
-import { buildFrame, CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
+import { buildFrame, type CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
 import { RECORDING_MAX_MS } from './settings';
 import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
 import type { Door, OpenResult } from './models';
@@ -378,7 +378,7 @@ export class CallHandler {
     if (frame.opcode === Opcode.RELEASE || frame.flags & Flag.FIN) {
       call.ended = true;
       this.callEnded(call);
-      call.media?.end('the intercom ended the call');
+      void call.media?.end('the intercom ended the call').catch(() => undefined);
       void call.preview?.stop(`the intercom ended the call${frame.body.length >= 3 && frame.opcode === Opcode.RELEASE ? ` (cause ${frame.body[2]})` : ''}`);
       return;
     }
@@ -456,7 +456,7 @@ export class CallHandler {
   async openWithLiveViewPaused<T>(open: () => Promise<T>): Promise<T | null> {
     // A view still being set up: wait for it, so the open isn't sent into its new call.
     await this.placing?.catch(() => undefined);
-    await Promise.all([...this.calls.values()].filter((c) => c.outbound).map((c) => c.mediaStarting?.catch(() => undefined)));
+    await Promise.all([...this.calls.values()].filter((c) => c.outbound).map((c) => c.mediaStarting?.catch(() => undefined) ?? Promise.resolve()));
     await this.soundSwitch?.settled();
     const session = [...this.calls.values()].filter((c) => c.outbound && !c.ended && c.media !== undefined).pop()?.media;
     if (!session) {
@@ -625,8 +625,8 @@ export class CallHandler {
     this.activeCall(); // drops ended and stale calls
     // Our connection id. The intercom's frames on it come with the top bit of the first byte
     // flipped, and that is how a call is stored (send() flips it back), as for its own calls.
-    let conn0 = 0;
-    let conn1 = 0;
+    let conn0: number;
+    let conn1: number;
     do {
       const id = randomBytes(2);
       conn0 = id[0] ^ 0x80;

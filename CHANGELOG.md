@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Development only: the same ESLint setup as the author's other plugins, checking for likely bugs (unhandled promises and similar) instead of formatting; it runs in CI and before publishing. TypeScript 6.0 (from 7.0) until typescript-eslint supports 7.
+- A failure in a few background tasks is now logged instead of left as an unhandled promise rejection: ending the media when the intercom hangs up, the registration refresh, and HomeKit's stream setup and stream requests. Nothing else changes.
+
 ## 2.5.0 (2026-11-22)
 
 ### Added

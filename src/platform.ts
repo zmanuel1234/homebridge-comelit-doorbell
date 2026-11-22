@@ -9,7 +9,7 @@ import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
-import { callHandlerMode, ComelitPlatformConfig, reconnectDelay, resolveSettings, Settings, settingsWarnings } from './config';
+import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings } from './config';
 import { getDeviceConfig } from './configReader';
 import { ctppInitSequence } from './ctpp';
 import { openDoor } from './door';
@@ -476,15 +476,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   private startKeepalive(config: DeviceConfig): void {
     this.stopKeepalive();
-    this.keepaliveTimer = setInterval(async () => {
+    this.keepaliveTimer = setInterval(() => {
       if (!this.client) {
         return;
       }
-      try {
-        await sendPushKeepalive(this.client, config, this.settings.registerPush);
-      } catch (e) {
-        this.log.warn(`Keepalive failed: ${(e as Error).message}`);
-      }
+      sendPushKeepalive(this.client, config, this.settings.registerPush)
+        .catch((e) => this.log.warn(`Keepalive failed: ${(e as Error).message}`));
     }, KEEPALIVE_INTERVAL_MS);
   }
 
@@ -536,45 +533,48 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.doctorPending = true;
     const delay = this.settings.doctorModeDelayMs;
     this.log.info(`${label}: opening '${door.name}' in ${delay / 1000} s`);
-    setTimeout(async () => {
-      // The switch that armed this open is still on (it can be turned off up to the open itself).
-      const armed = () => (doctor && this.doctorModeActive()) || (next && this.nextVisitorActive());
-      try {
-        if (!armed()) {
-          this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
-          return;
-        }
-        const call = this.callHandler;
-        if (!call?.ringingCall()) {
-          // No ring to open in (it ended, or only our own live view call is up): not opening.
-          this.log.info(`${label}: the call is over (answered elsewhere or hung up); not opening`);
-          return;
-        }
-        const started = Date.now();
-        // An actuator (only on a setup with no entrance door) gets its own command, never the
-        // entrance's open inside the call (#59).
-        const result = door.isActuator ? await this.openOnce(door) : await call.openInCall(door, true, armed);
-        if (!result && !armed()) {
-          // Turned off while the call was being answered: not opened.
-          this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
-          return;
-        }
-        if (result) {
-          this.log.info(`${label}: door '${door.name}' opened`);
-          [...this.lockAccessories.values()][0]?.showOpened();
-          void this.extraBuzzes(door, label, started);
-          if (next && this.nextVisitorActive()) {
-            this.nextVisitor?.used();
-          }
-        } else {
-          this.log.info(`${label}: no call to answer; not opening`);
-        }
-      } catch (e) {
-        this.log.warn(`${label}: open failed: ${(e as Error).message}`);
-      } finally {
-        this.doctorPending = false;
+    setTimeout(() => void this.openArmed(door, label, doctor, next), delay);
+  }
+
+  /** The delayed open of doctorOpen(). Catches its own errors. */
+  private async openArmed(door: Door, label: string, doctor: boolean, next: boolean): Promise<void> {
+    // The switch that armed this open is still on (it can be turned off up to the open itself).
+    const armed = () => (doctor && this.doctorModeActive()) || (next && this.nextVisitorActive());
+    try {
+      if (!armed()) {
+        this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
+        return;
       }
-    }, delay);
+      const call = this.callHandler;
+      if (!call?.ringingCall()) {
+        // No ring to open in (it ended, or only our own live view call is up): not opening.
+        this.log.info(`${label}: the call is over (answered elsewhere or hung up); not opening`);
+        return;
+      }
+      const started = Date.now();
+      // An actuator (only on a setup with no entrance door) gets its own command, never the
+      // entrance's open inside the call (#59).
+      const result = door.isActuator ? await this.openOnce(door) : await call.openInCall(door, true, armed);
+      if (!result && !armed()) {
+        // Turned off while the call was being answered: not opened.
+        this.log.info(`${label}: the switch was turned off before the door opened; not opening`);
+        return;
+      }
+      if (result) {
+        this.log.info(`${label}: door '${door.name}' opened`);
+        [...this.lockAccessories.values()][0]?.showOpened();
+        void this.extraBuzzes(door, label, started);
+        if (next && this.nextVisitorActive()) {
+          this.nextVisitor?.used();
+        }
+      } else {
+        this.log.info(`${label}: no call to answer; not opening`);
+      }
+    } catch (e) {
+      this.log.warn(`${label}: open failed: ${(e as Error).message}`);
+    } finally {
+      this.doctorPending = false;
+    }
   }
 
   /**
