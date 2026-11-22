@@ -59,7 +59,7 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 
 ## Requirements
 
-- Homebridge 2.0 (`2.0.0-beta.0` or later) and Node.js 22, 24 or 26
+- Homebridge 2.0 (`2.0.0-beta.0` or later) and Node.js 22 (22.19 or later), 24 or 26
 - The intercom on your local network, ideally with a fixed IP address
 - **A Comelit user of its own for Homebridge.** If Homebridge shares a user with a phone, the intercom delivers each call to only one of them.
 - For a HomeKit doorbell notification, one of:

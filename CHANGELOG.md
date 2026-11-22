@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Requires Node.js 22, 24 or 26** (dropped 18 and 20, which no longer get security updates; Homebridge 2.5 itself needs 22.12 or later). Check with `node -v` or on the Homebridge UI's status page before updating.
+- **Requires Node.js 22.19 or later, 24 or 26** (dropped 20, which no longer gets security updates; on Node 22, 22.19 is the minimum across the author's plugins). Check with `node -v` or on the Homebridge UI's status page before updating.
 - Development only: the same ESLint setup as the author's other plugins, checking for likely bugs (unhandled promises and similar) instead of formatting; it runs in CI and before publishing. TypeScript 6.0 (from 7.0) until typescript-eslint supports 7.
 - A failure in a few background tasks is now logged instead of left as an unhandled promise rejection: ending the media when the intercom hangs up, the registration refresh, and HomeKit's stream setup and stream requests. Nothing else changes.
 
