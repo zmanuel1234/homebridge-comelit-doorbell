@@ -470,7 +470,10 @@ test('camera: with recording, HomeKit gets a motion sensor and recording managem
 const encoders = spawnSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8' }).stdout ?? '';
 const ffprobeOk = spawnSync('ffprobe', ['-version']).status === 0;
 const ffmpegOk = encoders.includes('libx264') && ffprobeOk;
-test('recording with ffmpeg: fragments start with a keyframe and are no longer than 4 s, with sound in step', { skip: !ffmpegOk && 'no ffmpeg with libx264, or no ffprobe', timeout: 30_000 }, async () => {
+// Skipped without ffmpeg, except in CI, which sets REQUIRE_FFMPEG so a missing ffmpeg fails it.
+const ffmpegRequired = process.env.REQUIRE_FFMPEG === '1';
+test('recording with ffmpeg: fragments start with a keyframe and are no longer than 4 s, with sound in step', { skip: !ffmpegOk && !ffmpegRequired && 'no ffmpeg with libx264, or no ffprobe', timeout: 30_000 }, async () => {
+  assert.ok(ffmpegOk, 'REQUIRE_FFMPEG is set, but there is no ffmpeg with libx264, or no ffprobe');
   const seconds = 9;
   const h264 = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `testsrc=size=640x240:rate=16:duration=${seconds}`,
     '-c:v', 'libx264', '-g', '48', '-bsf:v', 'h264_mp4toannexb', '-f', 'h264', 'pipe:1'], { maxBuffer: 64 << 20 }).stdout;
@@ -527,8 +530,15 @@ test('recording with ffmpeg: fragments start with a keyframe and are no longer t
   assert.ok(Math.abs(video - P / 1000 - (seconds - 0.25)) < 1.2, `picture ${video} s for ${seconds} s of video and the prebuffer`);
   assert.ok(Math.abs(audio - video) < 0.5, `sound ${audio} s, picture ${video} s`);
   // Silent until the call's sound starts at 3 s, loud after.
-  const loudness = (at) => Number(/mean_volume: (-?[\d.]+) dB/.exec(spawnSync('ffmpeg', ['-hide_banner', '-ss', String(at), '-t', '0.5', '-i', 'pipe:0', '-map', '0:a', '-af', 'volumedetect', '-f', 'null', '-'],
-    { input: Buffer.concat(packets.map((x) => x.data)), encoding: 'utf8', maxBuffer: 16 << 20 }).stderr)[1]);
+  // -ss after -i: ffmpeg decodes from the start and drops what's before `at`. (Before -i it
+  // seeks, which on a pipe sometimes measured nothing: 2 failures in 10 runs.)
+  const loudness = (at) => {
+    const out = spawnSync('ffmpeg', ['-hide_banner', '-i', 'pipe:0', '-ss', String(at), '-t', '0.5', '-map', '0:a', '-af', 'volumedetect', '-f', 'null', '-'],
+      { input: Buffer.concat(packets.map((x) => x.data)), encoding: 'utf8', maxBuffer: 16 << 20 }).stderr;
+    const m = /mean_volume: (-?[\d.]+) dB/.exec(out);
+    assert.ok(m, `no sound measured at ${at} s: ${out.slice(-300)}`);
+    return Number(m[1]);
+  };
   assert.ok(loudness(P / 1000 + 1.5) < -60, `silent at 1.5 s: ${loudness(P / 1000 + 1.5)} dB`);
   assert.ok(loudness(P / 1000 + 4.5) > -30, `the sound at 4.5 s: ${loudness(P / 1000 + 4.5)} dB`);
 });
