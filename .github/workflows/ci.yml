@@ -19,7 +19,13 @@ jobs:
       - run: npm run check
       - run: npm run lint
       - run: npm run build
+      # The recording test needs a real ffmpeg (with libx264) and ffprobe; REQUIRE_FFMPEG makes
+      # it fail instead of skipping if they're missing.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - run: npm test
+        env:
+          REQUIRE_FFMPEG: '1'
       - run: node -e "JSON.parse(require('fs').readFileSync('config.schema.json','utf8'))"
       - run: npm pack --dry-run
       - name: Release tag check script works
