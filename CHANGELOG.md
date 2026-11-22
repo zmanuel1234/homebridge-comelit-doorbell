@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.5.0 (2026-11-22)
+
+### Added
+
+- **Doctor mode: turn off after** (`doctorModeMinutes`, with `doctorMode: switch`): the Doctor Mode switch turns itself off after this long, like Next Visitor. **2 hours by default**; `0` keeps the old behavior (on until you turn it off). The time limit survives a restart. A switch that was already on when you update gets its 2 hours from the restart.
+- **Contact sensors for notifications** (`doctorModeSensor`, `nextVisitorSensor`, off by default): the Doctor Mode or Next Visitor accessory gets a contact sensor that is Open while the switch is on and Closed while it's off. The Home app can notify about a sensor but not a switch, so turning on its notifications tells you when the mode turns on and off (by hand, by automation, by its time limit, or, for Next Visitor, once the visitor is let in). No dummy accessories needed. Turning the setting off removes the sensor.
+
+### Changed
+
+- **The Doctor Mode switch now turns itself off after 2 hours.** If you leave it on for longer (for example all day by an automation), set **Doctor mode: turn off after** to `0` or to more minutes. `doctorMode: always` is unchanged.
+
 ## 2.4.0 (2026-11-21)
 
 Everything new is off by default: with the default settings, 2.4.0 behaves like 2.3.3. The 2.4.0-beta sections below have the details and the door-test notes.

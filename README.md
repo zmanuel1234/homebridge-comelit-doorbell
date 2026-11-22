@@ -170,8 +170,11 @@ In JSON, numbers may also be written as plain text (`"subaddress": "3"`). A valu
 | Unlock allowed for (`ringWindowSeconds`) | `90` | Seconds after a ring during which HomeKit may unlock. A live view without a ring that shows the entrance counts like a ring: unlocking is allowed while it shows the live picture and for this many seconds after. While such a view is open on any device (an iPad left on the camera, say), Siri and automations can unlock too. `0` allows unlocking at any time. |
 | Doctor mode: open the door on every ring (`doctorMode`) | `off` | `off`, `always`, or `switch` (only while a HomeKit switch is on). See [doctor mode](#doctor-mode). |
 | Doctor mode and Next Visitor: open after (`doctorModeDelaySeconds`) | `2` | Seconds between the ring and opening (0–30). With **Record rings** on, 8 or more gives a clip of who comes in. Turning the switch off cancels the open until the door is actually opened (about 1 s after this delay; if the call was already answered for the open, it is then hung up, unless a live view is showing it). |
+| Doctor mode: turn off after (`doctorModeMinutes`) | `120` | With `switch`: the Doctor Mode switch turns itself off after this long (0–1440 minutes; `0`: never). |
+| Doctor mode: add a contact sensor (`doctorModeSensor`) | `false` | With `switch`: a contact sensor that is Open while doctor mode is on, for Home app notifications. |
 | Next Visitor switch (`nextVisitorSwitch`) | `false` | Adds a switch that lets the next visitor in, then turns itself off. See [next visitor](#next-visitor). |
 | Next Visitor: turn off after (`nextVisitorMinutes`) | `120` | If nobody rings, the switch turns itself off after this long (1–1440 minutes). |
+| Next Visitor: add a contact sensor (`nextVisitorSensor`) | `false` | A contact sensor that is Open while the Next Visitor switch is on, for Home app notifications. |
 | Buzzes per unlock (`openRepeat`) | `1` | How many times each unlock sends the door release (1–5), for an entrance behind two doors: the first buzz opens the street door, the next ones the inner door while you walk to it. Applies to every unlock from HomeKit (the lock tile, the doorbell notification, Siri, the Apple Watch) and to doctor mode and Next Visitor. The lock shows Unlocked until the last buzz. If the first buzz is refused, no more are sent; a later one that fails is logged and the rest still follow. |
 | Time from one buzz to the next (`openRepeatSeconds`) | `6` | Seconds from the start of one buzz to the start of the next (1–15). Include the buzz itself, about 3 s on many installations: 6 s gives a 3 s buzz and a 3 s break. |
 
@@ -238,7 +241,9 @@ Every message of the call is logged with the prefix `call:` at debug level: turn
 Like the door of a doctor's office: when someone rings, the plugin answers the call and opens the first door by itself, after **Doctor mode: open after** seconds (2 by default). **Anyone who rings gets in**, so use it only while you expect visitors.
 
 - **Always on** (`"doctorMode": "always"`): every ring opens the door until you change the setting. The log warns about it at startup.
-- **With a HomeKit switch** (`"doctorMode": "switch"`): adds a **Doctor Mode** switch. Every ring opens the door only while it is on, so you can turn it on by hand or with a HomeKit automation (for example during opening hours) and off again. It starts off and keeps its state across restarts.
+- **With a HomeKit switch** (`"doctorMode": "switch"`): adds a **Doctor Mode** switch. Every ring opens the door only while it is on, so you can turn it on by hand or with a HomeKit automation (for example during opening hours) and off again. It turns itself off after **Doctor mode: turn off after** minutes (2 hours by default; `0` keeps it on until you turn it off). It starts off and keeps its state and time limit across restarts.
+
+**Notifications.** The Home app can't notify you about a switch, but it can about a sensor. Turn on **Doctor mode: add a contact sensor** (`doctorModeSensor`): the Doctor Mode accessory gets a contact sensor that is **Open** while doctor mode is on and **Closed** while it's off. In the Home app, open the sensor's settings and turn on **Status and Notifications**. You then get a notification when doctor mode turns on, and when it turns off, including by its time limit. No dummy accessories needed. (The Home app may show the switch and the sensor as one tile: **Show as Separate Tiles** splits them.)
 
 How it works: during an unanswered ring the intercom refuses door opens (*busy*), so the plugin answers the call, opens the door inside it and hangs up, as the Comelit app does when you answer and open. The phones should stop ringing when it answers (not yet observed). If someone answers on a phone first, it doesn't open. It works with any **Answer the ring** setting, including `off`, and needs **Listen for rings**. The HomeKit doorbell notification and the ring sensor still fire, and the lock shows Unlocked for a moment. Turning the switch off during the seconds before the open cancels the open. Log lines start with `Doctor mode:`.
 
@@ -251,6 +256,7 @@ For one expected visitor (a delivery, a cleaner, a guest), turn on the **Next Vi
 - **If nobody rings**, it turns itself off after **Next Visitor: turn off after** minutes (2 hours by default).
 - **If the open doesn't go through** (the intercom isn't reachable, or someone answered on a phone first), the switch **stays on** for the next ring.
 - With **doctor mode** also on, a ring opens the door once, and the Next Visitor switch counts as used.
+- **Notifications:** **Next Visitor: add a contact sensor** (`nextVisitorSensor`) adds a contact sensor that is Open while the switch is on and Closed once it turns off (the visitor was let in, or nobody rang in time). Turn on its notifications in the Home app, as for doctor mode.
 - It keeps its state and its time limit across restarts. Log lines start with `Next visitor` (`Doctor mode and Next visitor` with both on).
 
 ### Doorbell camera

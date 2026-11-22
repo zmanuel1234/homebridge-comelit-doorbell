@@ -18,7 +18,7 @@ function fakeApi() {
     constructor(name, uuid) { this.displayName = name; this.UUID = uuid; this.context = {}; this.s = { info: new Svc() }; }
     getService(t) { return this.s[t]; }
     addService(t) { return (this.s[t] = new Svc()); }
-    removeService() {}
+    removeService(svc) { for (const k of Object.keys(this.s)) if (this.s[k] === svc) delete this.s[k]; }
   }
   class HapStatusError extends Error { constructor(status) { super(String(status)); this.hapStatus = status; } }
   const registered = new Set();
@@ -26,8 +26,8 @@ function fakeApi() {
     registered,
     duplicates: 0,
     hap: {
-      Service: { AccessoryInformation: 'info', LockMechanism: 'lock', MotionSensor: 'motion', Doorbell: 'db', Speaker: 'sp', Switch: 'sw' },
-      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n', On: 'on' },
+      Service: { AccessoryInformation: 'info', LockMechanism: 'lock', MotionSensor: 'motion', Doorbell: 'db', Speaker: 'sp', Switch: 'sw', ContactSensor: 'cs' },
+      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n', On: 'on', ContactSensorState: Object.assign('css', { CONTACT_DETECTED: 0, CONTACT_NOT_DETECTED: 1 }) },
       uuid: { generate: (s) => `uuid:${s}` },
       HapStatusError,
       HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412, SERVICE_COMMUNICATION_FAILURE: -70402 },
@@ -652,4 +652,116 @@ test('unlock: refused outside a ring and a live view (the message says so), allo
   showing = true;
   assert.doesNotThrow(() => target.set(0));
   assert.strictEqual(opened, 1);
+});
+
+// 2.5.0: doctor mode's time limit, and contact sensors for doctor mode and Next Visitor.
+
+test('doctor mode switch: turns itself off at its time limit, also across a restart; 0 means never', async () => {
+  const { DoctorModeSwitch } = require('../dist/accessories/doctorModeSwitch');
+  const { api, p } = platform({ doctorMode: 'switch' });
+  const acc = new api.platformAccessory('Doctor', 'uuid:d');
+  const sw = new DoctorModeSwitch(p, acc, 50);
+  sw.service.getCharacteristic('on').set(true);
+  assert.strictEqual(sw.on, true);
+  assert.ok(acc.context.until > Date.now(), 'time limit kept');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.strictEqual(sw.on, false, 'time limit');
+  assert.strictEqual(sw.service.getCharacteristic('on').value, false, 'HomeKit told');
+  // restart while on, limit not yet reached: stays on until it
+  acc.context.on = true;
+  acc.context.until = Date.now() + 60;
+  const after = new DoctorModeSwitch(p, acc, 50);
+  assert.strictEqual(after.on, true);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.strictEqual(after.on, false);
+  // restart after the limit passed: off at once
+  acc.context.on = true;
+  acc.context.until = Date.now() - 1;
+  assert.strictEqual(new DoctorModeSwitch(p, acc, 50).on, false);
+  // a limit stored with a longer setting: never more than the configured limit
+  acc.context.on = true;
+  acc.context.until = Date.now() + 60_000;
+  const capped = new DoctorModeSwitch(p, acc, 50);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.strictEqual(capped.on, false, 'capped at the current limit');
+  // 0: no time limit
+  const never = new DoctorModeSwitch(p, acc, 0);
+  never.service.getCharacteristic('on').set(true);
+  assert.strictEqual(acc.context.until, undefined);
+  await new Promise((r) => setTimeout(r, 80));
+  assert.strictEqual(never.on, true, 'stays on');
+  never.dispose();
+});
+
+test('doctor mode switch: on from before the update (no time limit stored) gets one starting now', async () => {
+  const { DoctorModeSwitch } = require('../dist/accessories/doctorModeSwitch');
+  const { api, p } = platform({ doctorMode: 'switch' });
+  const acc = new api.platformAccessory('Doctor', 'uuid:d');
+  acc.context.on = true; // 2.4.0 kept only this
+  const sw = new DoctorModeSwitch(p, acc, 50);
+  assert.strictEqual(sw.on, true, 'not turned off at once');
+  assert.ok(acc.context.until > Date.now());
+  await new Promise((r) => setTimeout(r, 100));
+  assert.strictEqual(sw.on, false);
+  // a limit stored earlier, now set to 0: stays on, the stored limit dropped
+  acc.context.on = true;
+  acc.context.until = Date.now() - 1;
+  const zero = new DoctorModeSwitch(p, acc, 0);
+  assert.strictEqual(zero.on, true);
+  assert.strictEqual(acc.context.until, undefined);
+});
+
+test('doctor mode switch: 2 hours by default, from the settings', () => {
+  const { p } = doctor({ doctorMode: 'switch' });
+  p.doctorSwitch.service.getCharacteristic('on').set(true);
+  const left = p.doctorSwitch.accessory.context.until - Date.now();
+  assert.ok(left > 119 * 60_000 && left <= 120 * 60_000);
+  p.doctorSwitch.dispose();
+});
+
+test('contact sensors: only when asked for; Open while the switch is on, Closed while off', async () => {
+  const none = doctor({ doctorMode: 'switch', nextVisitorSwitch: true });
+  assert.strictEqual(none.p.doctorSwitch.accessory.getService('cs'), undefined);
+  assert.strictEqual(none.p.nextVisitor.accessory.getService('cs'), undefined);
+
+  const { p, ring, opened } = doctor({ doctorMode: 'switch', doctorModeSensor: true, nextVisitorSwitch: true, nextVisitorSensor: true });
+  const dSensor = p.doctorSwitch.accessory.getService('cs').getCharacteristic(p.Characteristic.ContactSensorState);
+  const nSensor = p.nextVisitor.accessory.getService('cs').getCharacteristic(p.Characteristic.ContactSensorState);
+  assert.strictEqual(dSensor.get(), 0, 'off: Closed');
+  assert.strictEqual(dSensor.value, 0);
+  p.doctorSwitch.service.getCharacteristic('on').set(true);
+  assert.strictEqual(dSensor.get(), 1, 'on: Open');
+  assert.strictEqual(dSensor.value, 1, 'HomeKit told (notification)');
+  p.doctorSwitch.service.getCharacteristic('on').set(false);
+  assert.strictEqual(dSensor.value, 0);
+
+  nextOn(p).set(true);
+  assert.strictEqual(nSensor.value, 1);
+  await ring();
+  assert.strictEqual(opened.length, 1);
+  assert.strictEqual(nSensor.value, 0, 'used: Closed');
+});
+
+test('contact sensors: the sensor follows the time limit, and is removed when the setting is turned off', async () => {
+  const { DoctorModeSwitch } = require('../dist/accessories/doctorModeSwitch');
+  const { api, p } = platform({ doctorMode: 'switch' });
+  const acc = new api.platformAccessory('Doctor', 'uuid:d');
+  const sw = new DoctorModeSwitch(p, acc, 50, true);
+  const sensor = acc.getService('cs').getCharacteristic(p.Characteristic.ContactSensorState);
+  sw.service.getCharacteristic('on').set(true);
+  assert.strictEqual(sensor.value, 1);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.strictEqual(sensor.value, 0, 'time limit: Closed');
+  // restored from the cache with the setting off: the sensor goes
+  new DoctorModeSwitch(p, acc, 50, false);
+  assert.strictEqual(acc.getService('cs'), undefined);
+});
+
+test('contact sensors: turning the setting on or off rebuilds the accessories on the next connect', () => {
+  const { p } = doctor({ doctorMode: 'switch' });
+  const before = p.doctorSwitch;
+  p.settings.doctorModeSensor = true;
+  p.discoverAccessories(deviceConfig);
+  assert.notStrictEqual(p.doctorSwitch, before);
+  assert.ok(p.doctorSwitch.accessory.getService('cs'));
 });
