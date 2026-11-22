@@ -148,6 +148,24 @@ test('Next Visitor settings: defaults, text, limits (2.1.1-beta.2)', () => {
   assert.ok(settingsWarnings(resolveSettings({ nextVisitorSwitch: true, enableNotifications: false })).some((w) => /Next Visitor switch needs/.test(w)));
 });
 
+test('doctor mode time limit and sensors: defaults, 0, limits, warnings (2.5.0)', () => {
+  const d = resolveSettings({});
+  assert.strictEqual(d.doctorModeMs, 120 * 60_000);
+  assert.strictEqual(d.doctorModeSensor, false);
+  assert.strictEqual(d.nextVisitorSensor, false);
+  const s = resolveSettings({ doctorMode: 'switch', doctorModeMinutes: '0', doctorModeSensor: 'true', nextVisitorSwitch: true, nextVisitorSensor: true });
+  assert.strictEqual(s.doctorModeMs, 0, '0: never');
+  assert.strictEqual(s.doctorModeSensor, true);
+  assert.strictEqual(s.nextVisitorSensor, true);
+  assert.deepStrictEqual(settingsWarnings(s).filter((w) => /sensor/i.test(w)), []);
+  const bad = resolveSettings({ doctorModeMinutes: 2000 });
+  assert.strictEqual(bad.doctorModeMs, 120 * 60_000);
+  assert.strictEqual(bad.invalid.length, 1);
+  const w = settingsWarnings(resolveSettings({ doctorMode: 'always', doctorModeSensor: true, nextVisitorSensor: true }));
+  assert.ok(w.some((x) => /Doctor Mode sensor .* needs doctorMode 'switch'/.test(x)));
+  assert.ok(w.some((x) => /Next Visitor sensor .* needs the Next Visitor switch/.test(x)));
+});
+
 test('calls are followed (handshake) for doctor mode or the Next Visitor switch with answering off (review)', () => {
   const { callHandlerMode } = require('../dist/config');
   assert.strictEqual(callHandlerMode(resolveSettings({})), 'off');

@@ -24,8 +24,11 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   answerMode?: string;
   doctorMode?: string;
   doctorModeDelaySeconds?: number | string;
+  doctorModeMinutes?: number | string;
+  doctorModeSensor?: boolean | string;
   nextVisitorSwitch?: boolean | string;
   nextVisitorMinutes?: number | string;
+  nextVisitorSensor?: boolean | string;
   openRepeat?: number | string;
   openRepeatSeconds?: number | string;
   camera?: boolean;
@@ -70,10 +73,16 @@ export interface Settings {
   /** Open the door by itself on every ring: never, always, or while a HomeKit switch is on. */
   doctorMode: DoctorMode;
   doctorModeDelayMs: number;
+  /** The Doctor Mode switch turns itself off after this long; 0: never. */
+  doctorModeMs: number;
+  /** A contact sensor that follows the Doctor Mode switch (Open while on). */
+  doctorModeSensor: boolean;
   /** Show the Next Visitor switch: the next ring opens the door, then it turns itself off. */
   nextVisitorSwitch: boolean;
   /** The Next Visitor switch turns itself off after this long if nobody rings. */
   nextVisitorMs: number;
+  /** A contact sensor that follows the Next Visitor switch (Open while on). */
+  nextVisitorSensor: boolean;
   /**
    * Buzzes per unlock: the door release is sent this many times, for an entrance behind two
    * doors (the first buzz opens the street door, the next ones the inner door).
@@ -227,8 +236,11 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     answerMode: choice('answerMode', ['off', 'handshake', 'answer-on-open', 'answer-on-view'] as const, 'off'),
     doctorMode: choice('doctorMode', ['off', 'switch', 'always'] as const, 'off'),
     doctorModeDelayMs: num('doctorModeDelaySeconds', 2, (n) => n >= 0 && n <= 30) * 1000,
+    doctorModeMs: num('doctorModeMinutes', 120, (n) => n >= 0 && n <= 1440) * 60_000,
+    doctorModeSensor: bool('doctorModeSensor', false),
     nextVisitorSwitch: bool('nextVisitorSwitch', false),
     nextVisitorMs: num('nextVisitorMinutes', 120, (n) => n >= 1 && n <= 1440) * 60_000,
+    nextVisitorSensor: bool('nextVisitorSensor', false),
     openRepeat: num('openRepeat', 1, (n) => Number.isInteger(n) && n >= 1 && n <= 5),
     openRepeatMs: num('openRepeatSeconds', 6, (n) => n >= 1 && n <= 15) * 1000,
     camera: bool('camera', false),
@@ -286,6 +298,12 @@ export function settingsWarnings(s: Settings): string[] {
   }
   if (s.recording && s.camera && !s.enableNotifications) {
     w.push("Recording (HomeKit Secure Video) needs 'Listen for rings' (enableNotifications); without rings nothing is recorded.");
+  }
+  if (s.doctorModeSensor && s.doctorMode !== 'switch') {
+    w.push("The Doctor Mode sensor (doctorModeSensor) needs doctorMode 'switch'; it is not added.");
+  }
+  if (s.nextVisitorSensor && !s.nextVisitorSwitch) {
+    w.push('The Next Visitor sensor (nextVisitorSensor) needs the Next Visitor switch (nextVisitorSwitch); it is not added.');
   }
   if (s.nextVisitorSwitch && !s.enableNotifications) {
     w.push("The Next Visitor switch needs 'Listen for rings' (enableNotifications); without rings it never opens.");

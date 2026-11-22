@@ -660,7 +660,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     // Sorted, so the same doors and cameras in another order (as restored from the cache) match.
     const doors = [...config.doors].sort((a, b) => a.index - b.index);
     const cameras = [...config.cameras].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode, this.settings.nextVisitorSwitch]);
+    const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode, this.settings.nextVisitorSwitch,
+      this.settings.doctorModeSensor, this.settings.nextVisitorSensor]);
     if (from === this.builtFrom) {
       return;
     }
@@ -672,17 +673,18 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     const bell = this.accessoryFor('doorbell', this.displayName, keep);
     this.doorbellAccessory = new DoorbellAccessory(this, bell);
+    // A rebuild replaces the switch objects: the old ones' time limits must not run on.
+    this.doctorSwitch?.dispose();
+    this.nextVisitor?.dispose();
     if (this.settings.doctorMode === 'switch') {
       const sw = this.accessoryFor('doctor-mode', `${this.displayName} Doctor Mode`, keep);
-      this.doctorSwitch = new DoctorModeSwitch(this, sw);
+      this.doctorSwitch = new DoctorModeSwitch(this, sw, this.settings.doctorModeMs, this.settings.doctorModeSensor);
     } else {
       this.doctorSwitch = undefined;
     }
-    // A rebuild replaces the switch object: the old one's time limit must not run on.
-    this.nextVisitor?.dispose();
     if (this.settings.nextVisitorSwitch) {
       const sw = this.accessoryFor('next-visitor', `${this.displayName} Next Visitor`, keep);
-      this.nextVisitor = new NextVisitorSwitch(this, sw, this.settings.nextVisitorMs);
+      this.nextVisitor = new NextVisitorSwitch(this, sw, this.settings.nextVisitorMs, this.settings.nextVisitorSensor);
     } else {
       this.nextVisitor = undefined;
     }

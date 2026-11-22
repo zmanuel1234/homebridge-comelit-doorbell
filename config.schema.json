@@ -128,6 +128,22 @@
         "maximum": 30,
         "description": "Wait this long after the ring before opening. With Record rings on, 8 or more gives a clip of who comes in (the intercom's fresh picture comes about 4-5.6 s after the ring)."
       },
+      "doctorModeMinutes": {
+        "condition": { "functionBody": "return model.doctorMode === 'switch';" },
+        "title": "Doctor mode: turn off after (minutes)",
+        "type": "number",
+        "default": 120,
+        "minimum": 0,
+        "maximum": 1440,
+        "description": "The Doctor Mode switch turns itself off after this long. 0: it stays on until you turn it off."
+      },
+      "doctorModeSensor": {
+        "condition": { "functionBody": "return model.doctorMode === 'switch';" },
+        "title": "Doctor mode: add a contact sensor",
+        "type": "boolean",
+        "default": false,
+        "description": "Adds a contact sensor to the Doctor Mode switch: Open while doctor mode is on, Closed while off. Turn on its notifications in the Home app to be told when doctor mode turns on or off."
+      },
       "nextVisitorSwitch": {
         "title": "Next Visitor switch",
         "type": "boolean",
@@ -159,6 +175,13 @@
         "minimum": 1,
         "maximum": 1440,
         "description": "If nobody rings, the switch turns itself off after this long."
+      },
+      "nextVisitorSensor": {
+        "condition": { "functionBody": "return model.nextVisitorSwitch === true || model.nextVisitorSwitch === 'true';" },
+        "title": "Next Visitor: add a contact sensor",
+        "type": "boolean",
+        "default": false,
+        "description": "Adds a contact sensor to the Next Visitor switch: Open while it is on, Closed once it turns off (the visitor was let in, or its time limit passed). Turn on its notifications in the Home app."
       },
       "registerPush": {
         "title": "Register as a push device (original behavior)",
@@ -376,8 +399,11 @@
         "ringWindowSeconds",
         "doctorMode",
         "doctorModeDelaySeconds",
+        "doctorModeMinutes",
+        "doctorModeSensor",
         "nextVisitorSwitch",
         "nextVisitorMinutes",
+        "nextVisitorSensor",
         "openRepeat",
         "openRepeatSeconds"
       ]
