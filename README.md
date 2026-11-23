@@ -93,7 +93,13 @@ npm install -g homebridge-comelit-doorbell
 
 ### 3. Configure
 
-Fill in **Intercom IP address**, **User token** and **User row number** in the plugin's settings. The equivalent JSON:
+Open the plugin's settings. The **Setup assistant** at the top helps:
+
+- **Find my intercom** searches your network and fills in the intercom's IP address. If nothing answers (for example, Homebridge is on another network or VLAN), enter the IP address by hand.
+- **Test connection** checks the settings step by step: reaching the intercom, the token, its doors and entrance panel, the user row (it offers the right one if yours is wrong; left empty, the plugin reads it from the intercom) and, with the camera on, ffmpeg. It only reads: nothing on the intercom changes. You can test before saving.
+- **Copy diagnostics** copies a report to paste into an issue. The token, passwords, serial and MAC addresses are removed; door and user names stay, so check them first.
+
+Fill in **Intercom IP address**, **User token** and **User row number**, test, then save. The equivalent JSON:
 
 ```json
 {

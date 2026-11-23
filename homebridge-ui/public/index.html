@@ -1,0 +1,137 @@
+<div class="card mb-3">
+  <div class="card-body">
+    <h5 class="card-title mb-1">Setup assistant</h5>
+    <p class="card-text small text-muted mb-2">
+      Finds your intercom, tests the settings below step by step and shows the doors it offers. It only reads:
+      nothing on the intercom is changed.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-primary btn-sm" id="find">Find my intercom</button>
+      <button type="button" class="btn btn-primary btn-sm" id="test">Test connection</button>
+      <button type="button" class="btn btn-secondary btn-sm d-none" id="copy">Copy diagnostics</button>
+    </div>
+    <div id="found" class="mt-3"></div>
+    <div id="result" class="mt-3"></div>
+    <div id="diag" class="mt-2 d-none">
+      <p class="small text-muted mb-1">
+        Diagnostics for an issue report. The token, passwords, serial and MAC addresses are removed; door and
+        user names stay, so check them before posting.
+      </p>
+      <textarea id="diagText" class="form-control form-control-sm font-monospace" rows="8" readonly></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    homebridge.showSchemaForm();
+
+    /** The first ComelitIntercom block as the form has it now (maybe unsaved). */
+    async function current() {
+      const blocks = await homebridge.getPluginConfig();
+      return { blocks, config: blocks[0] ?? { platform: 'ComelitIntercom', name: 'Comelit Intercom' } };
+    }
+
+    /** Changes the form's settings; the user still saves them. */
+    async function change(patch, message) {
+      try {
+        const { blocks, config } = await current();
+        blocks[0] = { ...config, ...patch };
+        await homebridge.updatePluginConfig(blocks);
+        homebridge.toast.success(`${message} Save to keep it.`, 'Comelit');
+        return true;
+      } catch (e) {
+        homebridge.toast.error(e.message ?? String(e), "Couldn't change the settings");
+        return false;
+      }
+    }
+
+    $('find').addEventListener('click', async () => {
+      $('found').innerHTML = '';
+      homebridge.showSpinner();
+      try {
+        const devices = await homebridge.request('/discover');
+        const { config } = await current();
+        if (!devices.length) {
+          $('found').innerHTML =
+            '<div class="alert alert-warning small mb-0">No Comelit device answered. It may be on another network ' +
+            '(VLAN) than Homebridge, or block the search: enter its IP address by hand (on its web page, or in your router).</div>';
+          return;
+        }
+        $('found').innerHTML =
+          '<div class="small fw-bold mb-1">Found on your network:</div>' +
+          devices
+            .map((d, i) => {
+              const using = config.host === d.host;
+              const what = [d.model && `model ${esc(d.model)}`, d.firmware && `firmware ${esc(d.firmware)}`, d.address && `ViP ${esc(d.address)}`]
+                .filter(Boolean)
+                .join(', ');
+              return (
+                '<div class="d-flex align-items-center gap-2 small mb-1">' +
+                `<span><b>${esc(d.host)}</b> ${what ? `(${what})` : ''}</span>` +
+                (using
+                  ? '<span class="badge bg-success">in use</span>'
+                  : `<button type="button" class="btn btn-outline-primary btn-sm py-0" data-host="${i}">Use this</button>`) +
+                '</div>'
+              );
+            })
+            .join('');
+        for (const b of $('found').querySelectorAll('button[data-host]')) {
+          b.addEventListener('click', () => change({ host: devices[Number(b.dataset.host)].host }, 'Intercom IP address set.').then((ok) => ok && b.replaceWith(Object.assign(document.createElement('span'), { className: 'badge bg-success', textContent: 'in use' }))));
+        }
+      } catch (e) {
+        homebridge.toast.error(e.message ?? String(e), 'Search failed');
+      } finally {
+        homebridge.hideSpinner();
+      }
+    });
+
+    $('test').addEventListener('click', async () => {
+      $('result').innerHTML = '';
+      homebridge.showSpinner();
+      try {
+        const { config } = await current();
+        const r = await homebridge.request('/test', config);
+        const rows = r.steps
+          .map(
+            (s) =>
+              `<li class="list-group-item small d-flex gap-2"><span>${s.ok ? '✅' : '❌'}</span>` +
+              `<span><b>${esc(s.name)}</b>: ${esc(s.detail)}</span></li>`,
+          )
+          .join('');
+        const allOk = r.steps.every((s) => s.ok);
+        let fix = '';
+        const rowStep = r.steps.find((s) => s.name.startsWith('User row'));
+        if (r.subaddress !== undefined && rowStep && !rowStep.ok) {
+          fix = `<button type="button" class="btn btn-outline-primary btn-sm mt-2" id="useRow">Use user row ${Number(r.subaddress)}</button>`;
+        }
+        $('result').innerHTML =
+          `<div class="small fw-bold mb-1">${allOk ? 'Everything works.' : 'Something needs attention:'}</div>` +
+          `<ul class="list-group">${rows}</ul>${fix}`;
+        $('useRow')?.addEventListener('click', () => change({ subaddress: r.subaddress }, `User row set to ${r.subaddress}.`).then((ok) => ok && $('useRow').remove()));
+        $('diagText').value = r.diagnostics;
+        $('diag').classList.remove('d-none');
+        $('copy').classList.remove('d-none');
+      } catch (e) {
+        homebridge.toast.error(e.message ?? String(e), 'Test failed');
+      } finally {
+        homebridge.hideSpinner();
+      }
+    });
+
+    $('copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText($('diagText').value);
+        homebridge.toast.success('Diagnostics copied.', 'Comelit');
+      } catch {
+        // The settings page may not allow the clipboard: select the text to copy by hand.
+        $('diagText').focus();
+        $('diagText').select();
+        homebridge.toast.info('Press Ctrl+C (or ⌘C) to copy the selected text.', 'Comelit');
+      }
+    });
+  })();
+</script>

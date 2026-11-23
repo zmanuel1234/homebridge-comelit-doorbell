@@ -1,5 +1,6 @@
 {
   "pluginAlias": "ComelitIntercom",
+  "customUi": true,
   "pluginVersion": ">=2.0.0-beta.0",
   "pluginType": "platform",
   "singular": false,
