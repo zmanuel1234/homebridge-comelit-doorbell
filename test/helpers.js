@@ -32,4 +32,48 @@ function quietLog() {
   return { lines, info: add('I'), warn: add('W'), error: add('E'), debug: add('D') };
 }
 
-module.exports = { hex, frames, fakeClient, quietLog };
+/** A fake Homebridge API: services and characteristics as plain objects, accessories as registered. */
+function fakeApi() {
+  const mkChar = () => {
+    const c = { onGet(f) { c.get = f; return c; }, onSet(f) { c.set = f; return c; } };
+    return c;
+  };
+  class Svc {
+    constructor() { this.chars = new Map(); }
+    getCharacteristic(k) { if (!this.chars.has(k)) this.chars.set(k, mkChar()); return this.chars.get(k); }
+    setCharacteristic() { return this; }
+    updateCharacteristic(k, v) { this.getCharacteristic(k).value = v; return this; }
+  }
+  class Acc {
+    constructor(name, uuid) { this.displayName = name; this.UUID = uuid; this.context = {}; this.s = { info: new Svc() }; }
+    getService(t) { return this.s[t]; }
+    addService(t) { return (this.s[t] = new Svc()); }
+    removeService(svc) { for (const k of Object.keys(this.s)) if (this.s[k] === svc) delete this.s[k]; }
+  }
+  class HapStatusError extends Error { constructor(status) { super(String(status)); this.hapStatus = status; } }
+  const registered = new Set();
+  const api = {
+    registered,
+    duplicates: 0,
+    hap: {
+      Service: { AccessoryInformation: 'info', LockMechanism: 'lock', MotionSensor: 'motion', Doorbell: 'db', Speaker: 'sp', Switch: 'sw', ContactSensor: 'cs' },
+      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n', On: 'on', ContactSensorState: Object.assign('css', { CONTACT_DETECTED: 0, CONTACT_NOT_DETECTED: 1 }) },
+      uuid: { generate: (s) => `uuid:${s}` },
+      HapStatusError,
+      HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412, SERVICE_COMMUNICATION_FAILURE: -70402 },
+    },
+    on() {},
+    platformAccessory: Acc,
+    registerPlatformAccessories(_p, _n, accs) {
+      for (const a of accs) {
+        if (registered.has(a.UUID)) { api.duplicates++; throw new Error('Cannot add a bridged Accessory with the same UUID'); }
+        registered.add(a.UUID);
+      }
+    },
+    updatePlatformAccessories() {},
+    unregisterPlatformAccessories(_p, _n, accs) { for (const a of accs) registered.delete(a.UUID); },
+  };
+  return api;
+}
+
+module.exports = { hex, frames, fakeClient, quietLog, fakeApi };
