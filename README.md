@@ -1,3 +1,7 @@
+<p align="center">
+  <img alt="Comelit Doorbell" src="https://raw.githubusercontent.com/zmanuel1234/homebridge-comelit-doorbell/main/branding/homebridge-comelit-doorbell.png" width="100">
+</p>
+
 # homebridge-comelit-doorbell
 
 [![npm](https://img.shields.io/npm/v/homebridge-comelit-doorbell)](https://www.npmjs.com/package/homebridge-comelit-doorbell)
