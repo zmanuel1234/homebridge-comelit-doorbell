@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.3 (2026-11-23)
+
+No new settings, and nothing changes in what the plugin does.
+
+### Changed
+
+- The plugin has a donate link (Buy Me a Coffee): the Homebridge UI shows it as a heart button on the plugin's card, and npm lists it on the package page.
+- The README starts with the plugin's icon.
+
 ## 2.6.2 (2026-11-23)
 
 No new settings, and nothing changes in what the plugin does.
