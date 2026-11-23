@@ -2,3 +2,12 @@ node_modules/
 dist/
 *.tgz
 .DS_Store
+
+# Shared by the author's five plugins: never commit secrets, tokens or keys.
+.env
+.env.*
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
