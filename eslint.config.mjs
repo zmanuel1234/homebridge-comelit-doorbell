@@ -12,7 +12,20 @@ import tseslint from 'typescript-eslint';
 // ---- This repository ----
 const tsFiles = ['src/**/*.ts'];
 const ignores = ['dist/**'];
-const extra = [];
+const extra = [
+  // No `any`: values from the intercom, HAP and the config get a type (or `unknown`, checked).
+  {
+    files: tsFiles,
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+    },
+  },
+];
 // -------------------------
 
 export default tseslint.config(
