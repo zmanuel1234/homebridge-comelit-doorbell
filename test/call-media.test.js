@@ -471,3 +471,24 @@ test('call log (debug): sound packets that never arrived are counted by sequence
   const line = lines.find((l) => l.startsWith('call: sound from the intercom'));
   assert.match(line, /3 packets, 7 never arrived \(0\.1 s\), longest pause 0\.1 s/);
 });
+
+test('a video request that can\'t be sent is in the debug log, and the view goes on (2.6.0)', async () => {
+  const log = quietLog();
+  let failing = false;
+  let call;
+  call = new CallHandler('answer-on-view', 'SB0000023', 'SB000002', async (f) => {
+    if (failing) throw new Error('socket closed');
+    const fr = parseFrame(f);
+    if (fr.opcode === 0x0011 && fr.body[2] === 0x18) {
+      setImmediate(() => call.onFrame({ flags: 0x40, conn0: 0x36, conn1: 0x96, seq: 0xb6, ack: 0xd9, body: Buffer.from('00111802000000000130', 'hex'), opcode: 0x0011 }, ['SB000002']));
+    }
+  }, log, { videoRefreshMs: 20 });
+  call.attach(fakeClient());
+  await ring(call);
+  const session = await call.startMedia(false);
+  assert.ok(session);
+  failing = true; // the connection goes; the periodic video request now fails
+  await new Promise((r) => setTimeout(r, 80));
+  await session.end('viewer closed'); // first, so a failed check can't leave the refresh timer running
+  assert.ok(log.lines.includes('D call: video request not sent: socket closed'), log.lines.join('\n'));
+});

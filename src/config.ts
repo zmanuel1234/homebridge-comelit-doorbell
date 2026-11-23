@@ -150,7 +150,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
   const invalid: string[] = [];
   /** A number from the config (numbers typed as text are accepted), or the fallback if it isn't valid. */
   const num = (key: keyof ComelitPlatformConfig, fallback: number, ok: (n: number) => boolean): number => {
-    const v = c[key];
+    const v: unknown = c[key]; // Homebridge types config fields as any: checked below
     if (!isSet(v)) {
       return fallback;
     }
@@ -166,7 +166,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     num(key, fallback, (n) => n > 0 && n >= min && n <= max);
   /** One of the editor's choices; anything else is reported and gives the fallback. */
   const choice = <T extends string>(key: keyof ComelitPlatformConfig, options: readonly T[], fallback: T): T => {
-    const v = c[key];
+    const v: unknown = c[key]; // Homebridge types config fields as any: checked below
     if (!isSet(v)) {
       return fallback;
     }
@@ -179,7 +179,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
   };
   /** Text (a path, a name); anything that isn't text is reported and gives ''. */
   const text = (key: keyof ComelitPlatformConfig): string => {
-    const v = c[key];
+    const v: unknown = c[key]; // Homebridge types config fields as any: checked below
     if (!isSet(v)) {
       return '';
     }
@@ -191,7 +191,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
   };
   /** true/false, also written as text; anything else is reported and gives the fallback. */
   const bool = (key: keyof ComelitPlatformConfig, fallback: boolean): boolean => {
-    const v = c[key];
+    const v: unknown = c[key]; // Homebridge types config fields as any: checked below
     if (!isSet(v) || typeof v === 'boolean') {
       return isSet(v) ? (v as boolean) : fallback;
     }

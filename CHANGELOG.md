@@ -1,12 +1,18 @@
 # Changelog
 
-## Unreleased
+## 2.6.0 (2026-11-22)
+
+No new settings; with your current config, 2.6.0 behaves like 2.5.0. Check your Node.js version before updating (below).
 
 ### Changed
 
 - **Requires Node.js 22.19 or later, 24 or 26** (dropped 20, which no longer gets security updates; on Node 22, 22.19 is the minimum across the author's plugins). Check with `node -v` or on the Homebridge UI's status page before updating.
-- Development only: the same ESLint setup as the author's other plugins, checking for likely bugs (unhandled promises and similar) instead of formatting; it runs in CI and before publishing. TypeScript 6.0 (from 7.0) until typescript-eslint supports 7.
-- A failure in a few background tasks is now logged instead of left as an unhandled promise rejection: ending the media when the intercom hangs up, the registration refresh, and HomeKit's stream setup and stream requests. Nothing else changes.
+- Development only: the same ESLint setup as the author's other plugins, checking for likely bugs (unhandled promises and similar) instead of formatting; it runs in CI and before publishing. TypeScript 6.0 (from 7.0) until typescript-eslint supports 7. CI now also runs the recording test with a real ffmpeg, and new tests cover the login, reading the intercom's configuration, the keepalive / push registration, and the whole connection against a fake intercom over TCP (start-up, a wrong token, a refused configuration, drops, reconnects with their growing wait, the intercom closing the ring channel, and shutting down while connecting). Lint now refuses `any` in the plugin's code; the config's fields are read as `unknown` and checked, as they already were.
+
+### Fixed
+
+- A failure in a few background tasks is now logged instead of left as an unhandled promise rejection (which Node can treat as a crash): ending the media when the intercom hangs up, the registration refresh, and HomeKit's stream setup and stream requests.
+- The debug log now says when an acknowledgement or a video request to the intercom couldn't be sent. Both were dropped silently; a missed acknowledgement makes the intercom send the same data again and again, and a missed video request leaves the live view black until the no-video check gives up.
 
 ## 2.5.0 (2026-11-22)
 
