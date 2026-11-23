@@ -286,6 +286,9 @@ export const TALK_BACK_ARGS = [
   '-vn', '-c:a', 'pcm_alaw', '-ar', '8000', '-ac', '1', '-flush_packets', '1', '-f', 'alaw', 'pipe:1',
 ];
 
+/** The talk-back ffmpeg's report that no sound came from the Home app microphone. */
+export const isTalkBackTimeout = (text: string): boolean => /Operation timed out/i.test(text);
+
 /** The last visitor's picture, saved in Homebridge's storage folder. */
 const VISITOR_FILE = 'comelit-last-visitor.h264';
 /** Folder inside Homebridge's storage folder for the live view's short-lived files. */
@@ -755,13 +758,16 @@ export class DoorbellCamera implements CameraStreamingDelegate {
 
   private async streamRequest(request: StreamingRequest, callback: StreamRequestCallback): Promise<void> {
     if (request.type === 'start') {
+      // Answer HomeKit at once. Waiting for the intercom's video first (4-7 s on a 6741W) made
+      // Homebridge warn that the plugin slows it down ("Selected RTP Stream Configuration was
+      // slow to respond"); the Home app shows its spinner until the picture arrives either way.
+      callback();
       try {
         await this.startStream(request.sessionID, request);
-        callback();
       } catch (e) {
         this.log.error(`Doorbell camera: stream failed: ${(e as Error).message}`);
+        this.controller.forceStopStreamingSession(request.sessionID);
         await this.stopStream(request.sessionID, 'start failed');
-        callback(e as Error);
       }
     } else if (request.type === 'stop') {
       await this.stopStream(request.sessionID, 'viewer closed');
@@ -784,8 +790,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     };
     this.active.set(sessionID, active);
 
-    // Answer the ring and start the intercom's media, if a call is ringing. HomeKit gives up
-    // on a slow start, so after liveViewWaitSeconds show the picture instead.
+    // Answer the ring and start the intercom's media, if a call is ringing. The Home app gives
+    // up on a stream that sends nothing for long, so after liveViewWaitSeconds show the picture.
     let media: MediaSession | null = null;
     const starting = this.getCall()?.startMedia(this.settings.videoQuality === 'hd');
     if (starting) {
@@ -1046,7 +1052,9 @@ export class DoorbellCamera implements CameraStreamingDelegate {
   }
 
   private startTalkBack(active: ActiveSession, p: PendingSession, media: MediaSession): void {
-    const talk = this.spawnProcess('talk-back', TALK_BACK_ARGS);
+    // With the Home app's microphone off, no sound arrives and ffmpeg stops waiting for it with
+    // "Operation timed out": nobody talked, which is no problem.
+    const talk = this.spawnProcess('talk-back', TALK_BACK_ARGS, isTalkBackTimeout);
     talk.stdin.end(talkSdp(p.address, p.ipv6, p.audioReturnPort, p.audioSrtp));
     let pending = Buffer.alloc(0);
     let frames = 0;
@@ -1080,11 +1088,19 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     active.talk = talk;
   }
 
-  private spawnProcess(what: string, args: string[]): ChildProcessWithoutNullStreams {
+  /** `expected`: ffmpeg output that is no problem, logged as debug instead of as a warning. */
+  private spawnProcess(what: string, args: string[], expected?: (text: string) => boolean): ChildProcessWithoutNullStreams {
     this.log.debug(`Doorbell camera: ${what}: ${this.ffmpeg} ${args.join(' ')}`);
     const p = spawn(this.ffmpeg, args);
     p.stdin.on('error', () => undefined);
-    p.stderr.on('data', (d: Buffer) => this.log.warn(`Doorbell camera ${what}: ${d.toString().trim().slice(0, 300)}`));
+    p.stderr.on('data', (d: Buffer) => {
+      const text = `Doorbell camera ${what}: ${d.toString().trim().slice(0, 300)}`;
+      if (expected?.(text)) {
+        this.log.debug(text);
+      } else {
+        this.log.warn(text);
+      }
+    });
     p.on('error', (e) => this.log.error(`Doorbell camera ${what}: ${e.message}`));
     return p;
   }

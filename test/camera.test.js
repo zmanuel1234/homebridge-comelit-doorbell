@@ -396,3 +396,62 @@ test('talk-back: the first sound from the Home app microphone asks the view to o
   await new Promise((r) => setImmediate(r));
   assert.strictEqual(asked, 1);
 });
+
+test('a live view is answered at once, before the intercom\'s video has started (2.6.1)', async () => {
+  const media = fakeMedia();
+  let release;
+  const cam = camera({ talkBack: false }, media);
+  cam.getCall = () => ({ startMedia: () => new Promise((r) => (release = r)) });
+  pending(cam, 'ffffffff-1');
+  const answers = [];
+  cam.handleStreamRequest(request('ffffffff-1'), (e) => answers.push(e));
+  await new Promise((r) => setImmediate(r));
+  assert.deepStrictEqual(answers, [undefined], 'HomeKit has its answer while the media is still starting');
+  assert.deepStrictEqual(cam.spawned, [], 'no ffmpeg before the media is there');
+  release(media);
+  while (!cam.spawned.length) await new Promise((r) => setImmediate(r));
+  assert.deepStrictEqual(cam.spawned.map(([w]) => w), ['video', 'audio']);
+  await cam.stopStream('ffffffff-1', 'test');
+  assert.strictEqual(answers.length, 1, 'answered once');
+});
+
+test('a live view that fails to start after the answer is stopped in HomeKit (2.6.1)', async () => {
+  const cam = camera({ talkBack: false });
+  let forced = 0;
+  cam.controller.forceStopStreamingSession = () => forced++;
+  const answers = [];
+  cam.handleStreamRequest(request('99999999-1'), (e) => answers.push(e)); // never prepared
+  await new Promise((r) => setImmediate(r));
+  assert.deepStrictEqual(answers, [undefined]);
+  assert.strictEqual(forced, 1);
+  assert.ok(cam.log.lines.some((l) => /^E Doorbell camera: stream failed: unknown stream session/.test(l)));
+  assert.strictEqual(cam.active.size, 0);
+});
+
+test('talk-back: a timeout with no sound from the Home app microphone is logged as debug, other ffmpeg output as a warning (2.6.1)', async () => {
+  const { isTalkBackTimeout } = require('../dist/camera');
+  const media = fakeMedia();
+  const cam = camera({ talkBack: true }, media);
+  let expected;
+  cam.spawnProcess = (what, _args, isExpected) => { if (what === 'talk-back') expected = isExpected; return fakeProcess(); };
+  cam.startTalkBack({ stats: { micFrames: 0 } }, { address: '127.0.0.1', ipv6: false, audioReturnPort: 50000, audioSrtp: Buffer.alloc(30) }, media);
+  assert.strictEqual(expected, isTalkBackTimeout, 'the talk-back ffmpeg gets the check');
+  assert.strictEqual(isTalkBackTimeout('Doorbell camera talk-back: [in#0/sdp @ 0xf7e43920] Error during demuxing: Operation timed out'), true);
+  assert.strictEqual(isTalkBackTimeout('Doorbell camera talk-back: Unknown decoder libfdk_aac'), false);
+});
+
+test('ffmpeg output that a check expects is logged as debug, the rest as a warning (2.6.1)', async () => {
+  const cam = camera();
+  delete cam.spawnProcess; // the real one, running node in place of ffmpeg
+  Object.defineProperty(cam, 'ffmpeg', { value: process.execPath });
+  const run = (text, isExpected) => new Promise((resolve) => {
+    cam.spawnProcess('talk-back', ['-e', `process.stderr.write(${JSON.stringify(text)})`], isExpected).on('close', resolve);
+  });
+  await run('Error during demuxing: Operation timed out', (t) => /timed out/.test(t));
+  await run('something else went wrong', (t) => /timed out/.test(t));
+  const lines = cam.log.lines.filter((l) => /^[DW] Doorbell camera talk-back: (Error|something)/.test(l));
+  assert.deepStrictEqual(lines, [
+    'D Doorbell camera talk-back: Error during demuxing: Operation timed out',
+    'W Doorbell camera talk-back: something else went wrong',
+  ]);
+});
