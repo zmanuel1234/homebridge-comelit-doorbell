@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 2.6.1 (2026-11-22)
+
+No new settings; nothing to change in your config.
+
+### Fixed
+
+- Opening the doorbell camera no longer makes Homebridge warn "This plugin slows down Homebridge … 'Selected RTP Stream Configuration' … was slow to respond". The plugin now answers the Home app at once and starts sending the picture when the intercom's video arrives (4–7 s on a 6741W), instead of answering only then. The live view itself is unchanged, including the still picture after **Live view: wait for the intercom's video at most**.
+- With talk-back on, a live view where nobody uses the Home app's microphone no longer logs "Doorbell camera talk-back: … Error during demuxing: Operation timed out" as a warning; it is a debug line now. Any other output from the talk-back ffmpeg is still a warning.
+
+### Changed
 
 - Development only: the same release and CI workflows as the author's other plugins. Publishing a GitHub release publishes it to npm (with trusted publishing; the package and its checksum are added to the release); each repository's checks are its `verify`, `test:matrix` and `release:check` scripts.
 
