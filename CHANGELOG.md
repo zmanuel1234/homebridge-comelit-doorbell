@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.2 (2026-11-23)
+
+No new settings, and nothing changes in what the plugin does.
+
+### Changed
+
+- The Homebridge UI shows the plugin as **Comelit Doorbell** (it had no display name, so the UI showed the package name). The package's author is now "Manuel Zamfir", as for the author's other plugins.
+- Development only: the same security setup as the author's other plugins. SECURITY.md says how to report a vulnerability privately (through GitHub). A pull request that adds a dependency with a known vulnerability fails, CI checks that every installed package carries the npm registry's signature, and `.gitignore` keeps keys, tokens and `.env` files out of the repository.
+
 ## 2.6.1 (2026-11-22)
 
 No new settings; nothing to change in your config.
