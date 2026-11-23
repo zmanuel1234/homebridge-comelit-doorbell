@@ -424,7 +424,8 @@ export class CallHandler {
 
   /** A plain acknowledgement (no data), as the intercom sends for ours. */
   private async sendAck(call: Call): Promise<void> {
-    await this.send(call, Flag.ACK, Buffer.alloc(0), 'ack').catch(() => undefined);
+    // A missed ack makes the intercom send the same data again and again: say so in the debug log.
+    await this.send(call, Flag.ACK, Buffer.alloc(0), 'ack').catch((e) => this.log?.debug(`call: ack not sent: ${(e as Error).message}`));
   }
 
   /** Answers `call` (SETUP_ACK), once. */
@@ -834,7 +835,8 @@ export class MediaSession extends EventEmitter {
     this.timers.push(
       setInterval(() => {
         if (!this.switching) {
-          void this.requestVideo().catch(() => undefined); // (while switching, the new call's setup asks for video in its own order)
+          // (while switching, the new call's setup asks for video in its own order)
+          void this.requestVideo().catch((e) => this.log?.debug(`call: video request not sent: ${(e as Error).message}`));
         }
       }, this.timing.videoRefreshMs),
     );
@@ -937,7 +939,7 @@ export class MediaSession extends EventEmitter {
       this.keyframeRetry = setTimeout(() => {
         if (this.awaitingKeyframe && !this.ended) {
           this.log?.debug('call: no keyframe yet; asking for video again');
-          void this.requestVideo().catch(() => undefined);
+          void this.requestVideo().catch((e) => this.log?.debug(`call: video request not sent: ${(e as Error).message}`));
         }
       }, NO_KEYFRAME_RETRY_MS);
     }

@@ -105,3 +105,13 @@ test('debug log: the intercom\'s renewal checks and plain acknowledgements are a
   await listener.processMessage(frames.invite);
   assert.ok(lines.some((l) => l.startsWith('VIP msg: prefix=0x18c0')), 'a ring is still logged');
 });
+
+test('an ack for a call\'s data that can\'t be sent is in the debug log (2.6.0)', async () => {
+  const { client, log, events, listener } = setup('answer-on-view');
+  await listener.processMessage(frames.invite); // the ring
+  await listener.processMessage(frames.capabilities); // answered with ours
+  client.sendBinary = async () => { throw new Error('socket closed'); };
+  await listener.processMessage(frames.capabilities); // sent again (our answer was missed): a plain ack
+  assert.deepStrictEqual(events, ['doorbell_ring']);
+  assert.ok(log.lines.includes('D call: ack not sent: socket closed'), log.lines.join('\n'));
+});
