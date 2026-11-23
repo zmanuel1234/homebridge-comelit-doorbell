@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Development only: the same release and CI workflows as the author's other plugins. Publishing a GitHub release publishes it to npm (with trusted publishing; the package and its checksum are added to the release); each repository's checks are its `verify`, `test:matrix` and `release:check` scripts.
+
 ## 2.6.0 (2026-11-22)
 
 No new settings; with your current config, 2.6.0 behaves like 2.5.0. Check your Node.js version before updating (below).
