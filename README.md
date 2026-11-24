@@ -248,6 +248,19 @@ While a call is ringing and nobody has answered, the intercom refuses a door rel
 
 Every message of the call is logged with the prefix `call:` at debug level: turn on **debug mode** for the child bridge to see them.
 
+### Actuators as a switch or light
+
+Each actuator the intercom has (a relay such as a gate or the stair light) shows as a **lock** by default, which opens only after a ring, like the entrance. For a relay that isn't a door, list it under **Actuators shown as a switch or light** (`actuators`), with its name as the intercom gives it. **Test connection** in the Setup assistant lists them, marked `[actuator]`.
+
+```json
+"actuators": [{ "name": "Stair light", "type": "light" }]
+```
+
+- **`switch`** shows a switch, and **`light`** a light (Siri's "turn on the lights" then presses it too). Turning it on sends the actuator's command at any time, with no ring needed, as the Comelit app's button does. It shows On for a moment, then Off; the relay's own timer decides how long the light stays on.
+- HomeKit asks for no confirmation for a switch or light, and doctor mode and Next Visitor never use one. So **only use it for lights and other things that aren't doors**.
+- Changing an actuator from lock to switch or light replaces its HomeKit accessory: automations that used the lock need to be set up again.
+- A name that matches no actuator is reported in the log, with the actuators the intercom has.
+
 ### Doctor mode
 
 Like the door of a doctor's office: when someone rings, the plugin answers the call and opens the first door by itself, after **Doctor mode: open after** seconds (2 by default). **Anyone who rings gets in**, so use it only while you expect visitors.

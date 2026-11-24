@@ -723,3 +723,125 @@ test('contact sensors: turning the setting on or off rebuilds the accessories on
   assert.notStrictEqual(p.doctorSwitch, before);
   assert.ok(p.doctorSwitch.accessory.getService('cs'));
 });
+
+// Actuators as a switch or light (setting actuators), e.g. the stair light.
+
+const stairLight = { index: 1, name: 'Stair Light', aptAddress: 'SBIO0255', outputIndex: 0, isActuator: true, moduleIndex: 0 };
+const withLight = { ...deviceConfig, doors: [deviceConfig.doors[0], stairLight] };
+
+function logged() {
+  const lines = [];
+  const log = Object.assign((...a) => lines.push(['log', a.join(' ')]), {
+    info: (m) => lines.push(['info', m]), warn: (m) => lines.push(['warn', m]), error: (m) => lines.push(['error', m]), debug: () => undefined, success: () => undefined,
+  });
+  return { lines, log };
+}
+
+test('actuators: one set to light is a lightbulb that sends its command at any time, then shows Off', async () => {
+  const { lines, log } = logged();
+  const api = fakeApi();
+  const p = new ComelitIntercomPlatform(log, { platform: 'ComelitIntercom', name: 'Comelit Intercom', actuators: [{ name: '  stair   light ', type: 'light' }] }, api);
+  p.discoverAccessories(withLight);
+  assert.deepStrictEqual([...api.registered].sort(), [
+    'uuid:homebridge-comelit-intercom-actuator-1', 'uuid:homebridge-comelit-intercom-doorbell', 'uuid:homebridge-comelit-intercom-lock-0',
+  ]);
+  assert.strictEqual(p.lockAccessories.size, 1, 'only the entrance is a lock');
+  const acc = p.accessories.get('uuid:homebridge-comelit-intercom-actuator-1');
+  const on = acc.getService('lb').getCharacteristic('on');
+  const sent = [];
+  p.openOnce = async (door) => { sent.push(door.name); return { confirmed: false }; };
+  assert.strictEqual(p.isUnlockAllowed(), false, 'no ring');
+  on.set(true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepStrictEqual(sent, ['Stair Light'], 'sent without a ring');
+  assert.strictEqual(on.get(), true, 'shows On for a moment');
+  assert.ok(lines.some(([l, m]) => l === 'info' && /Actuator 'Stair Light': on \(sent/.test(m)), JSON.stringify(lines));
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.strictEqual(on.get(), false);
+  assert.strictEqual(on.value, false, 'HomeKit told');
+  on.set(false); // turning it off does nothing
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(sent.length, 1);
+});
+
+test('actuators: a failed command is logged and the button shows Off', async () => {
+  const { lines, log } = logged();
+  const api = fakeApi();
+  const p = new ComelitIntercomPlatform(log, { platform: 'ComelitIntercom', name: 'Comelit Intercom', actuators: [{ name: 'Stair Light', type: 'switch' }] }, api);
+  p.discoverAccessories(withLight);
+  const on = p.accessories.get('uuid:homebridge-comelit-intercom-actuator-1').getService('sw').getCharacteristic('on');
+  p.openOnce = async () => { throw new Error('Not connected'); };
+  on.set(true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(on.value, false);
+  assert.ok(lines.some(([l, m]) => l === 'warn' && /Stair Light': failed: Not connected/.test(m)));
+});
+
+test('actuators: doctor mode and Next Visitor never use one shown as a switch or light', async () => {
+  const { p, opened, ring } = doctor({ doctorMode: 'always', actuators: [{ name: 'Stair Light', type: 'light' }] });
+  p.deviceConfig = { ...deviceConfig, doors: [stairLight, deviceConfig.doors[0]] }; // the light listed first
+  p.discoverAccessories(p.deviceConfig);
+  await ring();
+  assert.deepStrictEqual(opened, [['Entrance lock', true]]);
+
+  const only = doctor({ doctorMode: 'always', actuators: [{ name: 'Stair Light', type: 'light' }] });
+  only.p.deviceConfig = { ...deviceConfig, doors: [stairLight] };
+  const sent = [];
+  only.p.openOnce = async (d) => { sent.push(d.name); return { confirmed: true }; };
+  await only.ring();
+  assert.deepStrictEqual(only.opened, []);
+  assert.deepStrictEqual(sent, [], 'the light is not turned on by a ring');
+});
+
+test('actuators: lock stays the default; pressActuator refuses locks and entrance doors', async () => {
+  const { p } = platform();
+  p.discoverAccessories(withLight);
+  assert.strictEqual(p.lockAccessories.size, 2, 'no setting: both are locks');
+  assert.strictEqual(p.actuatorType(stairLight), 'lock');
+  await assert.rejects(p.pressActuator(stairLight), /not an actuator shown as a switch or light/);
+  const named = platform({ actuators: [{ name: 'Entrance lock', type: 'light' }] }).p;
+  assert.strictEqual(named.actuatorType(deviceConfig.doors[0]), 'lock', 'an entrance door is always a lock');
+});
+
+test('actuators: changing the type rebuilds, and a switch turned light keeps one service', () => {
+  const api = fakeApi();
+  const cfg = { platform: 'ComelitIntercom', name: 'Comelit Intercom', actuators: [{ name: 'Stair Light', type: 'switch' }] };
+  const p = new ComelitIntercomPlatform(quietLog(), cfg, api);
+  p.discoverAccessories(withLight);
+  const acc = p.accessories.get('uuid:homebridge-comelit-intercom-actuator-1');
+  assert.ok(acc.getService('sw'));
+  p.settings.actuatorTypes = { 'stair light': 'light' };
+  p.discoverAccessories(withLight);
+  assert.ok(acc.getService('lb'));
+  assert.strictEqual(acc.getService('sw'), undefined);
+  p.settings.actuatorTypes = {};
+  p.discoverAccessories(withLight);
+  assert.ok(!p.accessories.has('uuid:homebridge-comelit-intercom-actuator-1'), 'back to a lock: the button accessory is removed');
+  assert.strictEqual(p.lockAccessories.size, 2);
+});
+
+test('actuators: a name that matches no actuator is reported, with the actuators the intercom has', () => {
+  const { lines, log } = logged();
+  const p = new ComelitIntercomPlatform(log, { platform: 'ComelitIntercom', name: 'Comelit Intercom', actuators: [{ name: 'Stairs', type: 'light' }] }, fakeApi());
+  p.discoverAccessories(withLight);
+  assert.ok(lines.some(([l, m]) => l === 'warn' && /no actuator named 'stairs' on the intercom \(its actuators: 'Stair Light'\)/.test(m)), JSON.stringify(lines));
+});
+
+test('actuators: a relay saved before a restart is checked against the intercom before sending', async () => {
+  const { p } = platform({ actuators: [{ name: 'Stair Light', type: 'switch' }] });
+  p.discoverAccessories(withLight); // as restored from the cache
+  const sent = [];
+  p.openOnce = async (d) => { sent.push(d.outputIndex); return { confirmed: true }; };
+  p.deviceConfig = { ...deviceConfig, doors: [deviceConfig.doors[0], { ...stairLight, outputIndex: 3 }] }; // moved since
+  await assert.rejects(p.pressActuator(stairLight), /no longer has this actuator as saved/);
+  p.deviceConfig = withLight;
+  await p.pressActuator(stairLight);
+  assert.deepStrictEqual(sent, [0]);
+});
+
+test('actuators: two actuators with the listed name are reported', () => {
+  const { lines, log } = logged();
+  const p = new ComelitIntercomPlatform(log, { platform: 'ComelitIntercom', name: 'Comelit Intercom', actuators: [{ name: 'Stair Light', type: 'light' }] }, fakeApi());
+  p.discoverAccessories({ ...withLight, doors: [...withLight.doors, { ...stairLight, index: 2, outputIndex: 1 }] });
+  assert.ok(lines.some(([l, m]) => l === 'warn' && /more than one actuator is named 'stair light'/.test(m)), JSON.stringify(lines));
+});

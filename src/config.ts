@@ -3,6 +3,13 @@ import type { AnswerMode } from './call';
 
 /** Sound in live view without a ring. */
 export type LiveViewSound = 'off' | 'talk' | 'always';
+/** How an actuator shows in HomeKit: a lock (opens only after a ring), or a button for a light. */
+export type ActuatorType = 'lock' | 'switch' | 'light';
+
+/** An actuator's name as matched against the settings: case and spaces don't matter. */
+export function actuatorKey(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}
 
 export type DoctorMode = 'off' | 'switch' | 'always';
 import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_MS } from './settings';
@@ -53,6 +60,8 @@ export interface ComelitPlatformConfig extends PlatformConfig {
 
 /** Settings with defaults applied. */
 export interface Settings {
+  /** Actuators shown as a switch or light, by actuatorKey(name); the rest are locks. */
+  actuatorTypes: Record<string, ActuatorType>;
   host: string;
   port: number;
   token: string;
@@ -212,6 +221,29 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     }
     return choice('liveViewSound', ['off', 'talk', 'always'] as const, 'off');
   };
+  /** The actuators setting: [{ name, type }]; entries that aren't valid are reported and skipped. */
+  const actuatorTypes = (): Record<string, ActuatorType> => {
+    const v: unknown = c.actuators;
+    const types: Record<string, ActuatorType> = {};
+    if (!isSet(v)) {
+      return types;
+    }
+    if (!Array.isArray(v)) {
+      invalid.push(`actuators: ${JSON.stringify(v)} is not valid, using none`);
+      return types;
+    }
+    for (const e of v as unknown[]) {
+      const entry = (e ?? {}) as { name?: unknown; type?: unknown };
+      const name = typeof entry.name === 'string' ? actuatorKey(entry.name) : '';
+      const type = (['lock', 'switch', 'light'] as const).find((t) => t === entry.type);
+      if (!name || !type) {
+        invalid.push(`actuators: ${JSON.stringify(e)} is not valid (it needs a name and a type: lock, switch or light), skipped`);
+        continue;
+      }
+      types[name] = type;
+    }
+    return types;
+  };
   // Fails closed: only an explicit 0 allows unlocking at any time; anything invalid keeps the 90 s window.
   const ringWindow = num('ringWindowSeconds', 90, (n) => n >= 0 && n <= 600);
   const subaddress = isSet(c.subaddress) ? num('subaddress', NaN, (n) => Number.isInteger(n) && n >= 0 && n <= 15) : NaN;
@@ -220,6 +252,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     invalid.push("videoCodec: 'copy' can't show the intercom's video (it needs re-encoding), using libx264");
   }
   return {
+    actuatorTypes: actuatorTypes(),
     host: text('host'),
     port: num('port', ICONA_BRIDGE_PORT, (n) => Number.isInteger(n) && n > 0 && n < 65536),
     token: text('token'),

@@ -148,6 +148,14 @@ test('Next Visitor settings: defaults, text, limits (2.1.1-beta.2)', () => {
   assert.ok(settingsWarnings(resolveSettings({ nextVisitorSwitch: true, enableNotifications: false })).some((w) => /Next Visitor switch needs/.test(w)));
 });
 
+test('actuators: name and type per entry; bad entries reported and skipped', () => {
+  assert.deepStrictEqual(resolveSettings({}).actuatorTypes, {});
+  const s = resolveSettings({ actuators: [{ name: ' Stair  Light ', type: 'light' }, { name: 'Garage', type: 'switch' }, { name: 'Gate', type: 'lock' }, { name: '', type: 'light' }, { name: 'X', type: 'dimmer' }, 'nope'] });
+  assert.deepStrictEqual(s.actuatorTypes, { 'stair light': 'light', garage: 'switch', gate: 'lock' });
+  assert.strictEqual(s.invalid.filter((w) => w.startsWith('actuators')).length, 3);
+  assert.strictEqual(resolveSettings({ actuators: 'Stair Light' }).invalid.length, 1);
+});
+
 test('doctor mode time limit and sensors: defaults, 0, limits, warnings (2.5.0)', () => {
   const d = resolveSettings({});
   assert.strictEqual(d.doctorModeMs, 120 * 60_000);
