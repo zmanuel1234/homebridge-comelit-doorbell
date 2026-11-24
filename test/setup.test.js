@@ -238,7 +238,10 @@ test('setup assistant: the UI files are published, and the settings use them', (
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.ok(pkg.files.includes('homebridge-ui'));
   assert.ok(pkg.dependencies['@homebridge/plugin-ui-utils']);
-  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(root, 'config.schema.json'), 'utf8')).customUi, true);
+  const schema = JSON.parse(fs.readFileSync(path.join(root, 'config.schema.json'), 'utf8'));
+  assert.strictEqual(schema.customUi, true);
+  // Homebridge shows the normal settings under a custom page only for a single settings block.
+  assert.strictEqual(schema.singular, true);
   for (const f of ['server.js', 'public/index.html']) {
     assert.ok(fs.existsSync(path.join(root, 'homebridge-ui', f)), f);
   }

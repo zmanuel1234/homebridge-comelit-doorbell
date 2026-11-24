@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.4 (2026-11-24)
+
+### Fixed
+
+- **The normal settings were still missing** below the Setup assistant in 2.7.0-beta.3. Homebridge shows them under a plugin's own settings page only when the plugin has a single settings block, and this plugin's settings said it could have several (inherited from the plugin it was imported from). It now says single, which is also how it works: a second intercom block would clash with the first, since every accessory's id is fixed. Your settings don't change.
+
 ## 2.7.0-beta.3 (2026-11-24)
 
 ### Fixed
