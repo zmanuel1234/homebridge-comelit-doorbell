@@ -140,7 +140,6 @@
             "type": {
               "title": "Show as",
               "type": "string",
-              "default": "switch",
               "oneOf": [
                 { "title": "Switch", "enum": ["switch"] },
                 { "title": "Light (Siri's \"turn on the lights\" presses it too)", "enum": ["light"] },

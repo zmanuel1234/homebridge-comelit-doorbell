@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.5 (2026-11-24)
+
+### Fixed
+
+- **Test connection** reported "actuators: {"type":"switch"} is not valid", twice: the settings form adds an empty row to **Actuators shown as a switch or light**. Rows without a name are now ignored without a warning (in the test and in the log), the form no longer pre-fills a type, and each problem is listed once.
+
 ## 2.7.0-beta.4 (2026-11-24)
 
 ### Fixed
