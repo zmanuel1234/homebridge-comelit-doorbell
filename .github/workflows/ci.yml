@@ -20,7 +20,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,13 +31,9 @@ jobs:
           cache: npm
       - name: System packages this repository's tests need (.github/apt-packages)
         if: hashFiles('.github/apt-packages') != ''
-        timeout-minutes: 8   # Ubuntu's package mirror sometimes stalls: fail fast, re-run
-        env:
-          # A stalled download is dropped after 30 s and tried again, instead of hanging the job
-          APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
-        run: |
-          sudo apt-get $APT_OPTS update -qq
-          grep -Ev '^[[:space:]]*(#|$)' .github/apt-packages | xargs -r sudo apt-get $APT_OPTS install -y -qq --no-install-recommends
+        # Each attempt is capped at 4.5 min and retried (.github/scripts/apt-install.sh); a normal install takes under a minute
+        timeout-minutes: 15
+        run: .github/scripts/apt-install.sh
       - run: npm ci
       - name: Every installed package is signed by the npm registry
         run: npm audit signatures
