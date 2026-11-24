@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.7.0-beta.1 (2026-11-23)
+
+No new settings; the plugin itself works as in 2.6.4.
+
+### Added
+
+- **Setup assistant** at the top of the plugin's settings (the normal settings stay below it):
+  - **Find my intercom**: searches the network (the `INFO` search Comelit devices answer on UDP port 24199) and lists what answers, with model, firmware and ViP address; **Use this** fills in the IP address.
+  - **Test connection**: checks the settings as the form has them, saved or not: reaching the intercom, the token, the intercom's model and firmware, its doors, actuators, entrance panel and extra cameras, the user row the token belongs to (**Use user row N** fixes a wrong one) and, with the camera on, that ffmpeg runs. Each step says what to do when it fails.
+  - **Copy diagnostics**: a report for issues, without the token, passwords, serial or MAC addresses.
+  - Read-only: it only signs in and reads the intercom's information and configuration, like the Comelit app. The plugin keeps running meanwhile.
+- New dependency: `@homebridge/plugin-ui-utils` (Homebridge's library for plugin settings pages).
+
 ## 2.6.4 (2026-11-23)
 
 No new settings, and nothing changes in what the plugin does.
