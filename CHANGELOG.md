@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.7.0-beta.3 (2026-11-24)
+
+### Fixed
+
+- **The normal settings were missing** below the Setup assistant: the page asked for them before Homebridge was ready. It asks again once the page is ready.
+- **Find my intercom** often found nothing on the first tries: it sent one search message, which networks (Wi-Fi, mesh) easily drop. It now sends it 4 times over 1.5 s, on each of the machine's networks and directly to the IP address already in the settings, and waits 4 s.
+- The assistant's text was hard to read in the dark theme.
+- **Copy diagnostics** could include the intercom's MAC address inside a cloud setting (`viper-p2p` → `mqtt` → `base`). MAC addresses and token-like strings are now removed wherever they appear, not only in fields named after them.
+
 ## 2.7.0-beta.2 (2026-11-23)
 
 ### Added

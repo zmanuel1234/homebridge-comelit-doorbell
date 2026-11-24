@@ -5,6 +5,7 @@
  */
 import { execFile } from 'node:child_process';
 import dgram from 'node:dgram';
+import os from 'node:os';
 import { authenticate } from './auth';
 import { resolveFfmpeg } from './camera';
 import { ChannelType, ViperMessageId } from './channels';
@@ -43,22 +44,52 @@ export function parseDiscoveryReply(msg: Buffer, host: string): FoundIntercom | 
   return { host, address, firmware, model };
 }
 
-/** Searches the network for Comelit devices: broadcasts `INFO` and collects the answers. */
+/** The broadcast address of each of this machine's IPv4 networks (e.g. 10.0.4.255). */
+export function broadcastAddresses(): string[] {
+  const out = new Set<string>();
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list ?? []) {
+      if (a.family !== 'IPv4' || a.internal) {
+        continue;
+      }
+      const ip = a.address.split('.').map(Number);
+      const mask = a.netmask.split('.').map(Number);
+      if (ip.length === 4 && mask.length === 4) {
+        out.add(ip.map((b, i) => (b | (~mask[i] & 255)) & 255).join('.'));
+      }
+    }
+  }
+  return [...out];
+}
+
+/** How often, and how far apart, the search is sent: one lost broadcast mustn't mean "not found". */
+const SEND_ROUNDS = 4;
+const SEND_EVERY_MS = 500;
+
+/**
+ * Searches the network for Comelit devices: sends `INFO` several times to the general broadcast
+ * address, to each of this machine's networks (a machine on several networks sends the general one
+ * on only one of them) and to `hosts` directly (an address already in the settings, which works
+ * even where broadcasts are blocked), and collects the answers.
+ */
 export function discoverIntercoms(
-  timeoutMs = 3000,
+  timeoutMs = 4000,
   target = '255.255.255.255',
   port = DISCOVERY_PORT,
+  hosts: string[] = [],
 ): Promise<FoundIntercom[]> {
+  const targets = [...new Set([target, ...(target === '255.255.255.255' ? broadcastAddresses() : []), ...hosts.filter(Boolean)])];
   return new Promise((resolve) => {
     const found = new Map<string, FoundIntercom>();
     const socket = dgram.createSocket('udp4');
+    const timers: NodeJS.Timeout[] = [];
     let done = false;
     const finish = (): void => {
       if (done) {
         return;
       }
       done = true;
-      clearTimeout(timer);
+      timers.forEach(clearTimeout);
       try {
         socket.close();
       } catch {
@@ -66,7 +97,7 @@ export function discoverIntercoms(
       }
       resolve([...found.values()]);
     };
-    const timer = setTimeout(finish, timeoutMs);
+    timers.push(setTimeout(finish, timeoutMs));
     socket.on('message', (msg, rinfo) => {
       const device = parseDiscoveryReply(msg, rinfo.address);
       if (device && !found.has(device.host)) {
@@ -74,17 +105,24 @@ export function discoverIntercoms(
       }
     });
     socket.on('error', finish);
+    const sendAll = (): void => {
+      for (const t of targets) {
+        if (done) {
+          return;
+        }
+        // One unreachable target (e.g. a network that went away) doesn't stop the others.
+        socket.send(Buffer.from('INFO'), port, t, () => undefined);
+      }
+    };
     socket.bind(() => {
       try {
         socket.setBroadcast(true);
       } catch {
         // not needed for a unicast target
       }
-      socket.send(Buffer.from('INFO'), port, target, (e) => {
-        if (e) {
-          finish();
-        }
-      });
+      for (let i = 0; i < SEND_ROUNDS; i++) {
+        timers.push(setTimeout(sendAll, i * SEND_EVERY_MS));
+      }
     });
   });
 }
@@ -121,7 +159,18 @@ export function redact(v: unknown, key = ''): unknown {
   if (key !== 'response-code' && SECRET.test(key) && v !== '' && typeof v !== 'boolean') {
     return '<removed>';
   }
-  return v;
+  return typeof v === 'string' ? scrub(v) : v;
+}
+
+/**
+ * Removes MAC addresses and token-like hex strings inside any text, whatever its field is called
+ * (e.g. the MAC in the cloud settings' `MSVU/0025291845E9/vip/…`).
+ */
+function scrub(text: string): string {
+  return text
+    .replace(/\b[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}\b/gi, '<removed>')
+    .replace(/(^|[^0-9a-f])[0-9a-f]{12}(?![0-9a-f])/gi, '$1<removed>')
+    .replace(/[0-9a-f]{24,}/gi, '<removed>');
 }
 
 function list(v: unknown): Record<string, unknown>[] {

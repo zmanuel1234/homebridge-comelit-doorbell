@@ -45,14 +45,37 @@ test('discovery: sends INFO and collects each device once', async () => {
   });
   await new Promise((r) => device.bind(0, '127.0.0.1', r));
   try {
-    const found = await discoverIntercoms(300, '127.0.0.1', device.address().port);
-    assert.deepStrictEqual(asked, ['INFO']);
+    const found = await discoverIntercoms(1800, '127.0.0.1', device.address().port);
+    assert.deepStrictEqual(asked, ['INFO', 'INFO', 'INFO', 'INFO'], 'sent 4 times, so one lost message does not matter');
     assert.strictEqual(found.length, 1);
     assert.strictEqual(found[0].host, '127.0.0.1');
     assert.strictEqual(found[0].model, 'MSVU');
   } finally {
     device.close();
   }
+});
+
+test('discovery: found when only a later search gets through, and asks a known address directly', async () => {
+  const device = dgram.createSocket('udp4');
+  let seen = 0;
+  device.on('message', (msg, rinfo) => {
+    seen++;
+    if (seen >= 3) device.send(msvuReply(), rinfo.port, rinfo.address); // the first two were "lost"
+  });
+  await new Promise((r) => device.bind(0, '127.0.0.1', r));
+  try {
+    // the broadcast target goes nowhere; only the address from the settings reaches the device
+    const found = await discoverIntercoms(1800, '127.0.0.2', device.address().port, ['127.0.0.1']);
+    assert.strictEqual(found.length, 1);
+    assert.strictEqual(found[0].model, 'MSVU');
+  } finally {
+    device.close();
+  }
+});
+
+test('discovery: the broadcast address of each network', () => {
+  const { broadcastAddresses } = require('../dist/setup');
+  for (const b of broadcastAddresses()) assert.match(b, /^\d+\.\d+\.\d+\.\d+$/);
 });
 
 test('discovery: nobody answers → an empty list, after the wait', async () => {
@@ -194,6 +217,13 @@ test('redact: URLs (webhooks, RTSP) and lists of secrets go; codecs and switches
   );
 });
 
+test('redact: MAC addresses and token-like strings inside any text go too', () => {
+  assert.deepStrictEqual(
+    redact({ base: 'MSVU/0025291845E9/vip/SB000002/sdp', note: 'mac 00:25:29:18:45:e9 and 00-25-29-18-45-E9', blob: 'x a62784fe60e26b3e445687e99f469aa8 y', host: '10.0.4.79', addr: 'SB100001', fw: '2.1.0', server: 'tls://hub-vc-generic.cloud.comelitgroup.com:443' }),
+    { base: 'MSVU/<removed>/vip/SB000002/sdp', note: 'mac <removed> and <removed>', blob: 'x <removed> y', host: '10.0.4.79', addr: 'SB100001', fw: '2.1.0', server: 'tls://hub-vc-generic.cloud.comelitgroup.com:443' },
+  );
+});
+
 test('redact: keeps the structure, removes only secret fields', () => {
   assert.deepStrictEqual(redact({ a: 1, list: [{ 'user-token': 'x', name: 'n' }], 'secure-mode': false, pin: '' }), {
     a: 1,
@@ -214,6 +244,8 @@ test('setup assistant: the UI files are published, and the settings use them', (
   }
   const html = fs.readFileSync(path.join(root, 'homebridge-ui/public/index.html'), 'utf8');
   assert.match(html, /homebridge\.showSchemaForm\(\)/, 'the normal settings stay below the assistant');
+  assert.match(html, /addEventListener\('ready', \(\) => homebridge\.showSchemaForm\(\)\)/, 'asked again once the page is ready');
+  assert.ok(!html.includes('text-muted'), 'readable in the dark theme');
   for (const route of ['/discover', '/test']) {
     assert.ok(html.includes(`'${route}'`) && fs.readFileSync(path.join(root, 'homebridge-ui/server.js'), 'utf8').includes(`'${route}'`), route);
   }

@@ -11,9 +11,11 @@ const { version } = require('../package.json');
   class UiServer extends HomebridgePluginUiServer {
     constructor() {
       super();
-      this.onRequest('/discover', async () => {
+      // body.host: the IP address already in the settings, if any (also asked directly).
+      this.onRequest('/discover', async (body) => {
         try {
-          return await setup.discoverIntercoms();
+          const host = typeof body?.host === 'string' && /^[\d.]+$/.test(body.host.trim()) ? body.host.trim() : '';
+          return await setup.discoverIntercoms(undefined, undefined, undefined, host ? [host] : []);
         } catch (e) {
           throw new RequestError(`Search failed: ${e.message}`, {});
         }

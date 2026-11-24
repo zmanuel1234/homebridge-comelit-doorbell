@@ -1,7 +1,7 @@
-<div class="card mb-3">
+<div class="card mb-3 bg-transparent text-reset">
   <div class="card-body">
     <h5 class="card-title mb-1">Setup assistant</h5>
-    <p class="card-text small text-muted mb-2">
+    <p class="card-text small mb-2" style="opacity: 0.75">
       Finds your intercom, tests the settings below step by step and shows the doors it offers. It only reads:
       nothing on the intercom is changed.
     </p>
@@ -13,11 +13,11 @@
     <div id="found" class="mt-3"></div>
     <div id="result" class="mt-3"></div>
     <div id="diag" class="mt-2 d-none">
-      <p class="small text-muted mb-1">
+      <p class="small mb-1" style="opacity: 0.75">
         Diagnostics for an issue report. The token, passwords, serial and MAC addresses are removed; door and
         user names stay, so check them before posting.
       </p>
-      <textarea id="diagText" class="form-control form-control-sm font-monospace" rows="8" readonly></textarea>
+      <textarea id="diagText" class="form-control form-control-sm font-monospace bg-transparent text-reset" rows="8" readonly></textarea>
     </div>
   </div>
 </div>
@@ -27,7 +27,10 @@
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+    // The normal settings below the assistant. Homebridge ignores this until the page is ready, so
+    // ask again then (asking twice is harmless).
     homebridge.showSchemaForm();
+    homebridge.addEventListener('ready', () => homebridge.showSchemaForm());
 
     /** The first ComelitIntercom block as the form has it now (maybe unsaved). */
     async function current() {
@@ -53,8 +56,8 @@
       $('found').innerHTML = '';
       homebridge.showSpinner();
       try {
-        const devices = await homebridge.request('/discover');
         const { config } = await current();
+        const devices = await homebridge.request('/discover', { host: config.host ?? '' });
         if (!devices.length) {
           $('found').innerHTML =
             '<div class="alert alert-warning small mb-0">No Comelit device answered. It may be on another network ' +
@@ -98,7 +101,7 @@
         const rows = r.steps
           .map(
             (s) =>
-              `<li class="list-group-item small d-flex gap-2"><span>${s.ok ? '✅' : '❌'}</span>` +
+              `<li class="list-group-item small d-flex gap-2 bg-transparent text-reset"><span>${s.ok ? '✅' : '❌'}</span>` +
               `<span><b>${esc(s.name)}</b>: ${esc(s.detail)}</span></li>`,
           )
           .join('');
