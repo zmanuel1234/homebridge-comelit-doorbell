@@ -218,7 +218,7 @@ export async function testConnection(config: ComelitPlatformConfig, opts: TestOp
   };
 
   const s = resolveSettings(config);
-  const warnings = [...s.invalid, ...settingsWarnings(s)];
+  const warnings = settingsWarnings(s); // includes s.invalid
   if (!s.host || !s.token) {
     steps.push({ name: 'Settings', ok: false, detail: !s.host ? 'Enter the intercom IP address (or use Find my intercom).' : 'Enter the user token.' });
     return finish();

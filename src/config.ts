@@ -235,6 +235,11 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     for (const e of v as unknown[]) {
       const entry = (e ?? {}) as { name?: unknown; type?: unknown };
       const name = typeof entry.name === 'string' ? actuatorKey(entry.name) : '';
+      // A row with no name is an empty row the settings form adds: not a mistake, just nothing.
+      const blankName = entry.name === undefined || entry.name === null || (typeof entry.name === 'string' && !name);
+      if (e && typeof e === 'object' && blankName) {
+        continue;
+      }
       const type = (['lock', 'switch', 'light'] as const).find((t) => t === entry.type);
       if (!name || !type) {
         invalid.push(`actuators: ${JSON.stringify(e)} is not valid (it needs a name and a type: lock, switch or light), skipped`);

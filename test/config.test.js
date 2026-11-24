@@ -150,9 +150,13 @@ test('Next Visitor settings: defaults, text, limits (2.1.1-beta.2)', () => {
 
 test('actuators: name and type per entry; bad entries reported and skipped', () => {
   assert.deepStrictEqual(resolveSettings({}).actuatorTypes, {});
-  const s = resolveSettings({ actuators: [{ name: ' Stair  Light ', type: 'light' }, { name: 'Garage', type: 'switch' }, { name: 'Gate', type: 'lock' }, { name: '', type: 'light' }, { name: 'X', type: 'dimmer' }, 'nope'] });
+  const s = resolveSettings({ actuators: [{ name: ' Stair  Light ', type: 'light' }, { name: 'Garage', type: 'switch' }, { name: 'Gate', type: 'lock' }, { name: 'X', type: 'dimmer' }, { name: 'Y' }, 'nope'] });
   assert.deepStrictEqual(s.actuatorTypes, { 'stair light': 'light', garage: 'switch', gate: 'lock' });
   assert.strictEqual(s.invalid.filter((w) => w.startsWith('actuators')).length, 3);
+  // Empty rows the settings form adds (no name, maybe a type) are ignored without a warning.
+  const blank = resolveSettings({ actuators: [{ type: 'switch' }, {}, { name: '', type: 'light' }, { name: '   ' }] });
+  assert.deepStrictEqual(blank.actuatorTypes, {});
+  assert.deepStrictEqual(blank.invalid, []);
   assert.strictEqual(resolveSettings({ actuators: 'Stair Light' }).invalid.length, 1);
 });
 

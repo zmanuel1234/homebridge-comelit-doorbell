@@ -119,6 +119,15 @@ test('test connection: the wrong user row is pointed out, with the right one', (
     assert.strictEqual(r.subaddress, 3);
   }));
 
+test('test connection: a bad setting is reported once, and an empty actuator row not at all', () =>
+  withFake({}, async (fake) => {
+    const blank = await testConnection(base(fake.port, { actuators: [{ type: 'switch' }] }));
+    assert.deepStrictEqual(blank.steps[0], { name: 'Settings', ok: true, detail: 'No problems found.' });
+    const bad = await testConnection(base(fake.port, { actuators: [{ name: 'Gate', type: 'dimmer' }] }));
+    assert.strictEqual(bad.steps[0].ok, false);
+    assert.strictEqual(bad.steps[0].detail.match(/is not valid/g).length, 1, bad.steps[0].detail);
+  }));
+
 test('test connection: an empty user row is fine (the plugin takes it from the intercom)', () =>
   withFake({}, async (fake) => {
     for (const subaddress of [undefined, '']) {
