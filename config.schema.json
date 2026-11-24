@@ -129,6 +129,28 @@
         "maximum": 30,
         "description": "Wait this long after the ring before opening. With Record rings on, 8 or more gives a clip of who comes in (the intercom's fresh picture comes about 4-5.6 s after the ring)."
       },
+      "actuators": {
+        "title": "Actuators shown as a switch or light",
+        "type": "array",
+        "description": "By default each actuator (a relay such as a gate or the stair light) is a lock, which opens only after a ring. List one here to show it as a switch or light instead: pressing it sends its command at any time, with no ring and no confirmation in HomeKit. Only for lights and other things that aren't doors. The names are those the intercom gives (Test connection in the Setup assistant lists them).",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "title": "Actuator name (as on the intercom)", "type": "string", "required": true },
+            "type": {
+              "title": "Show as",
+              "type": "string",
+              "default": "switch",
+              "oneOf": [
+                { "title": "Switch", "enum": ["switch"] },
+                { "title": "Light (Siri's \"turn on the lights\" presses it too)", "enum": ["light"] },
+                { "title": "Lock (default)", "enum": ["lock"] }
+              ],
+              "required": true
+            }
+          }
+        }
+      },
       "doctorModeMinutes": {
         "condition": { "functionBody": "return model.doctorMode === 'switch';" },
         "title": "Doctor mode: turn off after (minutes)",
@@ -406,7 +428,8 @@
         "nextVisitorMinutes",
         "nextVisitorSensor",
         "openRepeat",
-        "openRepeatSeconds"
+        "openRepeatSeconds",
+        "actuators"
       ]
     },
     {

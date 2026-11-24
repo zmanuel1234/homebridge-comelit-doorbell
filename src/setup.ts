@@ -241,7 +241,7 @@ export async function testConnection(config: ComelitPlatformConfig, opts: TestOp
     const row = typeof vip['apt-subaddress'] === 'number' ? vip['apt-subaddress'] : undefined;
     result.subaddress = row;
     const parts = [
-      `${result.doors.length} door${result.doors.length === 1 ? '' : 's'}${result.doors.length ? ` (${result.doors.map((d) => d.name).join(', ')})` : ''}`,
+      `${result.doors.length} door${result.doors.length === 1 ? '' : 's'}${result.doors.length ? ` (${result.doors.map((d) => (d.kind === 'actuator' ? `${d.name} [actuator]` : d.name)).join(', ')})` : ''}`,
       `${entrances} entrance panel${entrances === 1 ? '' : 's'}`,
     ];
     if (result.cameras.length) {

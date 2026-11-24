@@ -3,13 +3,14 @@ import { CameraAccessory } from './accessories/cameraAccessory';
 import { DoctorModeSwitch } from './accessories/doctorModeSwitch';
 import { NextVisitorSwitch } from './accessories/nextVisitorSwitch';
 import { DoorbellAccessory } from './accessories/doorbellAccessory';
+import { ActuatorSwitchAccessory } from './accessories/actuatorSwitch';
 import { LockAccessory } from './accessories/lockAccessory';
 import { authenticate } from './auth';
 import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
-import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings } from './config';
+import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings, actuatorKey, type ActuatorType } from './config';
 import { getDeviceConfig } from './configReader';
 import { ctppInitSequence } from './ctpp';
 import { openDoor } from './door';
@@ -525,7 +526,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       return;
     }
     const label = doctor && next ? 'Doctor mode and Next visitor' : doctor ? 'Doctor mode' : 'Next visitor';
-    const door = this.deviceConfig?.doors[0];
+    // The first door: an entrance door, else an actuator shown as a lock (never a light).
+    const door = this.deviceConfig?.doors.find((d) => this.actuatorType(d) === 'lock');
     if (!door) {
       this.log.warn(`${label}: no door to open`);
       return;
@@ -596,6 +598,28 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     return paused ?? all(false);
   }
 
+  /** How a door shows in HomeKit: entrance doors are always locks; actuators by the `actuators` setting. */
+  actuatorType(door: Door): ActuatorType {
+    return door.isActuator ? (this.settings.actuatorTypes[actuatorKey(door.name)] ?? 'lock') : 'lock';
+  }
+
+  /** An actuator shown as a switch or light: its own command, at any time (no ring needed). */
+  async pressActuator(door: Door): Promise<OpenResult> {
+    if (!door.isActuator || this.actuatorType(door) === 'lock') {
+      throw new Error('not an actuator shown as a switch or light');
+    }
+    // The accessory may hold the relay as saved before a restart: send only to the same relay
+    // in the intercom's current configuration (it may have been moved or renamed since).
+    const current = this.deviceConfig?.doors.find((d) => d.isActuator && d.index === door.index);
+    if (
+      this.deviceConfig &&
+      (!current || current.aptAddress !== door.aptAddress || current.outputIndex !== door.outputIndex || actuatorKey(current.name) !== actuatorKey(door.name))
+    ) {
+      throw new Error('the intercom no longer has this actuator as saved; it is rebuilt on the next connect');
+    }
+    return this.openOnce(current ?? door);
+  }
+
   private async openOnce(door: Door, retryBusy = false): Promise<OpenResult> {
     if (!this.client || !this.deviceConfig) {
       throw new Error('Not connected');
@@ -661,15 +685,33 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     const doors = [...config.doors].sort((a, b) => a.index - b.index);
     const cameras = [...config.cameras].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode, this.settings.nextVisitorSwitch,
-      this.settings.doctorModeSensor, this.settings.nextVisitorSensor]);
+      this.settings.doctorModeSensor, this.settings.nextVisitorSensor, doors.map((d) => this.actuatorType(d))]);
     if (from === this.builtFrom) {
       return;
     }
     this.builtFrom = from;
     const keep = new Set<string>();
     for (const door of config.doors) {
+      const type = this.actuatorType(door);
+      if (type !== 'lock') {
+        // A separate accessory from the lock's, so HomeKit forgets the lock (and its automations).
+        const accessory = this.accessoryFor(`actuator-${door.index}`, door.name || `Actuator ${door.index + 1}`, keep, undefined, { door });
+        new ActuatorSwitchAccessory(this, accessory, door, type);
+        continue;
+      }
       const accessory = this.accessoryFor(`lock-${door.index}`, door.name || `Door ${door.index + 1}`, keep, undefined, { door });
       this.lockAccessories.set(accessory.UUID, new LockAccessory(this, accessory, door));
+    }
+    // Names in the actuators setting that match no actuator on the intercom (a typo?).
+    const actuatorNames = new Set(config.doors.filter((d) => d.isActuator).map((d) => actuatorKey(d.name)));
+    const unknown = Object.keys(this.settings.actuatorTypes).filter((n) => !actuatorNames.has(n));
+    const shared = Object.keys(this.settings.actuatorTypes).filter((n) => config.doors.filter((d) => d.isActuator && actuatorKey(d.name) === n).length > 1);
+    if (shared.length > 0) {
+      this.log.warn(`actuators: more than one actuator is named ${shared.map((n) => `'${n}'`).join(', ')}; all of them are shown that way`);
+    }
+    if (unknown.length > 0 && config.doors.length > 0) {
+      const have = config.doors.filter((d) => d.isActuator).map((d) => `'${d.name}'`).join(', ') || 'none';
+      this.log.warn(`actuators: no actuator named ${unknown.map((n) => `'${n}'`).join(', ')} on the intercom (its actuators: ${have})`);
     }
     const bell = this.accessoryFor('doorbell', this.displayName, keep);
     this.doorbellAccessory = new DoorbellAccessory(this, bell);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.2 (2026-11-23)
+
+### Added
+
+- **Actuators shown as a switch or light** (`actuators`): an actuator such as the stair light can be a HomeKit light or switch instead of a lock. Turning it on sends the actuator's command at any time, with no ring needed, and it shows Off again a moment later. Doctor mode and Next Visitor never use one. Only for things that aren't doors: HomeKit asks for no confirmation. Actuators not listed stay locks, as before. A name that matches no actuator is reported in the log.
+
 ## 2.7.0-beta.1 (2026-11-23)
 
 No new settings; the plugin itself works as in 2.6.4.
