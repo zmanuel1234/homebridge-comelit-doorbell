@@ -258,6 +258,11 @@ test('setup assistant: the UI files are published, and the settings use them', (
   assert.match(html, /homebridge\.showSchemaForm\(\)/, 'the normal settings stay below the assistant');
   assert.match(html, /addEventListener\('ready', \(\) => tab === 'settings' && homebridge\.showSchemaForm\(\)\)/, 'asked again once the page is ready (on the Settings tab)');
   assert.ok(!html.includes('text-muted'), 'readable in the dark theme');
+  // In line with Homebridge's theme: its own classes, no see-through overrides or own colour scheme.
+  for (const off of ['bg-transparent', 'text-reset', 'btn-secondary', 'btn-outline-primary', 'theme-dark']) {
+    assert.ok(!html.includes(off), `no ${off}`);
+  }
+  assert.match(html, /btn btn-elegant btn-sm/, "secondary buttons as Homebridge's own (Close)");
   for (const route of ['/discover', '/test']) {
     assert.ok(html.includes(`'${route}'`) && fs.readFileSync(path.join(root, 'homebridge-ui/server.js'), 'utf8').includes(`'${route}'`), route);
   }

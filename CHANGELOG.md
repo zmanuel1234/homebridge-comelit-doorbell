@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.10 (2026-11-25)
+
+### Changed
+
+- **The settings page now matches Homebridge's theme.** Homebridge copies its stylesheets and theme into plugin pages; the page now uses them instead of its own overrides: cards and the test results as Homebridge's panels (dark grey in the dark theme, not see-through), **Use this** and **Use user row** in the theme's colour (they were Bootstrap blue), Refresh / Copy / Copy diagnostics like Homebridge's own **Close** button, and in the dark theme the tabs, the period menu (and its open list) and the diagnostics box in the colours of Homebridge's own plugin windows. It follows Homebridge's dark mode setting directly (no detection of its own).
+
 ## 2.7.0-beta.9 (2026-11-25)
 
 ### Changed

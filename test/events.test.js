@@ -206,6 +206,5 @@ test('settings page: Settings and Recent events tabs; the settings form is hidde
   assert.match(html, /request\('\/events'\)/);
   assert.match(html, /max-height: 360px; overflow-y: auto/, 'a box that scrolls, so the page stays short');
   for (const r of ['0', '1', '7', '30', 'all']) assert.match(html, new RegExp(`<option value="${r}">`), r);
-  assert.match(html, /userCurrentLightingMode/, "the period menu follows Homebridge's light or dark theme");
-  assert.match(html, /body\.theme-dark #range option/, 'its open list is dark too in the dark theme');
+  assert.match(html, /body\.dark-mode #range option \{ background-color: #333; color: #eee; \}/, "the period menu's open list in Homebridge's dark-menu colours");
 });
