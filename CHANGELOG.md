@@ -1,6 +1,10 @@
 # Changelog
 
-## 2.7.0-beta.10 (2026-11-25)
+## 2.7.0-beta.11 (2026-11-25)
+
+Same as 2.7.0-beta.10, which was never published: its release was created before its version change was merged, so its tag points at beta.9's code.
+
+## 2.7.0-beta.10 (2026-11-25, not published)
 
 ### Changed
 
