@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.6 (2026-11-25)
+
+### Fixed
+
+- **A misleading warning after a ring.** A live view opened within about a minute of a ring (or of a call with sound) can get no video, because the entrance panel is still finishing that call. The plugin warned about the panel's address and DIP switches, which is wrong for a working setup. It now notes that the intercom was still busy and to try again in a few seconds. The setup warning stays for a live view that gets no video with no recent call.
+
 ## 2.7.0-beta.5 (2026-11-24)
 
 ### Fixed
