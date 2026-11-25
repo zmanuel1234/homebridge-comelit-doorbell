@@ -2,6 +2,17 @@
   /* Tabs in the page's own colours (light or dark theme). */
   .nav-tabs .nav-link { color: inherit; opacity: 0.7; }
   .nav-tabs .nav-link.active { background: transparent; color: inherit; opacity: 1; border-bottom-color: transparent; }
+  /* The period menu in Homebridge's dark theme: the box and its open list both dark, with light
+     text (a see-through box showed its list as light text on white). Light theme: as usual. */
+  body.theme-dark #range,
+  body.theme-dark #range option {
+    background-color: #2d2d2d;
+    color: #e8e8e8;
+  }
+  body.theme-dark #range {
+    border-color: #5a5a5a;
+    --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e8e8e8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  }
 </style>
 
 <ul class="nav nav-tabs mb-3" role="tablist">
@@ -14,10 +25,11 @@
     <div class="card-body">
       <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
         <h5 class="card-title mb-0 me-auto">Recent events</h5>
-        <select id="range" class="form-select form-select-sm w-auto bg-transparent text-reset">
+        <select id="range" class="form-select form-select-sm w-auto" aria-label="Period">
           <option value="0">Today</option>
           <option value="1">Yesterday</option>
           <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
           <option value="all">All kept</option>
         </select>
         <button type="button" class="btn btn-secondary btn-sm" id="refresh">Refresh</button>
@@ -26,7 +38,8 @@
       <div id="eventList" class="small" style="max-height: 360px; overflow-y: auto"></div>
       <p class="small mt-2 mb-0" style="opacity: 0.75">
         Only what Homebridge sees: rings for your flat, and the doors it opens. Opens from an indoor monitor, a
-        neighbour's monitor or a key at the door aren't listed. The last 200 events are kept.
+        neighbour's monitor or a key at the door aren't listed. Events are kept for <span id="keepDays">30</span> days
+        (Advanced settings: Recent events: keep).
       </p>
     </div>
   </div>
@@ -96,7 +109,7 @@
 
     /** Events in the chosen range (by the browser's day). */
     function inRange(list) {
-      const r = $('range').value;
+      const r = range;
       if (r === 'all') {
         return list;
       }
@@ -116,6 +129,7 @@
     }
 
     let all = [];
+    let range = '0';
     function render() {
       shown = inRange(all);
       if (!shown.length) {
@@ -126,7 +140,7 @@
       $('eventList').innerHTML = shown
         .map((e) => {
           const d = day(e.t);
-          const header = $('range').value !== '0' && d !== lastDay ? `<div class="fw-bold mt-2">${esc(d)}</div>` : '';
+          const header = range !== '0' && d !== lastDay ? `<div class="fw-bold mt-2">${esc(d)}</div>` : '';
           lastDay = d;
           return (
             header +
@@ -140,6 +154,9 @@
 
     async function loadEvents() {
       try {
+        const { config } = await current();
+        const days = Number(config.eventHistoryDays);
+        $('keepDays').textContent = Number.isInteger(days) && days >= 1 && days <= 365 ? String(days) : '30';
         const r = await homebridge.request('/events');
         all = r.events ?? [];
         render();
@@ -147,7 +164,26 @@
         homebridge.toast.error(e.message ?? String(e), "Couldn't read the events");
       }
     }
-    $('range').addEventListener('change', render);
+    $('range').addEventListener('change', () => {
+      range = $('range').value;
+      render();
+    });
+
+    // Homebridge's light or dark theme, for the period menu's colours. Older Homebridge UIs don't
+    // say: then judge by the page's text colour (light text: dark theme).
+    (async () => {
+      let mode;
+      try {
+        mode = await homebridge.userCurrentLightingMode?.();
+      } catch {
+        mode = undefined;
+      }
+      if (mode !== 'light' && mode !== 'dark') {
+        const [r, g, b] = (getComputedStyle(document.body).color.match(/\d+/g) ?? [0, 0, 0]).map(Number);
+        mode = r * 0.299 + g * 0.587 + b * 0.114 > 140 ? 'dark' : 'light';
+      }
+      document.body.classList.toggle('theme-dark', mode === 'dark');
+    })();
     $('refresh').addEventListener('click', loadEvents);
     $('copyEvents').addEventListener('click', async () => {
       const text = shown.map((e) => `${day(e.t)} ${time(e.t)}  ${e.text}${e.note ? ` (${e.note})` : ''}`).join('\n');
