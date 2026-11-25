@@ -39,12 +39,13 @@ const { version } = require('../package.json');
         }
       });
       // Recent events, as the plugin keeps them in Homebridge's storage folder (newest first).
-      this.onRequest('/events', async () => {
+      // body.name: the intercom's name in the settings (each intercom has its own file).
+      this.onRequest('/events', async (body) => {
         const dir = this.homebridgeStoragePath;
         if (!dir) {
           return { events: [], note: "Homebridge didn't give its storage folder." };
         }
-        return { events: events.describeEvents(events.readEvents(path.join(dir, events.EVENTS_FILE))) };
+        return { events: events.describeEvents(events.readEvents(path.join(dir, events.eventsFileFor(body?.name)))) };
       });
       this.ready();
     }

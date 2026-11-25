@@ -104,7 +104,7 @@
     $('tabSettings').addEventListener('click', () => showTab('settings'));
     $('tabEvents').addEventListener('click', () => showTab('events'));
 
-    const ICONS = { ring: '🔔', open: '🔓', 'open-failed': '⚠️', refused: '⛔', view: '📷', mode: '🔁', connected: '🔌', disconnected: '📴', start: '▶️' };
+    const ICONS = { ring: '🔔', open: '🔓', actuator: '💡', 'open-failed': '⚠️', refused: '⛔', view: '📷', mode: '🔁', connected: '🔌', disconnected: '📴', start: '▶️' };
     let shown = [];
     const pad = (n) => String(n).padStart(2, '0');
     const time = (t) => {
@@ -163,7 +163,7 @@
         const { config } = await current();
         const days = Number(config.eventHistoryDays);
         $('keepDays').textContent = Number.isInteger(days) && days >= 1 && days <= 365 ? String(days) : '30';
-        const r = await homebridge.request('/events');
+        const r = await homebridge.request('/events', { name: (await current()).config.name ?? '' });
         all = r.events ?? [];
         render();
       } catch (e) {

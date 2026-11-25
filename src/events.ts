@@ -6,11 +6,25 @@
  * settings (Recent events tab). Holds no tokens or personal data: only times, door names and
  * what happened.
  */
-import { promises as fs, readFileSync } from 'node:fs';
+import { mkdirSync, promises as fs, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-/** The file, in Homebridge's storage folder. */
+/** The file, in Homebridge's storage folder (for the intercom with the default name). */
 export const EVENTS_FILE = 'comelit-doorbell-events.json';
+
+/**
+ * The events file for an intercom, by its name in the settings: the default name keeps the plain
+ * file name; another name gets its own file, so two intercoms (two child bridges sharing
+ * Homebridge's storage folder) don't overwrite each other's history.
+ */
+export function eventsFileFor(name?: unknown): string {
+  const n = typeof name === 'string' ? name.trim() : '';
+  if (!n || n === 'Comelit Intercom') {
+    return EVENTS_FILE;
+  }
+  const slug = n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return slug ? `comelit-doorbell-events-${slug}.json` : EVENTS_FILE;
+}
 /** How long events are kept by default (setting eventHistoryDays). */
 export const DEFAULT_EVENT_DAYS = 30;
 /** At most this many events are kept, whatever the days (the oldest go first): a safety cap. */
@@ -32,7 +46,8 @@ export type EventKind =
   | 'connected'
   | 'disconnected'
   | 'ring'
-  | 'open' // a door opened by the plugin (HomeKit, doctor mode, Next Visitor, an actuator)
+  | 'open' // a door opened by the plugin (HomeKit, doctor mode, Next Visitor, an actuator shown as a lock)
+  | 'actuator' // an actuator shown as a switch or light, pressed (not a door: not counted as an open)
   | 'open-failed'
   | 'refused' // an unlock HomeKit asked for and the plugin refused
   | 'view' // a live view
@@ -47,7 +62,7 @@ export interface RecentEvent {
   note?: string;
 }
 
-const KINDS: readonly EventKind[] = ['start', 'connected', 'disconnected', 'ring', 'open', 'open-failed', 'refused', 'view', 'mode'];
+const KINDS: readonly EventKind[] = ['start', 'connected', 'disconnected', 'ring', 'open', 'actuator', 'open-failed', 'refused', 'view', 'mode'];
 
 function valid(e: unknown): e is RecentEvent {
   const x = e as RecentEvent;
@@ -147,7 +162,23 @@ export class EventLog {
     return [...this.events];
   }
 
-  /** Writes now (at shutdown, and in tests). */
+  /** Writes now, synchronously: at shutdown, when there may be no time for an asynchronous write. */
+  flushSync(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    if (!this.file) {
+      return;
+    }
+    try {
+      mkdirSync(path.dirname(this.file), { recursive: true });
+      writeFileSync(`${this.file}.tmp`, JSON.stringify(this.events));
+      renameSync(`${this.file}.tmp`, this.file);
+    } catch {
+      // A history that can't be saved must not disturb the doorbell.
+    }
+  }
+
+  /** Writes now (in tests, and after the camera's shutdown). */
   async flush(): Promise<void> {
     clearTimeout(this.saveTimer);
     this.saveTimer = undefined;

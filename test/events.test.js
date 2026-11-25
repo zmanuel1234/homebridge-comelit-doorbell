@@ -203,8 +203,53 @@ test('settings page: Settings and Recent events tabs; the settings form is hidde
   assert.match(html, /id="tabSettings"/);
   assert.match(html, /id="tabEvents"/);
   assert.match(html, /homebridge\.hideSchemaForm\(\)/);
-  assert.match(html, /request\('\/events'\)/);
+  assert.match(html, /request\('\/events', \{ name:/, "asks for this intercom's events");
   assert.match(html, /max-height: 360px; overflow-y: auto/, 'a box that scrolls, so the page stays short');
   for (const r of ['0', '1', '7', '30', 'all']) assert.match(html, new RegExp(`<option value="${r}">`), r);
   assert.match(html, /body\.dark-mode #range option \{ background-color: #333; color: #eee; \}/, "the period menu's open list in Homebridge's dark-menu colours");
+});
+
+// Release review (2.7.0): two intercoms, actuator presses, the save at shutdown.
+
+test('each intercom has its own events file (two child bridges share the storage folder)', async () => {
+  const { eventsFileFor } = require('../dist/events');
+  assert.strictEqual(eventsFileFor(undefined), EVENTS_FILE);
+  assert.strictEqual(eventsFileFor(' Comelit Intercom '), EVENTS_FILE, 'the default name keeps the file it always had');
+  assert.strictEqual(eventsFileFor('Back Gate'), 'comelit-doorbell-events-back-gate.json');
+  assert.strictEqual(eventsFileFor('../../etc'), 'comelit-doorbell-events-etc.json', 'no path in the name');
+  assert.strictEqual(eventsFileFor('!!!'), EVENTS_FILE);
+  const dir = tmpDir();
+  const make = (name) => {
+    const api = fakeApi();
+    api.user = { storagePath: () => dir };
+    return new ComelitIntercomPlatform(quietLog(), { platform: 'ComelitIntercom', name }, api);
+  };
+  const a = make('Comelit Intercom');
+  const b = make('Back Gate');
+  a.onEvent({ eventType: 'doorbell_ring', aptAddress: 'SB000002' });
+  await a.events.flush();
+  await b.events.flush();
+  assert.deepStrictEqual(readEvents(path.join(dir, EVENTS_FILE)).map((e) => e.kind), ['start', 'ring']);
+  assert.deepStrictEqual(readEvents(path.join(dir, 'comelit-doorbell-events-back-gate.json')).map((e) => e.kind), ['start'], 'not overwritten');
+});
+
+test('an actuator shown as a switch or light is its own event, not a door open after a ring', () => {
+  const t0 = Date.now();
+  const shown = describeEvents([
+    { t: t0, kind: 'ring', text: 'Ring' },
+    { t: t0 + 10_000, kind: 'actuator', text: "Actuator 'Stair light' turned on from HomeKit" },
+  ]);
+  assert.strictEqual(shown.find((e) => e.kind === 'ring').note, 'not opened by Homebridge');
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, 'x.json'), JSON.stringify([{ t: 1, kind: 'actuator', text: 'a' }]));
+  assert.strictEqual(readEvents(path.join(dir, 'x.json')).length, 1, 'a known kind');
+});
+
+test('at shutdown the history is written at once (Homebridge may not wait)', () => {
+  const dir = tmpDir();
+  const file = path.join(dir, EVENTS_FILE);
+  const log = new EventLog(file);
+  log.add('ring', 'Ring');
+  log.flushSync();
+  assert.deepStrictEqual(readEvents(file).map((e) => e.kind), ['ring'], 'on disk before any timer');
 });

@@ -756,6 +756,7 @@ test('actuators: one set to light is a lightbulb that sends its command at any t
   assert.deepStrictEqual(sent, ['Stair Light'], 'sent without a ring');
   assert.strictEqual(on.get(), true, 'shows On for a moment');
   assert.ok(lines.some(([l, m]) => l === 'info' && /Actuator 'Stair Light': on \(sent/.test(m)), JSON.stringify(lines));
+  assert.deepStrictEqual(p.events.list().filter((e) => e.kind !== 'start').map((e) => e.kind), ['actuator'], 'Recent events: a press, not a door open');
   await new Promise((r) => setTimeout(r, 1100));
   assert.strictEqual(on.get(), false);
   assert.strictEqual(on.value, false, 'HomeKit told');

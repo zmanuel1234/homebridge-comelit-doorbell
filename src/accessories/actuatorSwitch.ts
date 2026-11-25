@@ -58,7 +58,7 @@ export class ActuatorSwitchAccessory {
     try {
       const result = await this.platform.pressActuator(this.door);
       this.platform.log.info(result.confirmed ? `${label}: on` : `${label}: on (sent; an actuator gives no confirmation)`);
-      this.platform.events.add('open', `Actuator '${this.door.name}' turned on from HomeKit`);
+      this.platform.events.add('actuator', `Actuator '${this.door.name}' turned on from HomeKit`);
       this.offTimer = setTimeout(() => this.showOff(), SHOW_ON_MS);
     } catch (e) {
       this.platform.log.warn(`${label}: failed: ${(e as Error).message}`);
