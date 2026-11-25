@@ -41,6 +41,8 @@ import type { Door, OpenResult } from './models';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
 
+/** How long after a ring or a call with sound a live view without video is put down to the panel being busy. */
+const BUSY_AFTER_CALL_MS = 60_000;
 /** The capabilities the Comelit app sends. */
 const APP_CAPABILITIES = Buffer.from('0003490027000000', 'hex');
 const SETUP_ACK = Buffer.from('000c000000000000', 'hex');
@@ -291,11 +293,29 @@ export class CallHandler {
 
   private warnedNoVideo = false;
 
+  /** When the last ring started (Date.now()), 0 if none yet. */
+  lastRingAt = 0;
+  /** When the last call with sound (an answered ring, or a live view with sound) ended, 0 if none. */
+  lastSoundCallEndedAt = 0;
+
   /**
-   * Our own call to the panel (live view without a ring) ended without any video: warns once
-   * per run, since some systems accept the call but never send video.
+   * Our own call to the panel (live view without a ring) ended without any video. Shortly after
+   * a ring or a call with sound, the panel is still busy and takes a new call without sending
+   * video (about 20 s on the author's kit): that is only noted. Otherwise warns once per run,
+   * since some systems accept the call but never send video.
    */
   noVideoFromOwnCall(reason: string): void {
+    const ring = Date.now() - this.lastRingAt;
+    const sound = Date.now() - this.lastSoundCallEndedAt;
+    const since = Math.min(ring, sound);
+    if (since < BUSY_AFTER_CALL_MS) {
+      const what = ring <= sound ? 'the ring' : 'the call with sound';
+      this.log?.info(
+        `Live view without a ring: no video (${reason}); the intercom was still busy after ${what} ` +
+          `${Math.round(since / 1000)} s earlier (it needs about 20 s). Try again in a few seconds.`,
+      );
+      return;
+    }
     if (this.warnedNoVideo) {
       return;
     }
@@ -354,6 +374,7 @@ export class CallHandler {
         ended: false,
       };
       this.calls.set(key, call);
+      this.lastRingAt = call.born;
     }
     if (!call) {
       return;
@@ -1223,6 +1244,10 @@ export class MediaSession extends EventEmitter {
       return;
     }
     this.ended = true;
+    if (!this.call.outbound || this.voiceOpen) {
+      // A ring's media or a live view with sound: the panel needs a moment before the next call.
+      this.handler.lastSoundCallEndedAt = Date.now();
+    }
     if (this.call.outbound && this.sawPicture) {
       // The unlock window counts from the last live picture (platform.isUnlockAllowed).
       this.handler.liveViewEndedAt = Math.max(this.handler.liveViewEndedAt, this.lastVideoAt);

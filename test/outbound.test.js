@@ -247,6 +247,47 @@ test('an own call that ends without video warns once per run; closing the view e
   assert.strictEqual(warns.length, 1, 'only once');
 });
 
+test('no video shortly after a ring or a call with sound: explained as the panel being busy, not a setup problem', async () => {
+  const { call } = setup();
+  const warns = [];
+  const infos = [];
+  call.log = { debug() {}, error() {}, info: (m) => infos.push(m), warn: (m) => warns.push(m) };
+  call.lastRingAt = Date.now() - 28_000; // as on the author's kit: a ring, then a live view 28 s later
+  let session = await call.startMedia(false);
+  await session.end('the intercom ended the call');
+  assert.deepStrictEqual(warns, []);
+  assert.strictEqual(infos.length, 1);
+  assert.match(infos[0], /no video \(the intercom ended the call\); the intercom was still busy after the ring 28 s earlier .*Try again in a few seconds/);
+
+  call.lastRingAt = 0;
+  call.lastSoundCallEndedAt = Date.now() - 5_000;
+  session = await call.startMedia(false);
+  await session.end('no media from the intercom');
+  assert.match(infos[1], /after the call with sound 5 s earlier/);
+  assert.deepStrictEqual(warns, []);
+
+  // A minute later it is a setup problem again: the usual warning (still once per run).
+  call.lastSoundCallEndedAt = Date.now() - 61_000;
+  session = await call.startMedia(false);
+  await session.end('no media from the intercom');
+  assert.strictEqual(warns.length, 1);
+  assert.match(warns[0], /took the call but sent no video .*Entrance button/);
+});
+
+test('a ring, and the end of a call with sound, are remembered for that explanation', async () => {
+  const { call } = setup();
+  const silent = await call.startMedia(false);
+  await silent.end('viewer closed');
+  assert.strictEqual(call.lastSoundCallEndedAt, 0, 'a silent live view without a ring does not count');
+  assert.strictEqual(call.lastRingAt, 0);
+  const before = Date.now();
+  await call.onFrame(ringFrame(call), ['SB100001']);
+  assert.ok(call.lastRingAt >= before, 'ring time noted');
+  const ring = await call.startMedia(false); // the view uses the ring's call
+  await ring.end('viewer closed');
+  assert.ok(call.lastSoundCallEndedAt >= before, "the end of a ring's media is noted");
+});
+
 test('sound in live view without a ring: our call is answered like a ring, with VOICESTATUS before the video request', async () => {
   const { call, sent } = setup({ options: { liveViewWithoutRing: true, liveViewSound: 'always', panelAddress: 'SB100001' } });
   const session = await call.startMedia(false);
