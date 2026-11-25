@@ -3,6 +3,7 @@
 const path = require('node:path');
 const setup = require('../dist/setup.js');
 const events = require('../dist/events.js');
+const backup = require('../dist/backup.js');
 const { version } = require('../package.json');
 
 (async () => {
@@ -27,6 +28,15 @@ const { version } = require('../package.json');
           throw new RequestError('No settings to test', {});
         }
         return setup.testConnection(config, { pluginVersion: version });
+      });
+      // A backup file from the intercom (base64): its users with a token. Read here, not kept.
+      this.onRequest('/backup', async (body) => {
+        const data = typeof body?.data === 'string' ? Buffer.from(body.data, 'base64') : Buffer.alloc(0);
+        try {
+          return backup.readBackup(data);
+        } catch (e) {
+          throw new RequestError(e.message, {});
+        }
       });
       // Recent events, as the plugin keeps them in Homebridge's storage folder (newest first).
       this.onRequest('/events', async () => {
