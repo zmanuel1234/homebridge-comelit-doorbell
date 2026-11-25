@@ -36,6 +36,14 @@
         "default": true,
         "description": "Keep a connection open to receive rings. Without rings the lock only opens with 'Unlock allowed for' set to 0."
       },
+      "eventHistoryDays": {
+        "title": "Recent events: keep (days)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 365,
+        "description": "How long the Recent events tab keeps rings, door opens and the rest (at most 2,000 events)."
+      },
       "reconnectDelay": {
         "title": "Reconnect delay (seconds)",
         "type": "integer",
@@ -459,7 +467,8 @@
         "leaseRefreshMinutes",
         "leaseRecycleMinutes",
         "reconnectDelay",
-        "maxReconnectDelay"
+        "maxReconnectDelay",
+        "eventHistoryDays"
       ]
     },
     {

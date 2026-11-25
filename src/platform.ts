@@ -80,7 +80,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.settings = resolveSettings(config);
     this.displayName = String(config.name ?? '').trim() || 'Comelit Intercom';
     const storage = api.user?.storagePath?.();
-    this.events = new EventLog(storage ? path.join(storage, EVENTS_FILE) : undefined);
+    this.events = new EventLog(storage ? path.join(storage, EVENTS_FILE) : undefined, undefined, this.settings.eventHistoryDays);
     this.events.add('start', `Homebridge started the plugin (${pluginVersion()})`);
     for (const w of settingsWarnings(this.settings)) {
       this.log.warn(w);

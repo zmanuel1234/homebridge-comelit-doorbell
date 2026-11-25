@@ -55,6 +55,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   videoRefreshSeconds?: number;
   liveViewWaitSeconds?: number;
   maxReconnectDelay?: number;
+  eventHistoryDays?: number | string;
   lastVisitorMinutes?: number;
 }
 
@@ -70,6 +71,8 @@ export interface Settings {
   reconnectDelayMs: number;
   /** Longest wait between reconnect attempts while the intercom can't be reached. */
   maxReconnectDelayMs: number;
+  /** Recent events are kept this many days. */
+  eventHistoryDays: number;
   leaseMode: 'reconnect' | 'inplace';
   leaseRefreshMs: number;
   leaseRecycleMs: number;
@@ -265,6 +268,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     enableNotifications: bool('enableNotifications', true),
     reconnectDelayMs: num('reconnectDelay', DEFAULT_RECONNECT_DELAY_S, (n) => n >= 1 && n <= 300) * 1000,
     maxReconnectDelayMs: pos('maxReconnectDelay', 300, 1, 3600) * 1000,
+    eventHistoryDays: num('eventHistoryDays', 30, (n) => Number.isInteger(n) && n >= 1 && n <= 365),
     leaseMode: choice('leaseRefreshMode', ['inplace', 'reconnect'] as const, 'inplace'),
     leaseRefreshMs: pos('leaseRefreshMinutes', 2, 0.5, 55) * 60_000,
     leaseRecycleMs: pos('leaseRecycleMinutes', 50, 5, 55) * 60_000,

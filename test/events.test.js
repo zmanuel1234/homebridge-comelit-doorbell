@@ -23,6 +23,39 @@ test('event log: keeps the newest events, saves them whole, and reads them back'
   assert.deepStrictEqual(new EventLog(file, 3).list().map((e) => e.text), ['View 2', 'View 3', 'View 4']);
 });
 
+test('event log: kept by days (30 by default), with a cap; old events go at start-up too', async () => {
+  const dir = tmpDir();
+  const file = path.join(dir, EVENTS_FILE);
+  const day = 86_400_000;
+  fs.writeFileSync(file, JSON.stringify([
+    { t: Date.now() - 40 * day, kind: 'ring', text: '40 days ago' },
+    { t: Date.now() - 20 * day, kind: 'ring', text: '20 days ago' },
+    { t: Date.now() - 2 * day, kind: 'ring', text: '2 days ago' },
+  ]));
+  assert.deepStrictEqual(new EventLog(file).list().map((e) => e.text), ['20 days ago', '2 days ago'], '30 days by default');
+  assert.deepStrictEqual(new EventLog(file, undefined, 7).list().map((e) => e.text), ['2 days ago'], '7 days');
+  assert.deepStrictEqual(new EventLog(file, undefined, 365).list().length, 3, 'a year');
+  const capped = new EventLog(undefined, 3, 365);
+  for (let n = 0; n < 5; n++) capped.add('view', `View ${n}`, Date.now() - (5 - n) * 1000);
+  assert.deepStrictEqual(capped.list().map((e) => e.text), ['View 2', 'View 3', 'View 4'], 'the cap still applies');
+  const { MAX_EVENTS, DEFAULT_EVENT_DAYS } = require('../dist/events');
+  assert.strictEqual(MAX_EVENTS, 2000);
+  assert.strictEqual(DEFAULT_EVENT_DAYS, 30);
+});
+
+test('event log: the days setting (eventHistoryDays), 1 to 365, 30 by default', () => {
+  const { resolveSettings } = require('../dist/config');
+  assert.strictEqual(resolveSettings({}).eventHistoryDays, 30);
+  assert.strictEqual(resolveSettings({ eventHistoryDays: '90' }).eventHistoryDays, 90);
+  for (const bad of [0, 366, 2.5, 'x']) {
+    const s = resolveSettings({ eventHistoryDays: bad });
+    assert.strictEqual(s.eventHistoryDays, 30, String(bad));
+    assert.strictEqual(s.invalid.length, 1, String(bad));
+  }
+  const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.schema.json'), 'utf8'));
+  assert.deepStrictEqual([schema.schema.properties.eventHistoryDays.minimum, schema.schema.properties.eventHistoryDays.maximum], [1, 365]);
+});
+
 test('event log: a ring reported twice is one ring; no IP addresses; events in time order', () => {
   const log = new EventLog(undefined);
   log.add('ring', 'Ring');
@@ -172,4 +205,7 @@ test('settings page: Settings and Recent events tabs; the settings form is hidde
   assert.match(html, /homebridge\.hideSchemaForm\(\)/);
   assert.match(html, /request\('\/events'\)/);
   assert.match(html, /max-height: 360px; overflow-y: auto/, 'a box that scrolls, so the page stays short');
+  for (const r of ['0', '1', '7', '30', 'all']) assert.match(html, new RegExp(`<option value="${r}">`), r);
+  assert.match(html, /userCurrentLightingMode/, "the period menu follows Homebridge's light or dark theme");
+  assert.match(html, /body\.theme-dark #range option/, 'its open list is dark too in the dark theme');
 });

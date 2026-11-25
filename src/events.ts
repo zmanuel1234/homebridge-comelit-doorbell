@@ -1,7 +1,8 @@
 /**
  * Recent events: a short history of what the plugin saw and did (rings, door opens and what
  * opened them, refused unlocks, live views, the connection), kept in a small file in
- * Homebridge's storage folder so it survives restarts and log trimming. Shown in the plugin's
+ * Homebridge's storage folder so it survives restarts and log trimming (30 days by default,
+ * setting eventHistoryDays; at most 2,000 events). Shown in the plugin's
  * settings (Recent events tab). Holds no tokens or personal data: only times, door names and
  * what happened.
  */
@@ -10,8 +11,10 @@ import path from 'node:path';
 
 /** The file, in Homebridge's storage folder. */
 export const EVENTS_FILE = 'comelit-doorbell-events.json';
-/** How many events are kept (the oldest go first). */
-export const MAX_EVENTS = 200;
+/** How long events are kept by default (setting eventHistoryDays). */
+export const DEFAULT_EVENT_DAYS = 30;
+/** At most this many events are kept, whatever the days (the oldest go first): a safety cap. */
+export const MAX_EVENTS = 2000;
 /** How long after a ring a view or an open counts as its outcome. */
 const RING_OUTCOME_MS = 120_000;
 /** Writes are grouped: at most one per this long. */
@@ -97,12 +100,27 @@ export class EventLog {
   private saveTimer?: NodeJS.Timeout;
   private saving: Promise<void> = Promise.resolve();
 
-  /** `file` undefined: kept in memory only (no storage folder, tests). */
+  /**
+   * `file` undefined: kept in memory only (no storage folder, tests). Events older than `days`
+   * go, and at most `max` are kept.
+   */
   constructor(
     private readonly file?: string,
     private readonly max = MAX_EVENTS,
+    private readonly days = DEFAULT_EVENT_DAYS,
   ) {
-    this.events = file ? readEvents(file).slice(-max) : [];
+    this.events = file ? readEvents(file).sort((a, b) => a.t - b.t) : [];
+    this.prune();
+  }
+
+  /** Drops events older than the days kept, and the oldest beyond the cap. */
+  private prune(): void {
+    const from = Date.now() - this.days * 86_400_000;
+    const old = this.events.findIndex((e) => e.t >= from);
+    this.events.splice(0, old === -1 ? this.events.length : old);
+    if (this.events.length > this.max) {
+      this.events.splice(0, this.events.length - this.max);
+    }
   }
 
   /** `t`: when it happened, if not now (a live view is noted when it ends, timed from its start). */
@@ -115,9 +133,7 @@ export class EventLog {
     }
     this.events.push({ t, kind, text: plain(text) });
     this.events.sort((a, b) => a.t - b.t);
-    if (this.events.length > this.max) {
-      this.events.splice(0, this.events.length - this.max);
-    }
+    this.prune();
     if (this.file && !this.saveTimer) {
       this.saveTimer = setTimeout(() => {
         this.saveTimer = undefined;

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.7.0-beta.9 (2026-11-25)
+
+### Changed
+
+- **Recent events keeps 30 days** instead of the last 200 events: **Recent events: keep (days)** under Advanced (`eventHistoryDays`, 1–365), with a safety cap of 2,000 events. The tab says how long events are kept.
+- The period menu (Today, Yesterday, Last 7 days, **Last 30 days**, All kept) follows Homebridge's light or dark theme. In the dark theme its open list was light text on white, so only "Today" could be seen.
+
+### Fixed
+
+- README: the setup step's JSON example was split from its sentence by the Recent events paragraph.
+
 ## 2.7.0-beta.8 (2026-11-25)
 
 ### Added
