@@ -8,7 +8,7 @@ import { LockAccessory } from './accessories/lockAccessory';
 import { authenticate } from './auth';
 import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
-import { EVENTS_FILE, EventLog } from './events';
+import { EventLog, eventsFileFor } from './events';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
 import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings, actuatorKey, type ActuatorType } from './config';
@@ -80,7 +80,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.settings = resolveSettings(config);
     this.displayName = String(config.name ?? '').trim() || 'Comelit Intercom';
     const storage = api.user?.storagePath?.();
-    this.events = new EventLog(storage ? path.join(storage, EVENTS_FILE) : undefined, undefined, this.settings.eventHistoryDays);
+    this.events = new EventLog(storage ? path.join(storage, eventsFileFor(config.name)) : undefined, undefined, this.settings.eventHistoryDays);
     this.events.add('start', `Homebridge started the plugin (${pluginVersion()})`);
     for (const w of settingsWarnings(this.settings)) {
       this.log.warn(w);
@@ -419,7 +419,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   private teardown(): void {
     this.shuttingDown = true;
-    // Saved after the camera has ended its live views, which note them.
+    // Saved at once (Homebridge may not wait), and again after the camera has ended its live
+    // views, which note them.
+    this.events.flushSync();
     void (this.camera?.shutdown() ?? Promise.resolve())
       .catch(() => undefined)
       .then(() => this.events.flush());

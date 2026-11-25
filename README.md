@@ -26,6 +26,7 @@ It continues [`homebridge-comelit-intercom`](https://www.npmjs.com/package/homeb
 - [Setup](#setup)
 - [What appears in HomeKit](#what-appears-in-homekit)
 - [Recommended Home app setup](#recommended-home-app-setup)
+- [The settings page](#the-settings-page) (Setup assistant, Recent events)
 - [Settings](#settings)
 - [How ring and unlock work](#how-ring-and-unlock-work)
 - [Migrating from homebridge-comelit-intercom](#migrating-from-homebridge-comelit-intercom) (and [updating from 2.0.x](#updating-from-20x))
@@ -95,11 +96,7 @@ npm install -g homebridge-comelit-doorbell
 
 ### 3. Configure
 
-Open the plugin's settings. The **Setup assistant** at the top helps:
-
-- **Find my intercom** searches your network and fills in the intercom's IP address. If nothing answers (for example, Homebridge is on another network or VLAN), enter the IP address by hand.
-- **Test connection** checks the settings step by step: reaching the intercom, the token, its doors and entrance panel, the user row (it offers the right one if yours is wrong; left empty, the plugin reads it from the intercom) and, with the camera on, ffmpeg. It only reads: nothing on the intercom changes. You can test before saving.
-- **Copy diagnostics** copies a report to paste into an issue. The token, passwords, serial and MAC addresses are removed; door and user names stay, so check them first.
+Open the plugin's settings. The **[Setup assistant](#the-settings-page)** at the top finds the intercom (**Find my intercom**), reads the token from a backup (**Token from a backup**) and checks everything step by step (**Test connection**).
 
 Fill in **Intercom IP address**, **User token** and **User row number**, test, then save. The equivalent JSON:
 
@@ -112,8 +109,6 @@ Fill in **Intercom IP address**, **User token** and **User row number**, test, t
   "subaddress": 3
 }
 ```
-
-The plugin's settings also have a **Recent events** tab: the last rings, door opens and what opened them (HomeKit, Doctor Mode, Next Visitor, an actuator), unlocks it refused, live views, Doctor Mode and Next Visitor turning on and off, and the connection to the intercom. Each ring says what followed it: viewed, opened (and how long after), or *not opened by Homebridge*. **Copy** copies the list. Choose Today, Yesterday, Last 7 days, Last 30 days or All kept. The plugin keeps them for 30 days (**Recent events: keep (days)** under Advanced, `eventHistoryDays`, 1–365; at most 2,000 events) in `comelit-doorbell-events.json` in Homebridge's storage folder, so they survive restarts and log trimming; the file holds no token or personal data. It only lists what Homebridge sees: an open from an indoor monitor, a neighbour's monitor or a key at the door isn't there.
 
 Everything else has working defaults. Running the plugin as a **child bridge** is recommended.
 
@@ -151,6 +146,33 @@ For the fewest taps when someone rings (with **Doorbell camera** on and **Answer
 - **Opening without the video:** add the Comelit lock to Control Centre or the Lock Screen, or use the Apple Watch or Siri ("unlock" followed by the lock's name). During a ring the plugin answers, opens and hangs up by itself.
 - **Chime and TV:** a HomePod can play a chime when the doorbell rings, and an Apple TV can show the camera in a corner of the screen; both are turned on in the Home app's settings.
 - **Expected visitors:** turn on the **Next Visitor switch** setting, then turn the switch on by hand, by Siri, or from a Home automation: the next ring opens the door and the switch turns itself off. For an afternoon of guests, set **Doctor mode** to *With a HomeKit switch* instead, and turn it off afterwards.
+
+## The settings page
+
+The plugin's settings have two tabs: **Settings** (the Setup assistant, then all the usual settings) and **Recent events**. Both follow Homebridge's light or dark theme.
+
+![The Setup assistant after Find my intercom and Test connection](https://raw.githubusercontent.com/zmanuel1234/homebridge-comelit-doorbell/main/docs/settings-page.png)
+
+### Setup assistant
+
+It only reads from the intercom (it signs in and asks for its information and configuration, like the Comelit app); nothing there is changed. It works on the settings as the form has them, saved or not.
+
+- **Find my intercom**: searches the network (Comelit devices answer an `INFO` search on UDP port 24199) and lists what answers, with model, firmware and ViP address. **Use this** fills in the IP address. Nothing found: Homebridge may be on another network or VLAN than the intercom; enter the IP address by hand.
+- **Test connection**: checks, one line each, the settings, reaching the intercom, the token, the intercom's model and firmware, its doors and entrance panel, the user row the token belongs to (**Use user row N** fixes a wrong one; empty is fine) and, with the camera on, that ffmpeg runs. A failed line says what to do.
+- **Token from a backup**: choose a backup of the intercom's settings (its web page: **Backup/Restore → Make Backup**, then download it; `.tar.gz`, or `.tar` if your browser unpacked it). It lists the users that have a token, by row and description; **Use this** fills in the token and user row. Activation codes and email addresses in the backup are never shown, and the file isn't kept. A backup can be older than the intercom's settings: run **Test connection** afterwards.
+- **Copy diagnostics** (after a test): a report to paste into an issue. The token, passwords, codes, serial numbers, MAC addresses and URLs are removed; door and user names stay, so check it before posting.
+
+Changes made by **Use this** and **Use user row** are in the form only until you click **Save**.
+
+### Recent events
+
+![The Recent events tab](https://raw.githubusercontent.com/zmanuel1234/homebridge-comelit-doorbell/main/docs/recent-events.png)
+
+What Homebridge saw and did: rings; door opens and what opened them (HomeKit, Doctor Mode, Next Visitor); actuators shown as a switch or light being pressed (not counted as a door open); unlocks it refused and opens that failed; live views (how long, or no video and why); Doctor Mode and Next Visitor turning on and off; the connection to the intercom; Homebridge starting the plugin. Each ring says what followed it within two minutes: viewed, opened and how long after, or *not opened by Homebridge*.
+
+- Choose Today, Yesterday, Last 7 days, Last 30 days or All kept; **Copy** copies the list.
+- Kept for 30 days (**Recent events: keep (days)** under Advanced, `eventHistoryDays`, 1–365; at most 2,000 events) in `comelit-doorbell-events.json` in Homebridge's storage folder (a second intercom with another name gets its own file), so they survive restarts and log trimming. The file holds times, door names and what happened, so it shows when the door was used; it holds no token, codes or IP addresses.
+- Only what Homebridge sees: an open from an indoor monitor, a neighbour's monitor, the concierge or a key at the door isn't there, nor a ring for another flat.
 
 ## Settings
 
@@ -436,8 +458,10 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 - Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 - Opening inside a call (`answer-on-open`, `answer-on-view`, doctor mode) uses the door's output, but an output of `0` is sent as `1`: tested only on a door with output 1.
-- One intercom per Homebridge bridge: for two intercoms, run each in its own child bridge (the accessories' IDs and the saved visitor picture aren't separate per intercom).
+- One intercom per Homebridge bridge: for two intercoms, run each in its own child bridge (the accessories' IDs and the saved visitor picture aren't separate per intercom). The settings page shows and edits only the first intercom's block: edit a second one in **JSON Config**. Give each intercom its own **Name**: Recent events keeps a file per name.
 - With **Listen for rings** off, each open sets up a door channel that is left open on the intercom until the next full reconnect (every **Full reconnect every** minutes).
+- **Find my intercom** needs Homebridge on the same network as the intercom (broadcasts don't cross VLANs or routers); the IP address can always be entered by hand.
+- **Actuators shown as a switch or light** is covered by tests but not yet tried on a real actuator.
 
 ## Development
 

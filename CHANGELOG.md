@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.7.0 (2026-11-26)
+
+The plugin's settings get a page of their own: a **Setup assistant** that finds the intercom, reads the token from a backup and checks the setup step by step, and a **Recent events** tab that shows what rang, what opened the door and when. Also: actuators as a switch or light. Rings, the camera, unlocking, Doctor Mode and Next Visitor work as in 2.6.4.
+
+### What changes when you update
+
+Nothing in HomeKit, and nothing in your settings. You'll notice:
+
+- **The plugin's settings** open with two tabs, **Settings** (the Setup assistant, then your usual settings) and **Recent events**.
+- **A new file**, `comelit-doorbell-events.json`, in Homebridge's storage folder: the Recent events history (30 days; times, door names and what happened; no token, codes or IP addresses). A second intercom with another **Name** gets its own file.
+- **One settings block on the settings page.** The plugin's settings are now marked as a single block, which Homebridge needs to show the usual settings below the assistant. Two intercoms still work, each in its own child bridge with its own **Name**, but the page shows and edits only the first block; edit a second one in **JSON Config**.
+- **A new dependency**, `@homebridge/plugin-ui-utils` (Homebridge's library for plugin settings pages; no dependencies of its own).
+
+### Added
+
+- **Setup assistant** (it only reads from the intercom; it works on the settings as the form has them, saved or not):
+  - **Find my intercom**: searches the network (Comelit devices answer an `INFO` search on UDP port 24199; sent 4 times, on every network and to the IP address already set) and lists model, firmware and ViP address; **Use this** fills in the IP address.
+  - **Test connection**: settings, reaching the intercom, the token, model and firmware, doors and entrance panel, the token's user row (**Use user row N** fixes a wrong one; empty is fine), and ffmpeg when the camera is on. Each failed step says what to do.
+  - **Token from a backup**: the backup the intercom's web page makes (Backup/Restore → Make Backup; `.tar.gz`, or `.tar`; its `users.cfg` is gzipped again inside). Lists the users with a token; **Use this** fills in the token and user row. Activation codes and email addresses are never shown; the file isn't kept.
+  - **Copy diagnostics**: a report for issues without the token, passwords, codes, serial numbers, MAC addresses, URLs or ids.
+- **Recent events**: rings, door opens and what opened them (HomeKit, Doctor Mode, Next Visitor), actuators shown as a switch or light being pressed (not counted as a door open), refused and failed unlocks, live views, Doctor Mode and Next Visitor on and off, the connection, and Homebridge starting the plugin. Each ring shows what followed it (viewed, opened N s later, or *not opened by Homebridge*). Today, Yesterday, Last 7 days, Last 30 days or All kept; **Copy**. Kept 30 days (**Recent events: keep (days)**, `eventHistoryDays`, 1–365), at most 2,000 events.
+- **Actuators shown as a switch or light** (`actuators: [{ name, type }]`): an actuator such as a stair light can be a HomeKit switch or light that sends its command at any time, no ring needed, and shows Off again a moment later. Entrance doors and unlisted actuators stay locks; Doctor Mode and Next Visitor never use one; the relay is checked against the intercom's current configuration before sending. Only for things that aren't doors. Not yet tried on a real actuator.
+- The settings page follows Homebridge's theme, light or dark, in any colour: Homebridge's own panels, buttons, menus and tabs.
+
+### Fixed
+
+- After a ring (or a call with sound), a live view that got no video warned about the entrance panel's address and DIP switches, which was wrong for a working setup: the panel is just still finishing the call. Within a minute of one, the log now says to try again in a few seconds; the setup warning stays for the other cases.
+
+### Known limits
+
+- **Find my intercom** needs Homebridge on the same network as the intercom (broadcasts don't cross VLANs); the IP address can always be entered by hand.
+- **Recent events** only lists what Homebridge sees: opens from an indoor monitor, a neighbour's monitor or a key aren't there.
+- The token's activation-code route (as the Comelit app does it) isn't supported: use **Token from a backup**.
+
 ## 2.7.0-beta.12 (2026-11-25)
 
 ### Changed
