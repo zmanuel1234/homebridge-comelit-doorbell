@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.12 (2026-11-25)
+
+### Changed
+
+- **Settings / Recent events tabs** look like the tabs in Homebridge's own plugin window: no outline or underline, and the active tab is a filled, rounded block (light grey `#efefef` in light themes, `#2b2b2b` in dark themes, like the panel below it).
+
 ## 2.7.0-beta.11 (2026-11-25)
 
 Same as 2.7.0-beta.10, which was never published: its release was created before its version change was merged, so its tag points at beta.9's code.

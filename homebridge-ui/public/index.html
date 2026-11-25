@@ -5,11 +5,12 @@
    * theme. What it doesn't style here gets the colours of its own plugin windows in dark mode:
    * cards and the active tab #2b2b2b, menus #333 with #eee text, inputs #242424.
    */
-  .nav-tabs .nav-link { color: inherit; }
+  /* Tabs as in Homebridge's own plugin window: no borders, the active tab filled. */
+  .nav-tabs { --bs-nav-tabs-border-width: 0; gap: 0.25rem; }
+  .nav-tabs .nav-link { color: inherit; border-radius: 0.375rem; }
   .nav-tabs .nav-link:not(.active) { opacity: 0.75; }
-  body.dark-mode .nav-tabs { border-color: #444; }
-  body.dark-mode .nav-tabs .nav-link { color: #bdbdbd; }
-  body.dark-mode .nav-tabs .nav-link.active { background-color: #2b2b2b; color: #fff; border-color: #444 #444 #2b2b2b; }
+  .nav-tabs .nav-link.active { background-color: #efefef; color: inherit; }
+  body.dark-mode .nav-tabs .nav-link.active { background-color: #2b2b2b; color: #fff; }
   body.dark-mode #range,
   body.dark-mode #range option { background-color: #333; color: #eee; }
   body.dark-mode #range {

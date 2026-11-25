@@ -263,6 +263,10 @@ test('setup assistant: the UI files are published, and the settings use them', (
     assert.ok(!html.includes(off), `no ${off}`);
   }
   assert.match(html, /btn btn-elegant btn-sm/, "secondary buttons as Homebridge's own (Close)");
+  // Tabs as in Homebridge's own plugin window: borderless, the active one filled (#efefef, dark #2b2b2b).
+  assert.match(html, /\.nav-tabs \{ --bs-nav-tabs-border-width: 0;/);
+  assert.match(html, /\.nav-tabs \.nav-link\.active \{ background-color: #efefef;/);
+  assert.match(html, /body\.dark-mode \.nav-tabs \.nav-link\.active \{ background-color: #2b2b2b;/);
   for (const route of ['/discover', '/test']) {
     assert.ok(html.includes(`'${route}'`) && fs.readFileSync(path.join(root, 'homebridge-ui/server.js'), 'utf8').includes(`'${route}'`), route);
   }
