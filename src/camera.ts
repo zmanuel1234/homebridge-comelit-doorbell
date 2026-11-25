@@ -362,6 +362,8 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     private readonly log: Logging,
     private readonly settings: Settings,
     private readonly getCall: () => CallHandler | undefined,
+    /** Notes a live view for the Recent events tab. */
+    private readonly onEvent: (kind: 'view', text: string, t: number) => void = () => undefined,
   ) {
     this.ffmpeg = resolveFfmpeg(settings.ffmpegPath);
     const hap = api.hap;
@@ -1136,6 +1138,11 @@ export class DoorbellCamera implements CameraStreamingDelegate {
     this.active.delete(sessionID);
     clearTimeout(active.inactivity);
     this.log.info(this.summary(active, reason));
+    // Live views only: the Home app also asks for still pictures each time it shows the tile.
+    if (active.stats.live) {
+      const secs = Math.round((Date.now() - active.stats.startedAt) / 1000);
+      this.onEvent('view', active.stats.firstPictureAt ? `Live view, ${secs} s` : `Live view: no video (${reason})`, active.stats.startedAt);
+    }
     for (const c of active.cleanup) {
       c();
     }

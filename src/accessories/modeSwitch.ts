@@ -4,6 +4,8 @@ import type { ComelitIntercomPlatform } from '../platform';
 export interface ModeSwitchOptions {
   /** Log label, e.g. 'Doctor mode'. */
   label: string;
+  /** Its name in Recent events, as in the Home app, e.g. 'Doctor Mode'. */
+  eventName: string;
   /** What the log says when it turns on, e.g. 'every ring opens the door'. */
   onText: string;
   model: string;
@@ -88,6 +90,7 @@ export class ModeSwitch {
   }
 
   protected turnOn(): void {
+    const was = this.on;
     this.accessory.context.on = true;
     let until = '';
     if (this.opts.limitMs > 0) {
@@ -102,6 +105,9 @@ export class ModeSwitch {
     this.platform.api.updatePlatformAccessories([this.accessory]);
     this.updateSensor();
     this.platform.log.info(`${this.opts.label} ON: ${this.opts.onText}${until}`);
+    if (!was) {
+      this.platform.events?.add('mode', `${this.opts.eventName} on${until}`);
+    }
   }
 
   protected turnOff(why: string): void {
@@ -114,6 +120,7 @@ export class ModeSwitch {
     this.updateSensor();
     if (was) {
       this.platform.log.info(`${this.opts.label} off: ${why}`);
+      this.platform.events?.add('mode', `${this.opts.eventName} off: ${why}`);
     }
   }
 

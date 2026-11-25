@@ -256,7 +256,7 @@ test('setup assistant: the UI files are published, and the settings use them', (
   }
   const html = fs.readFileSync(path.join(root, 'homebridge-ui/public/index.html'), 'utf8');
   assert.match(html, /homebridge\.showSchemaForm\(\)/, 'the normal settings stay below the assistant');
-  assert.match(html, /addEventListener\('ready', \(\) => homebridge\.showSchemaForm\(\)\)/, 'asked again once the page is ready');
+  assert.match(html, /addEventListener\('ready', \(\) => tab === 'settings' && homebridge\.showSchemaForm\(\)\)/, 'asked again once the page is ready (on the Settings tab)');
   assert.ok(!html.includes('text-muted'), 'readable in the dark theme');
   for (const route of ['/discover', '/test']) {
     assert.ok(html.includes(`'${route}'`) && fs.readFileSync(path.join(root, 'homebridge-ui/server.js'), 'utf8').includes(`'${route}'`), route);

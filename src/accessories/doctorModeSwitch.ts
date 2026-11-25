@@ -11,6 +11,7 @@ export class DoctorModeSwitch extends ModeSwitch {
   constructor(platform: ComelitIntercomPlatform, accessory: PlatformAccessory, limitMs = 0, sensor = false) {
     super(platform, accessory, {
       label: 'Doctor mode',
+      eventName: 'Doctor Mode',
       onText: 'every ring opens the door',
       expiredText: 'its time limit passed',
       model: 'Doctor mode',

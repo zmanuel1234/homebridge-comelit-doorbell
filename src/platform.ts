@@ -8,6 +8,7 @@ import { LockAccessory } from './accessories/lockAccessory';
 import { authenticate } from './auth';
 import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
+import { EVENTS_FILE, EventLog } from './events';
 import { ChannelType } from './channels';
 import { IconaBridgeClient } from './client';
 import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings, actuatorKey, type ActuatorType } from './config';
@@ -19,6 +20,8 @@ import { encodeCtppInit } from './protocol';
 import { registerPush, sendPushKeepalive } from './push';
 import { KEEPALIVE_INTERVAL_MS, PLATFORM_NAME, PLUGIN_NAME, UUID_SEED } from './settings';
 import { VipEventListener } from './vipListener';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 /** How long the intercom must be unreachable before the lock shows No Response. */
 export const UNREACHABLE_AFTER_MS = 30_000;
@@ -49,6 +52,8 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   /** Doors and cameras the accessories were last built from, to skip rebuilding them on every reconnect. */
   private builtFrom?: string;
   private lastRingAt = 0;
+  /** Recent events, for the Recent events tab in the plugin's settings. */
+  readonly events: EventLog;
   /** Since when the intercom is not connected (from startup until the first connection); undefined while connected. */
   private downSince: number | undefined = Date.now();
   /** The last disconnect was a planned refresh: its reconnect is routine (debug log). */
@@ -74,6 +79,9 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
     this.settings = resolveSettings(config);
     this.displayName = String(config.name ?? '').trim() || 'Comelit Intercom';
+    const storage = api.user?.storagePath?.();
+    this.events = new EventLog(storage ? path.join(storage, EVENTS_FILE) : undefined);
+    this.events.add('start', `Homebridge started the plugin (${pluginVersion()})`);
     for (const w of settingsWarnings(this.settings)) {
       this.log.warn(w);
     }
@@ -323,6 +331,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.routine.reconnects++;
     } else {
       this.log.info('Comelit Intercom ready');
+      this.events.add('connected', 'Connected to the intercom');
     }
     this.plannedReconnect = false;
     this.startRoutineSummary();
@@ -410,7 +419,10 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   private teardown(): void {
     this.shuttingDown = true;
-    void this.camera?.shutdown().catch(() => undefined);
+    // Saved after the camera has ended its live views, which note them.
+    void (this.camera?.shutdown() ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => this.events.flush());
     this.stopKeepalive();
     clearInterval(this.routineTimer);
     this.routineTimer = undefined;
@@ -426,6 +438,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.plannedReconnect = planned;
     if (!planned) {
       this.log.warn('Device disconnected — scheduling reconnect');
+      this.events.add('disconnected', 'Connection to the intercom lost; reconnecting');
     }
     this.downSince ??= Date.now();
     this.camera?.recorder?.reset();
@@ -497,6 +510,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.log.debug(`Event: ${event.eventType} from ${event.aptAddress}`);
     if (event.eventType === 'doorbell_ring') {
       this.lastRingAt = Date.now();
+      this.events.add('ring', 'Ring');
       this.doorbellAccessory?.triggerRing();
       this.camera?.ring();
       this.doctorOpen();
@@ -564,6 +578,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }
       if (result) {
         this.log.info(`${label}: door '${door.name}' opened`);
+        this.events.add('open', `Door '${door.name}' opened by ${label === 'Doctor mode' ? 'Doctor Mode' : 'Next Visitor'}`);
         [...this.lockAccessories.values()][0]?.showOpened();
         void this.extraBuzzes(door, label, started);
         if (next && this.nextVisitorActive()) {
@@ -574,6 +589,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }
     } catch (e) {
       this.log.warn(`${label}: open failed: ${(e as Error).message}`);
+      this.events.add('open-failed', `${label === 'Doctor mode' ? 'Doctor Mode' : 'Next Visitor'}: open failed (${(e as Error).message})`);
     } finally {
       this.doctorPending = false;
     }
@@ -733,7 +749,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (this.settings.camera) {
       // Experimental doorbell camera, as an accessory of its own so turning it off removes it cleanly.
       if (!this.camera) {
-        this.camera = new DoorbellCamera(this.api, this.log, this.settings, () => this.callHandler);
+        this.camera = new DoorbellCamera(this.api, this.log, this.settings, () => this.callHandler, (kind, text, t) => this.events.add(kind, text, t));
       }
       const camera = this.camera;
       // A new accessory gets the controller before it is registered; a cached one, once.
@@ -764,5 +780,14 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }
       this.log.info(`Removed ${stale.length} stale accessory/accessories`);
     }
+  }
+}
+
+/** The plugin's version, for the Recent events tab ('?' if it can't be read). */
+function pluginVersion(): string {
+  try {
+    return `plugin ${(JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? '?'}`;
+  } catch {
+    return 'plugin ?';
   }
 }

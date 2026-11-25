@@ -75,6 +75,7 @@ export class LockAccessory {
       if (now - this.lastRefusedLog > REFUSED_LOG_INTERVAL_MS) {
         this.lastRefusedLog = now;
         this.platform.log.warn(`Open refused: no ring or live view in the last ${this.platform.settings.ringWindowMs / 1000} s`);
+        this.platform.events.add('refused', `Unlock of '${this.door.name}' from HomeKit refused: no ring or live view in the last ${this.platform.settings.ringWindowMs / 1000} s`);
       }
       throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE);
     }
@@ -118,13 +119,17 @@ export class LockAccessory {
       const result = await this.platform.openDoor(this.door);
       if (result.confirmed) {
         this.platform.log.info(`Door '${this.door.name}' opened`);
+        this.platform.events.add('open', `Door '${this.door.name}' opened from HomeKit`);
       } else if (this.door.isActuator) {
         this.platform.log.info(`Door '${this.door.name}': open sent (an actuator gives no confirmation)`);
+        this.platform.events.add('open', `Door '${this.door.name}' opened from HomeKit (sent; an actuator gives no confirmation)`);
       } else {
         this.platform.log.warn(`Door '${this.door.name}': open sent, but the intercom did not confirm it`);
+        this.platform.events.add('open', `Door '${this.door.name}': open sent from HomeKit, not confirmed by the intercom`);
       }
     } catch (e) {
       this.platform.log.error(`Door open failed: ${(e as Error).message}`);
+      this.platform.events.add('open-failed', `Unlock of '${this.door.name}' from HomeKit failed (${(e as Error).message})`);
       relock();
       return;
     } finally {

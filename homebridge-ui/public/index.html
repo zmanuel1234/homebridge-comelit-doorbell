@@ -1,3 +1,38 @@
+<style>
+  /* Tabs in the page's own colours (light or dark theme). */
+  .nav-tabs .nav-link { color: inherit; opacity: 0.7; }
+  .nav-tabs .nav-link.active { background: transparent; color: inherit; opacity: 1; border-bottom-color: transparent; }
+</style>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item"><button type="button" class="nav-link active" id="tabSettings">Settings</button></li>
+  <li class="nav-item"><button type="button" class="nav-link" id="tabEvents">Recent events</button></li>
+</ul>
+
+<div id="paneEvents" class="d-none">
+  <div class="card mb-3 bg-transparent text-reset">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <h5 class="card-title mb-0 me-auto">Recent events</h5>
+        <select id="range" class="form-select form-select-sm w-auto bg-transparent text-reset">
+          <option value="0">Today</option>
+          <option value="1">Yesterday</option>
+          <option value="7">Last 7 days</option>
+          <option value="all">All kept</option>
+        </select>
+        <button type="button" class="btn btn-secondary btn-sm" id="refresh">Refresh</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="copyEvents">Copy</button>
+      </div>
+      <div id="eventList" class="small" style="max-height: 360px; overflow-y: auto"></div>
+      <p class="small mt-2 mb-0" style="opacity: 0.75">
+        Only what Homebridge sees: rings for your flat, and the doors it opens. Opens from an indoor monitor, a
+        neighbour's monitor or a key at the door aren't listed. The last 200 events are kept.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div id="paneSettings">
 <div class="card mb-3 bg-transparent text-reset">
   <div class="card-body">
     <h5 class="card-title mb-1">Setup assistant</h5>
@@ -21,16 +56,110 @@
     </div>
   </div>
 </div>
+</div>
 
 <script>
   (() => {
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+    // Tabs: Settings (the assistant and the normal settings) and Recent events (without the
+    // settings form, so the page stays short).
+    let tab = 'settings';
+    function showTab(which) {
+      tab = which;
+      $('tabSettings').classList.toggle('active', which === 'settings');
+      $('tabEvents').classList.toggle('active', which === 'events');
+      $('paneSettings').classList.toggle('d-none', which !== 'settings');
+      $('paneEvents').classList.toggle('d-none', which !== 'events');
+      if (which === 'events') {
+        homebridge.hideSchemaForm();
+        loadEvents();
+      } else {
+        homebridge.showSchemaForm();
+      }
+    }
+    $('tabSettings').addEventListener('click', () => showTab('settings'));
+    $('tabEvents').addEventListener('click', () => showTab('events'));
+
+    const ICONS = { ring: '🔔', open: '🔓', 'open-failed': '⚠️', refused: '⛔', view: '📷', mode: '🔁', connected: '🔌', disconnected: '📴', start: '▶️' };
+    let shown = [];
+    const pad = (n) => String(n).padStart(2, '0');
+    const time = (t) => {
+      const d = new Date(t);
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const day = (t) => new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+
+    /** Events in the chosen range (by the browser's day). */
+    function inRange(list) {
+      const r = $('range').value;
+      if (r === 'all') {
+        return list;
+      }
+      // Calendar days (setDate), so a clock change doesn't shift them by an hour.
+      const dayStart = (back) => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - back);
+        return d.getTime();
+      };
+      const days = Number(r);
+      if (days === 1) {
+        return list.filter((e) => e.t >= dayStart(1) && e.t < dayStart(0));
+      }
+      const from = dayStart(days === 0 ? 0 : days - 1);
+      return list.filter((e) => e.t >= from);
+    }
+
+    let all = [];
+    function render() {
+      shown = inRange(all);
+      if (!shown.length) {
+        $('eventList').innerHTML = `<div class="py-2" style="opacity: 0.75">${all.length ? 'Nothing in this period.' : 'No events yet: they are recorded from this version on.'}</div>`;
+        return;
+      }
+      let lastDay = '';
+      $('eventList').innerHTML = shown
+        .map((e) => {
+          const d = day(e.t);
+          const header = $('range').value !== '0' && d !== lastDay ? `<div class="fw-bold mt-2">${esc(d)}</div>` : '';
+          lastDay = d;
+          return (
+            header +
+            '<div class="d-flex gap-2 py-1 border-bottom" style="border-color: rgba(128,128,128,0.25) !important">' +
+            `<span class="font-monospace">${time(e.t)}</span><span>${ICONS[e.kind] ?? '•'}</span>` +
+            `<span>${esc(e.text)}${e.note ? `<br><span style="opacity: 0.75">${esc(e.note)}</span>` : ''}</span></div>`
+          );
+        })
+        .join('');
+    }
+
+    async function loadEvents() {
+      try {
+        const r = await homebridge.request('/events');
+        all = r.events ?? [];
+        render();
+      } catch (e) {
+        homebridge.toast.error(e.message ?? String(e), "Couldn't read the events");
+      }
+    }
+    $('range').addEventListener('change', render);
+    $('refresh').addEventListener('click', loadEvents);
+    $('copyEvents').addEventListener('click', async () => {
+      const text = shown.map((e) => `${day(e.t)} ${time(e.t)}  ${e.text}${e.note ? ` (${e.note})` : ''}`).join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        homebridge.toast.success('Events copied.', 'Comelit');
+      } catch {
+        homebridge.toast.info("The settings page doesn't allow the clipboard here: select the list and copy it.", 'Comelit');
+      }
+    });
+
     // The normal settings below the assistant. Homebridge ignores this until the page is ready, so
     // ask again then (asking twice is harmless).
     homebridge.showSchemaForm();
-    homebridge.addEventListener('ready', () => homebridge.showSchemaForm());
+    homebridge.addEventListener('ready', () => tab === 'settings' && homebridge.showSchemaForm());
 
     /** The first ComelitIntercom block as the form has it now (maybe unsaved). */
     async function current() {
