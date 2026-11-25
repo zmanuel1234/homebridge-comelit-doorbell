@@ -2,6 +2,7 @@
 // settings are open, in its own process, and only reads: it never changes the intercom.
 const path = require('node:path');
 const setup = require('../dist/setup.js');
+const events = require('../dist/events.js');
 const { version } = require('../package.json');
 
 (async () => {
@@ -26,6 +27,14 @@ const { version } = require('../package.json');
           throw new RequestError('No settings to test', {});
         }
         return setup.testConnection(config, { pluginVersion: version });
+      });
+      // Recent events, as the plugin keeps them in Homebridge's storage folder (newest first).
+      this.onRequest('/events', async () => {
+        const dir = this.homebridgeStoragePath;
+        if (!dir) {
+          return { events: [], note: "Homebridge didn't give its storage folder." };
+        }
+        return { events: events.describeEvents(events.readEvents(path.join(dir, events.EVENTS_FILE))) };
       });
       this.ready();
     }

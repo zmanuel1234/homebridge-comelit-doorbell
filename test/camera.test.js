@@ -455,3 +455,22 @@ test('ffmpeg output that a check expects is logged as debug, the rest as a warni
     'W Doorbell camera talk-back: something else went wrong',
   ]);
 });
+
+test('Recent events: a live view is noted (with its length, or "no video"); still pictures are not', async () => {
+  const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't' });
+  const noted = [];
+  const cam = new DoorbellCamera({ hap }, quietLog(), settings, () => undefined, (kind, text, t) => noted.push([kind, text, t]));
+  const session = (live, firstPictureAt) => ({
+    stats: { startedAt: Date.now() - 14_000, live, request: '640x360 30 fps 132 kbps', firstPictureAt, unitsToFfmpeg: 0, framesOut: 0, homekitReports: 0, micFrames: 0 },
+    media: { describe: () => 'fake', end: async () => undefined },
+    cleanup: [],
+  });
+  cam.active.set('a', session(true, Date.now() - 12_000));
+  await cam.stopStream('a', 'viewer closed');
+  cam.active.set('b', session(true, 0));
+  await cam.stopStream('b', 'the intercom ended the call');
+  cam.active.set('c', session(false, 0));
+  await cam.stopStream('c', 'viewer closed');
+  assert.deepStrictEqual(noted.map(([k, text]) => [k, text]), [['view', 'Live view, 14 s'], ['view', 'Live view: no video (the intercom ended the call)']]);
+  assert.ok(noted.every(([, , t]) => Date.now() - t >= 13_900), 'timed from when the view started');
+});

@@ -99,7 +99,9 @@ Open the plugin's settings. The **Setup assistant** at the top helps:
 - **Test connection** checks the settings step by step: reaching the intercom, the token, its doors and entrance panel, the user row (it offers the right one if yours is wrong; left empty, the plugin reads it from the intercom) and, with the camera on, ffmpeg. It only reads: nothing on the intercom changes. You can test before saving.
 - **Copy diagnostics** copies a report to paste into an issue. The token, passwords, serial and MAC addresses are removed; door and user names stay, so check them first.
 
-Fill in **Intercom IP address**, **User token** and **User row number**, test, then save. The equivalent JSON:
+Fill in **Intercom IP address**, **User token** and **User row number**, test, then save.
+
+The plugin's settings also have a **Recent events** tab: the last rings, door opens and what opened them (HomeKit, Doctor Mode, Next Visitor, an actuator), unlocks it refused, live views, Doctor Mode and Next Visitor turning on and off, and the connection to the intercom. Each ring says what followed it: viewed, opened (and how long after), or *not opened by Homebridge*. Choose Today, Yesterday, Last 7 days or All kept; **Copy** copies the list. The plugin keeps the last 200 events in `comelit-doorbell-events.json` in Homebridge's storage folder, so they survive restarts and log trimming; the file holds no token or personal data. It only lists what Homebridge sees: an open from an indoor monitor, a neighbour's monitor or a key at the door isn't there. The equivalent JSON:
 
 ```json
 {

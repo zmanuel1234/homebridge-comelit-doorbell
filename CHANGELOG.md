@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.7.0-beta.7 (2026-11-25)
+
+### Added
+
+- **Recent events**, a new tab in the plugin's settings (next to **Settings**; the settings form hides while it's open, so the page stays short): the last rings, door opens and what opened them (HomeKit, Doctor Mode, Next Visitor, an actuator), refused and failed unlocks, live views (how long, or no video), Doctor Mode and Next Visitor turning on and off, the connection to the intercom, and Homebridge starting the plugin. Each ring says what followed it: viewed, opened and how long after, or *not opened by Homebridge*. Today, Yesterday, Last 7 days or All kept, in a box that scrolls; **Copy** copies the list.
+- The plugin keeps the last 200 events in `comelit-doorbell-events.json` in Homebridge's storage folder (written at most every 2 s, and at shutdown), so they survive restarts and log trimming. No token or personal data: times, door names and what happened. Only what Homebridge sees: opens from an indoor monitor, a neighbour's monitor or a key aren't listed.
+
 ## 2.7.0-beta.6 (2026-11-25)
 
 ### Fixed

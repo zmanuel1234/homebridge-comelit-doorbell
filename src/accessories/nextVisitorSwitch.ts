@@ -12,6 +12,7 @@ export class NextVisitorSwitch extends ModeSwitch {
   constructor(platform: ComelitIntercomPlatform, accessory: PlatformAccessory, limitMs: number, sensor = false) {
     super(platform, accessory, {
       label: 'Next visitor',
+      eventName: 'Next Visitor',
       onText: 'the next ring opens the door',
       expiredText: 'nobody rang within its time limit',
       model: 'Next visitor',
