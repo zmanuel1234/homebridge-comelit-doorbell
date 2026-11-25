@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0-beta.8 (2026-11-25)
+
+### Added
+
+- **Token from a backup** in the Setup assistant: choose a backup from the intercom's web page (Backup/Restore → **Make Backup**, then download it; `.tar.gz`, or `.tar` if the browser unpacked it), and the assistant lists the users with a token (row, description, whether activated). **Use this** fills in the token and user row. It reads the archive's `etc/comelit/users.cfg`, which is gzipped a second time inside the archive (also accepts a plain `.tar`, or `users.cfg` on its own). Activation codes and email addresses in the backup are never shown or returned; the file is read on Homebridge and not kept. Files that aren't a backup get a plain explanation.
+
 ## 2.7.0-beta.7 (2026-11-25)
 
 ### Added

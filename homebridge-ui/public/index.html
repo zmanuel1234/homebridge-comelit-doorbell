@@ -43,9 +43,12 @@
     <div class="d-flex flex-wrap gap-2">
       <button type="button" class="btn btn-primary btn-sm" id="find">Find my intercom</button>
       <button type="button" class="btn btn-primary btn-sm" id="test">Test connection</button>
+      <button type="button" class="btn btn-primary btn-sm" id="readBackup">Token from a backup</button>
+      <input type="file" id="backupFile" class="d-none" accept=".gz,.tgz,.tar,.cfg,application/gzip,application/x-tar" />
       <button type="button" class="btn btn-secondary btn-sm d-none" id="copy">Copy diagnostics</button>
     </div>
     <div id="found" class="mt-3"></div>
+    <div id="users" class="mt-3"></div>
     <div id="result" class="mt-3"></div>
     <div id="diag" class="mt-2 d-none">
       <p class="small mb-1" style="opacity: 0.75">
@@ -253,6 +256,76 @@
         homebridge.hideSpinner();
       }
     });
+
+    // Token from a backup: the intercom's web page, Backup/Restore, gives a .tar.gz; its users
+    // with a token are listed (no activation codes or emails), and Use this fills in the token
+    // and user row.
+    $('readBackup').addEventListener('click', () => $('backupFile').click());
+    $('backupFile').addEventListener('change', async () => {
+      const file = $('backupFile').files[0];
+      $('backupFile').value = '';
+      if (!file) {
+        return;
+      }
+      $('users').innerHTML = '';
+      // An intercom backup is a few tens of KB: anything much bigger isn't one (and would be too
+      // big to send to Homebridge).
+      if (file.size > 512 * 1024) {
+        homebridge.toast.error(`${file.name} is too big for an intercom backup.`, "Couldn't read the backup");
+        return;
+      }
+      homebridge.showSpinner();
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        }
+        const users = await homebridge.request('/backup', { data: btoa(bin) });
+        const { config } = await current();
+        showUsers(users, config);
+      } catch (e) {
+        homebridge.toast.error(e.message ?? String(e), "Couldn't read the backup");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    });
+
+    /** The backup's users; the one in the settings is marked "in use". */
+    function showUsers(users, config) {
+      if (!users.length) {
+        $('users').innerHTML =
+          '<div class="alert alert-warning small mb-0">This backup has no user with a token. If you made it before setting up ' +
+          "the Homebridge user, click Make Backup on the intercom's Backup/Restore page and use the new one; otherwise add and " +
+          'activate a user for Homebridge first, as the setup instructions say.</div>';
+        return;
+      }
+      $('users').innerHTML =
+        '<div class="small fw-bold mb-1">Users in this backup:</div>' +
+        users
+          .map((u, i) => {
+            const using = config.token === u.token && Number(config.subaddress) === u.row;
+            return (
+              '<div class="d-flex align-items-center gap-2 small mb-1">' +
+              `<span>Row <b>${Number(u.row)}</b>: ${esc(u.description || '(no description)')}${u.activated ? '' : ' (not activated)'}</span>` +
+              (using
+                ? '<span class="badge bg-success">in use</span>'
+                : `<button type="button" class="btn btn-outline-primary btn-sm py-0" data-user="${i}">Use this</button>`) +
+              '</div>'
+            );
+          })
+          .join('') +
+        '<p class="small mt-1 mb-0" style="opacity: 0.75">Pick the user you made for Homebridge. A backup can be older than the ' +
+        "intercom's settings: run Test connection afterwards. The file isn't kept.</p>";
+      for (const b of $('users').querySelectorAll('button[data-user]')) {
+        b.addEventListener('click', async () => {
+          const u = users[Number(b.dataset.user)];
+          if (await change({ token: u.token, subaddress: u.row }, `Token and user row ${u.row} set.`)) {
+            showUsers(users, (await current()).config); // only this one is "in use" now
+          }
+        });
+      }
+    }
 
     $('copy').addEventListener('click', async () => {
       try {

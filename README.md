@@ -79,7 +79,9 @@ Other ViP devices may work. You'll find the model id and firmware on the interco
 1. Open the intercom's web page, `http://<intercom-ip>:8080`, and sign in with the installer password.
 2. Open **Users** and add a user of type **Apps** for Homebridge. Note its row number (`#3`, for example). That number is the **sub-address**.
 3. **Activate it once** with the Comelit app, on any phone or tablet, using the user's activation code. The intercom only creates the user's token at activation: a user that was never activated has none, and the plugin can't log in with it. Afterwards, delete the app from that device or sign out, but **don't deactivate or delete the user** on the intercom, or its token stops working. Nothing else may use this user: if a phone keeps it, the intercom delivers each call to only one of them.
-4. Download a **backup** from the web page. Open the archive and find `users.cfg`. Your user is the line `mspUsersMap.0.<row number>`, and its token is the 32-character value in the `9:4:"…"` field.
+4. On the intercom's web page, open **Backup/Restore**, click **Make Backup**, then click the new file in the list (the highest number, e.g. `000002.tar.gz`) to download it. Your browser may save it as `.tar.gz` or `.tar`: both work. A backup made earlier may not have your Homebridge user yet, so make a new one. In the plugin's settings, click **Token from a backup** in the Setup assistant and choose that file: it lists the users that have a token (row and description; no activation codes or emails), and **Use this** fills in the token and user row. The file is read on Homebridge and not kept. Then click **Test connection**: a backup can be older than the intercom's current settings.
+
+   By hand instead: open the archive; `etc/comelit/users.cfg` inside is compressed again (gzip), so unpack it too. Your user is the line `mspUsersMap.0.<row number>`, and its token is the 32-character value in the `9:4:"…"` field.
 
 Treat the token like a password: don't post it in issues or screenshots. To revoke it, delete the user on the intercom and create a new one.
 
