@@ -206,7 +206,17 @@ test('settings page: Settings and Recent events tabs; the settings form is hidde
   assert.match(html, /request\('\/events', \{ name:/, "asks for this intercom's events");
   assert.match(html, /max-height: 360px; overflow-y: auto/, 'a box that scrolls, so the page stays short');
   for (const r of ['0', '1', '7', '30', 'all']) assert.match(html, new RegExp(`<option value="${r}">`), r);
-  assert.match(html, /body\.dark-mode #range option \{ background-color: #333; color: #eee; \}/, "the period menu's open list in Homebridge's dark-menu colours");
+  assert.match(html, /body\.dark-mode \.form-select option \{ background-color: #333; color: #eee; \}/, "the menus' open lists in Homebridge's dark-menu colours");
+});
+
+test('settings page: several intercoms (2.8.0)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'homebridge-ui', 'public', 'index.html'), 'utf8');
+  for (const id of ['which', 'addIntercom', 'removeIntercom', 'intercomNotes']) assert.match(html, new RegExp(`id="${id}"`), id);
+  // Homebridge merges each block sent into the one at its place: settings a block lost are sent as
+  // undefined, so another intercom's settings (actuators, say) don't stay behind.
+  assert.match(html, /out\[k\] = undefined/);
+  assert.match(html, /\[blocks\[i\], \.\.\.blocks\.filter\(\(_, j\) => j !== i\)\]/, 'the chosen intercom moves to the front, which the form edits');
+  assert.match(html, /Child Bridge Config/, 'says where to give each intercom its own child bridge');
 });
 
 // Release review (2.7.0): two intercoms, actuator presses, the save at shutdown.

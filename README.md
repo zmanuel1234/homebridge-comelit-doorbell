@@ -164,6 +164,10 @@ It only reads from the intercom (it signs in and asks for its information and co
 
 Changes made by **Use this** and **Use user row** are in the form only until you click **Save**.
 
+### Several intercoms
+
+**Add an intercom** (next to the tabs) adds a block for another intercom and shows it; with more than one, a menu there chooses which intercom the settings, the Setup assistant and Recent events show, and **Remove** (click twice) removes the one shown. Nothing is kept until you click **Save**. Each intercom needs its own **Name** and its own child bridge: after saving, open **Child Bridge Config** in the plugin's menu on the Plugins page. The page says so while either is missing.
+
 ### Recent events
 
 ![The Recent events tab](https://raw.githubusercontent.com/zmanuel1234/homebridge-comelit-doorbell/main/docs/recent-events.png)
@@ -458,7 +462,7 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 - Doctor mode lets in anyone who rings while it is on. Prefer the switch, turned off by an automation.
 - In `reconnect` mode, a ring during the up to 2 s reconnect every refresh interval is missed. `inplace` mode has no such gap.
 - Opening inside a call (`answer-on-open`, `answer-on-view`, doctor mode) uses the door's output, but an output of `0` is sent as `1`: tested only on a door with output 1.
-- One intercom per Homebridge bridge: for two intercoms, run each in its own child bridge (the accessories' IDs and the saved visitor picture aren't separate per intercom). The settings page shows and edits only the first intercom's block: edit a second one in **JSON Config**. Give each intercom its own **Name**: Recent events keeps a file per name.
+- One intercom per Homebridge bridge: for two intercoms, run each in its own child bridge (the accessories' IDs and the saved visitor picture aren't separate per intercom). Give each intercom its own **Name**: Recent events keeps a file per name. The settings page handles several intercoms (see [Several intercoms](#several-intercoms)).
 - With **Listen for rings** off, each open sets up a door channel that is left open on the intercom until the next full reconnect (every **Full reconnect every** minutes).
 - **Find my intercom** needs Homebridge on the same network as the intercom (broadcasts don't cross VLANs or routers); the IP address can always be entered by hand.
 - **Actuators shown as a switch or light** is covered by tests but not yet tried on a real actuator.

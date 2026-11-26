@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.0-beta.1 (2026-11-26)
+
+- **Several intercoms on the settings page.** **Add an intercom**, next to the tabs, adds a block for another intercom; with more than one, a menu there chooses which one the settings, the Setup assistant and Recent events show, and **Remove** (click twice) removes the one shown. Until now the page showed only the first intercom, and a second one had to be edited in JSON Config.
+- The page warns while two intercoms share a **Name** (Recent events are kept by name) or don't each have their own child bridge (their accessories would clash on one bridge), and says where to set one up: **Child Bridge Config** in the plugin's menu.
+- Switching intercoms clears the previous one's search, test and backup results. Nothing changes until you click **Save**.
+
 ## 2.7.3 (2026-11-26)
 
 No change to how the plugin works.
