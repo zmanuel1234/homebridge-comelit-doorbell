@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.3 (2026-11-26)
+
+No change to how the plugin works.
+
+- Development only: the linter again runs ESLint's no-dupe-args and no-octal (through a small local oxlint plugin), so it checks everything the old ESLint setup did.
+
 ## 2.7.2 (2026-11-26)
 
 No change to how the plugin works: the compiled code is the same as 2.7.1's (only the position of one comment, the source maps and the way index.d.ts writes the same type differ).
