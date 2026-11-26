@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.2 (2026-11-26)
+
+No change to how the plugin works: the compiled code is the same as 2.7.1's (only a comment and the source maps differ).
+
+- Development only: built with TypeScript 7 (the native compiler) and linted with oxlint instead of TypeScript 6 and ESLint, with the same rules. CI retries npm's package signature check up to 3 times, because npm's registry sometimes answers it with an invalid response.
+
 ## 2.7.1 (2026-11-26)
 
 No change to how the plugin works.
