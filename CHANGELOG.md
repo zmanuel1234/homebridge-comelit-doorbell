@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.1 (2026-11-26)
+
+No change to how the plugin works.
+
+- Development only: CI runs the tests on Node 22, 24 and 26 in a single check.
+
 ## 2.7.0 (2026-11-26)
 
 The plugin's settings get a page of their own: a **Setup assistant** that finds the intercom, reads the token from a backup and checks the setup step by step, and a **Recent events** tab that shows what rang, what opened the door and when. Also: actuators as a switch or light. Rings, the camera, unlocking, Doctor Mode and Next Visitor work as in 2.6.4.
