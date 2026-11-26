@@ -11,10 +11,10 @@ export const CHANNEL_TYPE_PUSH = ChannelType.UCFG;
 
 /** Message ids used in JSON `message-id` fields (not the same as ChannelType). */
 export enum ViperMessageId {
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values -- PUSH and UAUT share id 2 on the wire
   UAUT = 2,
   UCFG = 3,
   SERVER_INFO = 20,
-  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values -- PUSH and UAUT share id 2 on the wire
   PUSH = 2,
 }
 
