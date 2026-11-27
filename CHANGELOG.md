@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.1 - 2026-11-27
+
+No change to how the plugin works.
+
+- LICENSE holds the official Apache License 2.0 text. The file inherited from homebridge-comelit-intercom was a reworded copy that GitHub and other tools couldn't identify; the license is the same, Apache 2.0, and the original copyright line is kept in NOTICE.
+- npm and Homebridge's plugin search: the description covers HomeKit Secure Video recording and unlocking from Home, Siri or Apple Watch, with keywords for them. The README has Verified by Homebridge, downloads and license badges.
+
 ## 2.8.0 - 2026-11-27
 
 Several intercoms on the settings page, tiles that follow the names in the settings, No Response on the ring sensor too, an optional Offline sensor, and the intercom's firmware in Home. Rings, the camera, unlocking, Doctor Mode and Next Visitor work as in 2.7.3.
