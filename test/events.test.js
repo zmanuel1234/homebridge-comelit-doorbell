@@ -263,3 +263,16 @@ test('at shutdown the history is written at once (Homebridge may not wait)', () 
   log.flushSync();
   assert.deepStrictEqual(readEvents(file).map((e) => e.kind), ['ring'], 'on disk before any timer');
 });
+
+test('events: after a Name change, the events kept under the old Name are taken over once', () => {
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'ev-'));
+  const { EventLog: Log } = require('../dist/events');
+  const old = path.join(dir, 'old.json');
+  fs.writeFileSync(old, JSON.stringify([{ t: Date.now() - 1000, kind: 'ring', text: 'Ring' }]));
+  const log = new Log(path.join(dir, 'new.json'));
+  log.add('start', 'started');
+  assert.strictEqual(log.adopt(old), 1);
+  assert.strictEqual(log.adopt(old), 0, 'not twice');
+  assert.deepStrictEqual(log.list().map((e) => e.kind).sort(), ['ring', 'start']);
+  assert.strictEqual(log.adopt(path.join(dir, 'missing.json')), 0);
+});

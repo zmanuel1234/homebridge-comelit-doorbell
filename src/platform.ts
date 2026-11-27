@@ -21,6 +21,7 @@ import { encodeCtppInit } from './protocol';
 import { registerPush, sendPushKeepalive } from './push';
 import { KEEPALIVE_INTERVAL_MS, PLATFORM_NAME, PLUGIN_NAME, UUID_SEED } from './settings';
 import { VipEventListener } from './vipListener';
+import { followName } from './names';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -79,6 +80,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private camera?: DoorbellCamera;
   private cameraConfigured = false;
   private readonly displayName: string;
+  private readonly storage?: string;
 
   constructor(
     readonly log: Logging,
@@ -90,6 +92,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.settings = resolveSettings(config);
     this.displayName = String(config.name ?? '').trim() || 'Comelit Intercom';
     const storage = api.user?.storagePath?.();
+    this.storage = storage;
     this.events = new EventLog(storage ? path.join(storage, eventsFileFor(config.name)) : undefined, undefined, this.settings.eventHistoryDays);
     this.events.add('start', `Homebridge started the plugin (${pluginVersion()})`);
     for (const w of settingsWarnings(this.settings)) {
@@ -114,6 +117,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       );
     }
     api.on('didFinishLaunching', () => {
+      this.adoptEvents();
       this.restoreCached();
       this.watchDown();
       this.setupDevice().catch((e) => this.onSetupError('Initial setup', e));
@@ -123,6 +127,22 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 
   configureAccessory(accessory: PlatformAccessory): void {
     this.accessories.set(accessory.UUID, accessory);
+  }
+
+  /**
+   * After the Name changed: Recent events are kept by name, so the ones kept under the previous
+   * Name (noted on the doorbell accessory) are taken over.
+   */
+  private adoptEvents(): void {
+    const bell = this.accessories.get(this.api.hap.uuid.generate(`${UUID_SEED}-doorbell`));
+    const before = bell?.context.intercomName as string | undefined;
+    if (!this.storage || before === undefined || before === this.displayName) {
+      return;
+    }
+    const n = this.events.adopt(path.join(this.storage, eventsFileFor(before)));
+    if (n > 0) {
+      this.log.info(`Recent events: took over ${n} from before the Name changed ('${before}')`);
+    }
   }
 
   /**
@@ -445,6 +465,34 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       if (!shared) {
         await client.closeChannel('INFO').catch(() => undefined);
       }
+    }
+  }
+
+  /**
+   * Renames an accessory's tile (and a mode switch's contact sensor, "<name> Sensor") when its
+   * name in the settings changed, unless it was renamed in the Home app. The camera's tile is its
+   * doorbell service; a sensor-only accessory's, its sensor.
+   */
+  private followNames(accessory: PlatformAccessory, name: string): void {
+    const S = this.Service;
+    const main = [S.Doorbell, S.LockMechanism, S.Switch, S.Lightbulb, S.ContactSensor, S.MotionSensor]
+      .map((type) => accessory.getService(type))
+      .find((svc): svc is Service => !!svc);
+    if (!main) {
+      return;
+    }
+    const before = JSON.stringify(accessory.context.givenNames ?? null);
+    const renamed = followName(this.api, this.log, accessory, main, name);
+    const sensor = main === accessory.getService(S.Switch) ? accessory.getService(S.ContactSensor) : undefined;
+    if (sensor) {
+      followName(this.api, this.log, accessory, sensor, `${name} Sensor`);
+    }
+    // Homebridge's own name for it (logs, the camera's tile) only when its tile took the new name.
+    if (renamed && accessory.displayName !== name) {
+      accessory.updateDisplayName(name);
+    }
+    if (JSON.stringify(accessory.context.givenNames ?? null) !== before) {
+      this.api.updatePlatformAccessories([accessory]); // saves the names noted with it
     }
   }
 
@@ -816,16 +864,20 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     this.builtFrom = from;
     const keep = new Set<string>();
+    // Each accessory with the name it should have now (tiles follow a changed Name or door name).
+    const names: Array<[PlatformAccessory, string]> = [];
     for (const door of config.doors) {
       const type = this.actuatorType(door);
       if (type !== 'lock') {
         // A separate accessory from the lock's, so HomeKit forgets the lock (and its automations).
         const accessory = this.accessoryFor(`actuator-${door.index}`, door.name || `Actuator ${door.index + 1}`, keep, undefined, { door });
         new ActuatorSwitchAccessory(this, accessory, door, type);
+        names.push([accessory, door.name || `Actuator ${door.index + 1}`]);
         continue;
       }
       const accessory = this.accessoryFor(`lock-${door.index}`, door.name || `Door ${door.index + 1}`, keep, undefined, { door });
       this.lockAccessories.set(accessory.UUID, new LockAccessory(this, accessory, door));
+      names.push([accessory, door.name || `Door ${door.index + 1}`]);
     }
     // Names in the actuators setting that match no actuator on the intercom (a typo?).
     const actuatorNames = new Set(config.doors.filter((d) => d.isActuator).map((d) => actuatorKey(d.name)));
@@ -840,17 +892,21 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     const bell = this.accessoryFor('doorbell', this.displayName, keep);
     this.doorbellAccessory = new DoorbellAccessory(this, bell);
+    names.push([bell, this.displayName]);
+    bell.context.intercomName = this.displayName; // for adoptEvents after a Name change
     // A rebuild replaces the switch objects: the old ones' time limits must not run on.
     this.doctorSwitch?.dispose();
     this.nextVisitor?.dispose();
     if (this.settings.doctorMode === 'switch') {
       const sw = this.accessoryFor('doctor-mode', `${this.displayName} Doctor Mode`, keep);
+      names.push([sw, `${this.displayName} Doctor Mode`]);
       this.doctorSwitch = new DoctorModeSwitch(this, sw, this.settings.doctorModeMs, this.settings.doctorModeSensor);
     } else {
       this.doctorSwitch = undefined;
     }
     if (this.settings.nextVisitorSwitch) {
       const sw = this.accessoryFor('next-visitor', `${this.displayName} Next Visitor`, keep);
+      names.push([sw, `${this.displayName} Next Visitor`]);
       this.nextVisitor = new NextVisitorSwitch(this, sw, this.settings.nextVisitorMs, this.settings.nextVisitorSensor);
     } else {
       this.nextVisitor = undefined;
@@ -870,16 +926,22 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         camera.attach(cam);
         this.cameraConfigured = true;
       }
+      names.push([cam, `${this.displayName} Camera`]);
     }
     this.cameraAccessories = config.cameras.map((camera) => {
       const accessory = this.accessoryFor(`camera-${camera.id}`, camera.name || `Camera ${camera.id}`, keep, undefined, { camera });
+      names.push([accessory, camera.name || `Camera ${camera.id}`]);
       return new CameraAccessory(this, accessory, camera);
     });
     if (this.settings.offlineSensor) {
       const sensor = this.accessoryFor('offline', `${this.displayName} Offline`, keep);
+      names.push([sensor, `${this.displayName} Offline`]);
       this.offlineSensor = new OfflineSensor(this, sensor);
     } else {
       this.offlineSensor = undefined;
+    }
+    for (const [accessory, name] of names) {
+      this.followNames(accessory, name);
     }
     // Locks of doors the intercom no longer has: drop them from the list too (they are removed below).
     for (const uuid of [...this.lockAccessories.keys()]) {

@@ -138,6 +138,26 @@ export class EventLog {
     }
   }
 
+  /**
+   * Takes in the events of another file (the intercom's events from before its Name changed),
+   * and saves them here. Nothing if it has none.
+   */
+  adopt(file: string): number {
+    if (!this.file || file === this.file) {
+      return 0;
+    }
+    const known = new Set(this.events.map((e) => `${e.t}/${e.kind}/${e.text}`));
+    const added = readEvents(file).filter((e) => !known.has(`${e.t}/${e.kind}/${e.text}`));
+    if (added.length === 0) {
+      return 0;
+    }
+    this.events.push(...added);
+    this.events.sort((a, b) => a.t - b.t);
+    this.prune();
+    void this.save();
+    return added.length;
+  }
+
   /** `t`: when it happened, if not now (a live view is noted when it ends, timed from its start). */
   add(kind: EventKind, text: string, t = Date.now()): void {
     if (kind === 'ring') {
