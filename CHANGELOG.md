@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.8.0 - 2026-11-27
+
+Several intercoms on the settings page, tiles that follow the names in the settings, No Response on the ring sensor too, an optional Offline sensor, and the intercom's firmware in Home. Rings, the camera, unlocking, Doctor Mode and Next Visitor work as in 2.7.3.
+
+### What changes when you update
+
+Nothing is renamed by the update itself, and no setting changes. You'll notice:
+
+- **Firmware** in the settings of every accessory in Home and Eve now shows the intercom's firmware (such as 2.1.0).
+- The doorbell sensor and the RTSP camera placeholders show **No Response** in Home once the intercom has been unreachable for more than 30 s (when Home next asks, such as when you open the app), like the lock.
+
+### New
+
+- **Offline sensor** (**Add an Offline contact sensor**, `offlineSensor`, off by default): a separate accessory (**Name** + `Offline`), Open while the intercom has been unreachable for 2 minutes and Closed once it is back; it never shows No Response itself. Turn on its notifications in the Home app.
+- **Tiles follow the names in the settings.** Changing **Name** renames the doorbell sensor, the camera, the switches and their sensors and the Offline sensor after the restart; renaming a door on the intercom renames its lock. Tiles renamed in the Home app from 2.8.0 on keep their name; one renamed there before takes the new name at the first change. The camera's tile follows as far as the Home app allows. Recent events move with the Name.
+- **Several intercoms on the settings page:** **Add an intercom**, a menu to choose which one the settings, the Setup assistant and Recent events show, and **Remove**. The page warns when two intercoms share a Name or a child bridge.
+
+### Fixed since the betas
+
+- The log's "ready" line uses the **Name** ("Intercom ready" for an intercom named Intercom; with the default Name it still reads "Comelit Intercom ready"), and the note under **Name** says what it now does.
+- Development only: GitHub releases take their notes from this changelog, and publishing an older version no longer moves npm's `latest` tag back.
+
+The betas below list each change in detail.
+
 ## 2.8.0-beta.3 - 2026-11-27
 
 Fixes to the settings page for several intercoms (new in 2.8.0-beta.1):

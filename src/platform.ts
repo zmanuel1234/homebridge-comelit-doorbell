@@ -407,7 +407,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (this.plannedReconnect) {
       this.routine.reconnects++;
     } else {
-      this.log.info('Comelit Intercom ready');
+      this.log.info(`${this.displayName} ready`);
       this.events.add('connected', 'Connected to the intercom');
     }
     if (this.firmware === undefined && this.firmwareTries < 2) {
