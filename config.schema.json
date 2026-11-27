@@ -140,7 +140,7 @@
       "actuators": {
         "title": "Actuators shown as a switch or light",
         "type": "array",
-        "description": "By default each actuator (a relay such as a gate or the stair light) is a lock, which opens only after a ring. List one here to show it as a switch or light instead: pressing it sends its command at any time, with no ring and no confirmation in HomeKit. Only for lights and other things that aren't doors. The names are those the intercom gives (Test connection in the Setup assistant lists them).",
+        "description": "By default each actuator (a relay such as a gate or the stair light) is a lock, which opens only after a ring. List one here to show it as a switch or light instead: pressing it sends its command at any time, with no ring and no confirmation in HomeKit. Only for lights and other things that aren't doors. The names are those the intercom gives (Test connection in the Setup assistant lists them). Changing an actuator between lock and switch or light makes it a new accessory in Home: set its name and room again.",
         "items": {
           "type": "object",
           "properties": {
@@ -443,7 +443,7 @@
         "offlineSensor",
         "openRepeat",
         "openRepeatSeconds",
-        "actuators"
+        { "key": "actuators", "type": "array", "orderable": false, "buttonText": "Add an actuator", "items": ["actuators[].name", "actuators[].type"] }
       ]
     },
     {

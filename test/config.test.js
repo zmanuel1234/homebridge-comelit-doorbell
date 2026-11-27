@@ -236,3 +236,21 @@ test('offline sensor: off by default, on with true or "true" (2.8.0-beta.2)', ()
   assert.strictEqual(resolveSettings({ offlineSensor: true }).offlineSensor, true);
   assert.strictEqual(resolveSettings({ offlineSensor: 'true' }).offlineSensor, true);
 });
+
+test('settings form: the actuators list has its rows and an Add button (#59, 2.8.2)', () => {
+  // Listed by bare key, Homebridge's form showed the section's title and note but no rows and no
+  // Add button; an array needs its items spelled out in the layout.
+  const schema = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'config.schema.json'), 'utf8'));
+  const found = [];
+  const walk = (x) => {
+    if (Array.isArray(x)) x.forEach(walk);
+    else if (x && typeof x === 'object') {
+      if (Array.isArray(x.items)) for (const i of x.items) if (i === 'actuators' || i?.key === 'actuators') found.push(i);
+      Object.values(x).forEach(walk);
+    }
+  };
+  walk(schema.layout);
+  assert.deepStrictEqual(found, [
+    { key: 'actuators', type: 'array', orderable: false, buttonText: 'Add an actuator', items: ['actuators[].name', 'actuators[].type'] },
+  ]);
+});
