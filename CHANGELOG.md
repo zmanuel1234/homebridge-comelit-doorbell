@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Fixes to the settings page for several intercoms (2.8.0-beta.1):
+Fixes to the settings page for several intercoms (new in 2.8.0-beta.1):
 
 - **Remove could remove the wrong intercom.** After clicking **Remove** once, choosing another intercom in the menu within 5 s and clicking again removed the newly chosen one. Choosing, adding or renaming an intercom now resets the button.
 - A search, test or backup still running when you choose another intercom no longer shows its results under the new one, and its **Use this** buttons can't change the new one's settings. Recent events likewise show only the chosen intercom's.

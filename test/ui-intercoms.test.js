@@ -141,6 +141,42 @@ test('ui: an armed Remove is reset by switching, and never removes the other int
   await p.$('removeIntercom').fire('click'); // asks again, now for Back
   assert.strictEqual(p.$('removeIntercom').textContent, 'Remove Back?');
   assert.strictEqual(p.config().length, 2);
+  await p.$('removeIntercom').fire('click');
+  await settle();
+  assert.deepStrictEqual(p.config(), [A], 'the one it asked about');
+});
+
+test('ui: renaming the intercom shown resets an armed Remove', async () => {
+  const p = page([A, B]);
+  await settle();
+  await p.$('removeIntercom').fire('click');
+  assert.strictEqual(p.$('removeIntercom').textContent, 'Remove Front?');
+  const blocks = await p.homebridge.getPluginConfig();
+  blocks[0].name = 'Garden';
+  await p.homebridge.updatePluginConfig(blocks);
+  assert.strictEqual(p.$('removeIntercom').textContent, 'Remove');
+});
+
+test('ui: a search that fails after switching says nothing, and the spinner waits for the newer one', async () => {
+  const answers = [];
+  let spinner = 0;
+  const p = page([A, B], { '/discover': () => new Promise((r, j) => answers.push({ r, j })) });
+  p.homebridge.showSpinner = () => { spinner = 1; };
+  p.homebridge.hideSpinner = () => { spinner = 0; };
+  await settle();
+  const first = p.$('find').fire('click');
+  await settle();
+  await choose(p, 'Back');
+  const second = p.$('find').fire('click');
+  await settle();
+  answers[0].j(new Error('timeout'));
+  await first;
+  assert.strictEqual(spinner, 1, 'still searching for Back');
+  assert.ok(!p.toasts.some(([kind]) => kind === 'error'));
+  answers[1].r([]);
+  await second;
+  assert.strictEqual(spinner, 0);
+  assert.match(p.$('found').innerHTML, /No Comelit device answered/);
 });
 
 test('ui: Add puts a new intercom in front and keeps the others', async () => {
