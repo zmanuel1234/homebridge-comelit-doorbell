@@ -73,6 +73,7 @@ test('reconnects with the same doors do not rebuild or re-save the accessories',
   let updates = 0;
   api.updatePlatformAccessories = () => { updates++; };
   p.discoverAccessories(deviceConfig);
+  updates = 0; // the first build notes each tile's name with it
   const lock = [...p.lockAccessories.values()][0];
   p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
   assert.strictEqual(updates, 0);
@@ -976,4 +977,45 @@ test('firmware: a version HomeKit cannot take, or no answer, leaves the row alon
   assert.strictEqual(p2.firmware, undefined, 'asked again on the next connection');
   await p2.readFirmware(infoClient(new Error('timeout'), true));
   assert.strictEqual(p2.firmwareTries, 2, 'then no more');
+});
+
+// ─── Names follow the settings (2.8.0-beta.3) ───
+
+test('names: a new Name renames the tiles named by the plugin, not ones renamed in the Home app', () => {
+  const api = fakeApi();
+  const cache = new Map();
+  const start = (name) => {
+    const p = new ComelitIntercomPlatform(quietLog(), { platform: 'ComelitIntercom', name, doctorMode: 'switch', doctorModeSensor: true, offlineSensor: true }, api);
+    for (const a of cache.values()) p.configureAccessory(a);
+    const register = api.registerPlatformAccessories;
+    api.registerPlatformAccessories = (pl, n, accs) => { for (const a of accs) cache.set(a.UUID, a); register(pl, n, accs); };
+    p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+    api.registerPlatformAccessories = register;
+    return p;
+  };
+  const shown = (seed, svc) => cache.get(`uuid:homebridge-comelit-intercom-${seed}`).getService(svc).getCharacteristic('cn').value;
+  start('Comelit Intercom');
+  // first start: only noted, nothing renamed
+  assert.strictEqual(shown('doorbell', 'motion'), undefined);
+  // renamed in the Home app (after the plugin had a ConfiguredName on it): kept
+  start('Intercom');
+  assert.strictEqual(shown('doorbell', 'motion'), 'Intercom');
+  assert.strictEqual(shown('offline', 'cs'), 'Intercom Offline');
+  assert.strictEqual(shown('doctor-mode', 'sw'), 'Intercom Doctor Mode');
+  assert.strictEqual(shown('doctor-mode', 'cs'), 'Intercom Doctor Mode Sensor');
+  assert.strictEqual(cache.get('uuid:homebridge-comelit-intercom-doorbell').displayName, 'Intercom');
+  assert.strictEqual(shown('lock-0', 'lock'), undefined, "the door's name didn't change");
+  cache.get('uuid:homebridge-comelit-intercom-offline').getService('cs').getCharacteristic('cn').value = 'Intercom gone';
+  start('Front');
+  assert.strictEqual(shown('doorbell', 'motion'), 'Front');
+  assert.strictEqual(shown('offline', 'cs'), 'Intercom gone', 'renamed in Home: kept');
+});
+
+test('names: a door renamed on the intercom renames its lock', () => {
+  const { p, api } = platform();
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  p.discoverAccessories({ ...deviceConfig, doors: [{ ...deviceConfig.doors[0], name: 'Front gate' }] });
+  const lock = [...p.lockAccessories.values()][0];
+  assert.strictEqual(lock.service.getCharacteristic('cn').value, 'Front gate');
+  assert.ok(api.registered.has('uuid:homebridge-comelit-intercom-lock-0'));
 });

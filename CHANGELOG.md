@@ -8,6 +8,8 @@ Fixes to the settings page for several intercoms (new in 2.8.0-beta.1):
 - A search, test or backup still running when you choose another intercom no longer shows its results under the new one, and its **Use this** buttons can't change the new one's settings. Recent events likewise show only the chosen intercom's.
 - The menu lists the intercoms in name order, instead of moving the chosen one to the top each time.
 - The warning about two intercoms with the same **Name** also catches names that differ only in capitals or punctuation ("Front Door" and "front-door"), which share Recent events too.
+- **Tiles follow the names in the settings.** When you change **Name**, the doorbell sensor, the camera, the Doctor Mode and Next Visitor switches (and their sensors) and the Offline sensor take the new name after the restart; a lock or actuator takes its door's new name when you rename the door on the intercom. A tile you renamed in the Home app keeps your name. The first start of this version only notes the current names, so nothing is renamed by the update itself. Until now the names were set once, when a tile was first added.
+- Recent events move with the **Name**: after a change, the events kept under the old Name are taken over.
 - Development only: tests that run the settings page's own code for adding, choosing and removing intercoms.
 
 ## 2.8.0-beta.2 - 2026-11-27
