@@ -1,30 +1,30 @@
 # Changelog
 
-## 2.8.0-beta.1 (2026-11-26)
+## 2.8.0-beta.1 - 2026-11-26
 
 - **Several intercoms on the settings page.** **Add an intercom**, next to the tabs, adds a block for another intercom; with more than one, a menu there chooses which one the settings, the Setup assistant and Recent events show, and **Remove** (click twice) removes the one shown. Until now the page showed only the first intercom, and a second one had to be edited in JSON Config.
 - The page warns while two intercoms share a **Name** (Recent events are kept by name) or don't each have their own child bridge (their accessories would clash on one bridge), and says where to set one up: **Child Bridge Config** in the plugin's menu.
 - Switching intercoms clears the previous one's search, test and backup results. Nothing changes until you click **Save**.
 
-## 2.7.3 (2026-11-26)
+## 2.7.3 - 2026-11-26
 
 No change to how the plugin works.
 
 - Development only: the linter again runs ESLint's no-dupe-args and no-octal (through a small local oxlint plugin), so it checks everything the old ESLint setup did.
 
-## 2.7.2 (2026-11-26)
+## 2.7.2 - 2026-11-26
 
 No change to how the plugin works: the compiled code is the same as 2.7.1's (only the position of one comment, the source maps and the way index.d.ts writes the same type differ).
 
 - Development only: built with TypeScript 7 (the native compiler) and linted with oxlint instead of TypeScript 6 and ESLint, with the same rules. CI retries npm's package signature check up to 3 times, because npm's registry sometimes answers it with an invalid response.
 
-## 2.7.1 (2026-11-26)
+## 2.7.1 - 2026-11-26
 
 No change to how the plugin works.
 
 - Development only: CI runs the tests on Node 22, 24 and 26 in a single check.
 
-## 2.7.0 (2026-11-26)
+## 2.7.0 - 2026-11-26
 
 The plugin's settings get a page of their own: a **Setup assistant** that finds the intercom, reads the token from a backup and checks the setup step by step, and a **Recent events** tab that shows what rang, what opened the door and when. Also: actuators as a switch or light. Rings, the camera, unlocking, Doctor Mode and Next Visitor work as in 2.6.4.
 
@@ -58,23 +58,23 @@ Nothing in HomeKit, and nothing in your settings. You'll notice:
 - **Recent events** only lists what Homebridge sees: opens from an indoor monitor, a neighbour's monitor or a key aren't there.
 - The token's activation-code route (as the Comelit app does it) isn't supported: use **Token from a backup**.
 
-## 2.7.0-beta.12 (2026-11-25)
+## 2.7.0-beta.12 - 2026-11-25
 
 ### Changed
 
 - **Settings / Recent events tabs** look like the tabs in Homebridge's own plugin window: no outline or underline, and the active tab is a filled, rounded block (light grey `#efefef` in light themes, `#2b2b2b` in dark themes, like the panel below it).
 
-## 2.7.0-beta.11 (2026-11-25)
+## 2.7.0-beta.11 - 2026-11-25
 
 Same as 2.7.0-beta.10, which was never published: its release was created before its version change was merged, so its tag points at beta.9's code.
 
-## 2.7.0-beta.10 (2026-11-25, not published)
+## 2.7.0-beta.10 - 2026-11-25 (not published)
 
 ### Changed
 
 - **The settings page now matches Homebridge's theme.** Homebridge copies its stylesheets and theme into plugin pages; the page now uses them instead of its own overrides: cards and the test results as Homebridge's panels (dark grey in the dark theme, not see-through), **Use this** and **Use user row** in the theme's colour (they were Bootstrap blue), Refresh / Copy / Copy diagnostics like Homebridge's own **Close** button, and in the dark theme the tabs, the period menu (and its open list) and the diagnostics box in the colours of Homebridge's own plugin windows. It follows Homebridge's dark mode setting directly (no detection of its own).
 
-## 2.7.0-beta.9 (2026-11-25)
+## 2.7.0-beta.9 - 2026-11-25
 
 ### Changed
 
@@ -85,38 +85,38 @@ Same as 2.7.0-beta.10, which was never published: its release was created before
 
 - README: the setup step's JSON example was split from its sentence by the Recent events paragraph.
 
-## 2.7.0-beta.8 (2026-11-25)
+## 2.7.0-beta.8 - 2026-11-25
 
 ### Added
 
 - **Token from a backup** in the Setup assistant: choose a backup from the intercom's web page (Backup/Restore → **Make Backup**, then download it; `.tar.gz`, or `.tar` if the browser unpacked it), and the assistant lists the users with a token (row, description, whether activated). **Use this** fills in the token and user row. It reads the archive's `etc/comelit/users.cfg`, which is gzipped a second time inside the archive (also accepts a plain `.tar`, or `users.cfg` on its own). Activation codes and email addresses in the backup are never shown or returned; the file is read on Homebridge and not kept. Files that aren't a backup get a plain explanation.
 
-## 2.7.0-beta.7 (2026-11-25)
+## 2.7.0-beta.7 - 2026-11-25
 
 ### Added
 
 - **Recent events**, a new tab in the plugin's settings (next to **Settings**; the settings form hides while it's open, so the page stays short): the last rings, door opens and what opened them (HomeKit, Doctor Mode, Next Visitor, an actuator), refused and failed unlocks, live views (how long, or no video), Doctor Mode and Next Visitor turning on and off, the connection to the intercom, and Homebridge starting the plugin. Each ring says what followed it: viewed, opened and how long after, or *not opened by Homebridge*. Today, Yesterday, Last 7 days or All kept, in a box that scrolls; **Copy** copies the list.
 - The plugin keeps the last 200 events in `comelit-doorbell-events.json` in Homebridge's storage folder (written at most every 2 s, and at shutdown), so they survive restarts and log trimming. No token or personal data: times, door names and what happened. Only what Homebridge sees: opens from an indoor monitor, a neighbour's monitor or a key aren't listed.
 
-## 2.7.0-beta.6 (2026-11-25)
+## 2.7.0-beta.6 - 2026-11-25
 
 ### Fixed
 
 - **A misleading warning after a ring.** A live view opened within about a minute of a ring (or of a call with sound) can get no video, because the entrance panel is still finishing that call. The plugin warned about the panel's address and DIP switches, which is wrong for a working setup. It now notes that the intercom was still busy and to try again in a few seconds. The setup warning stays for a live view that gets no video with no recent call.
 
-## 2.7.0-beta.5 (2026-11-24)
+## 2.7.0-beta.5 - 2026-11-24
 
 ### Fixed
 
 - **Test connection** reported "actuators: {"type":"switch"} is not valid", twice: the settings form adds an empty row to **Actuators shown as a switch or light**. Rows without a name are now ignored without a warning (in the test and in the log), the form no longer pre-fills a type, and each problem is listed once.
 
-## 2.7.0-beta.4 (2026-11-24)
+## 2.7.0-beta.4 - 2026-11-24
 
 ### Fixed
 
 - **The normal settings were still missing** below the Setup assistant in 2.7.0-beta.3. Homebridge shows them under a plugin's own settings page only when the plugin has a single settings block, and this plugin's settings said it could have several (inherited from the plugin it was imported from). It now says single, which is also how it works: a second intercom block would clash with the first, since every accessory's id is fixed. Your settings don't change.
 
-## 2.7.0-beta.3 (2026-11-24)
+## 2.7.0-beta.3 - 2026-11-24
 
 ### Fixed
 
@@ -125,13 +125,13 @@ Same as 2.7.0-beta.10, which was never published: its release was created before
 - The assistant's text was hard to read in the dark theme.
 - **Copy diagnostics** could include the intercom's MAC address inside a cloud setting (`viper-p2p` → `mqtt` → `base`). MAC addresses and token-like strings are now removed wherever they appear, not only in fields named after them.
 
-## 2.7.0-beta.2 (2026-11-23)
+## 2.7.0-beta.2 - 2026-11-23
 
 ### Added
 
 - **Actuators shown as a switch or light** (`actuators`): an actuator such as the stair light can be a HomeKit light or switch instead of a lock. Turning it on sends the actuator's command at any time, with no ring needed, and it shows Off again a moment later. Doctor mode and Next Visitor never use one. Only for things that aren't doors: HomeKit asks for no confirmation. Actuators not listed stay locks, as before. A name that matches no actuator is reported in the log.
 
-## 2.7.0-beta.1 (2026-11-23)
+## 2.7.0-beta.1 - 2026-11-23
 
 No new settings; the plugin itself works as in 2.6.4.
 
@@ -144,7 +144,7 @@ No new settings; the plugin itself works as in 2.6.4.
   - Read-only: it only signs in and reads the intercom's information and configuration, like the Comelit app. The plugin keeps running meanwhile.
 - New dependency: `@homebridge/plugin-ui-utils` (Homebridge's library for plugin settings pages).
 
-## 2.6.4 (2026-11-23)
+## 2.6.4 - 2026-11-23
 
 No new settings, and nothing changes in what the plugin does.
 
@@ -152,7 +152,7 @@ No new settings, and nothing changes in what the plugin does.
 
 - The donate link also offers GitHub Sponsors (first), next to Buy Me a Coffee: the Homebridge UI's heart button and npm list both.
 
-## 2.6.3 (2026-11-23)
+## 2.6.3 - 2026-11-23
 
 No new settings, and nothing changes in what the plugin does.
 
@@ -161,7 +161,7 @@ No new settings, and nothing changes in what the plugin does.
 - The plugin has a donate link (Buy Me a Coffee): the Homebridge UI shows it as a heart button on the plugin's card, and npm lists it on the package page.
 - The README starts with the plugin's icon.
 
-## 2.6.2 (2026-11-23)
+## 2.6.2 - 2026-11-23
 
 No new settings, and nothing changes in what the plugin does.
 
@@ -170,7 +170,7 @@ No new settings, and nothing changes in what the plugin does.
 - The Homebridge UI shows the plugin as **Comelit Doorbell** (it had no display name, so the UI showed the package name). The package's author is now "Manuel Zamfir", as for the author's other plugins.
 - Development only: the same security setup as the author's other plugins. SECURITY.md says how to report a vulnerability privately (through GitHub). A pull request that adds a dependency with a known vulnerability fails, CI checks that every installed package carries the npm registry's signature, and `.gitignore` keeps keys, tokens and `.env` files out of the repository.
 
-## 2.6.1 (2026-11-22)
+## 2.6.1 - 2026-11-22
 
 No new settings; nothing to change in your config.
 
@@ -183,7 +183,7 @@ No new settings; nothing to change in your config.
 
 - Development only: the same release and CI workflows as the author's other plugins. Publishing a GitHub release publishes it to npm (with trusted publishing; the package and its checksum are added to the release); each repository's checks are its `verify`, `test:matrix` and `release:check` scripts.
 
-## 2.6.0 (2026-11-22)
+## 2.6.0 - 2026-11-22
 
 No new settings; with your current config, 2.6.0 behaves like 2.5.0. Check your Node.js version before updating (below).
 
@@ -197,7 +197,7 @@ No new settings; with your current config, 2.6.0 behaves like 2.5.0. Check your 
 - A failure in a few background tasks is now logged instead of left as an unhandled promise rejection (which Node can treat as a crash): ending the media when the intercom hangs up, the registration refresh, and HomeKit's stream setup and stream requests.
 - The debug log now says when an acknowledgement or a video request to the intercom couldn't be sent. Both were dropped silently; a missed acknowledgement makes the intercom send the same data again and again, and a missed video request leaves the live view black until the no-video check gives up.
 
-## 2.5.0 (2026-11-22)
+## 2.5.0 - 2026-11-22
 
 ### Added
 
@@ -208,7 +208,7 @@ No new settings; with your current config, 2.6.0 behaves like 2.5.0. Check your 
 
 - **The Doctor Mode switch now turns itself off after 2 hours.** If you leave it on for longer (for example all day by an automation), set **Doctor mode: turn off after** to `0` or to more minutes. `doctorMode: always` is unchanged.
 
-## 2.4.0 (2026-11-21)
+## 2.4.0 - 2026-11-21
 
 Everything new is off by default: with the default settings, 2.4.0 behaves like 2.3.3. The 2.4.0-beta sections below have the details and the door-test notes.
 
@@ -241,7 +241,7 @@ Everything new is off by default: with the default settings, 2.4.0 behaves like 
 
 - Shorter labels in the settings screen's dropdowns (they were cut off on phones); the descriptions under them say the rest. No setting was renamed and no value changed.
 
-## 2.4.0-beta.6 (2026-11-20)
+## 2.4.0-beta.6 - 2026-11-20
 
 Pre-release. Only installations with **Live view without a ring** on and **Unlock allowed for** above 0 see a difference.
 
@@ -254,7 +254,7 @@ Pre-release. Only installations with **Live view without a ring** on and **Unloc
 - **A ring during a live view without a ring could be missed**, very rarely. The plugin's call to the panel gets a random connection id, and the intercom picks a ring's id itself: about once in 65,536 rings during a live view they matched, and the ring was taken as part of the plugin's own call (no doorbell notification, no recording). Now such a ring ends the live view and comes through as usual. Found by a test that failed once on CI.
 - A ring while the live view was calling the panel again (for sound, or after the lock's pause) no longer gets the panel called during the ring: the view ends, open it again to answer the ring.
 
-## 2.4.0-beta.5 (2026-11-20)
+## 2.4.0-beta.5 - 2026-11-20
 
 Pre-release. Only installations with an actuator (a second door or gate output) see a difference.
 
@@ -267,7 +267,7 @@ Pre-release. Only installations with an actuator (a second door or gate output) 
 
 - A live view without a ring is ended by the panel itself after about 30–40 s (about 31 s on an EX-7000HW kit, 37 s on a 6741W): the picture freezes, close the view and open it again.
 
-## 2.4.0-beta.4 (2026-11-20)
+## 2.4.0-beta.4 - 2026-11-20
 
 Pre-release. With the default settings the plugin behaves like 2.4.0-beta.3.
 
@@ -284,7 +284,7 @@ Pre-release. With the default settings the plugin behaves like 2.4.0-beta.3.
 - The panel ends a **silent** live view without a ring after about 31 s (a normal hang-up): the Home app's picture then freezes, close the view. A view **with sound** isn't cut short (95 s, closed by the viewer).
 - **Turning the microphone off doesn't turn the sound off.** The panel ignores a request to close the sound in the middle of a call (and the video stalled for a while after it), and the Comelit app's own sound-off button ends its call. So with **When you talk**, once the microphone has turned the sound on, it stays on until you close the view: closing the view is how to turn it off.
 
-## 2.4.0-beta.3 (2026-11-19)
+## 2.4.0-beta.3 - 2026-11-19
 
 Pre-release. The setting stays off by default: with the default settings the plugin behaves like 2.4.0-beta.2.
 
@@ -295,7 +295,7 @@ Pre-release. The setting stays off by default: with the default settings the plu
   - Needs **Talk-back** (a warning says so otherwise): without it the Home app has no microphone.
   - Tried on an EX-7000HW (2026-11-19): the panel took the new call at the first try; the entrance heard in the Home app (936 sound packets, none lost) and talk-back heard at the panel; the picture paused about 5 s.
 
-## 2.4.0-beta.2 (2026-11-19)
+## 2.4.0-beta.2 - 2026-11-19
 
 Pre-release. The new setting is off by default: with the default settings the plugin behaves like 2.4.0-beta.1.
 
@@ -310,7 +310,7 @@ Pre-release. The new setting is off by default: with the default settings the pl
 
 - **Live view without a ring: the entrance panel's address.** Self activation always asks for the main entrance panel, address 0. On the installation where the panel sent no video, the cause was its address (2, from the panel's DIP switches); with address 0 it works. The README, the setting's description and the one-time no-video warning now name it as the first thing to check, and the tested-hardware table marks it as working there.
 
-## 2.4.0-beta.1 (2026-11-18)
+## 2.4.0-beta.1 - 2026-11-18
 
 Pre-release. Both new features are off by default: with the default settings the plugin behaves like 2.3.3.
 
@@ -330,7 +330,7 @@ Pre-release. Both new features are off by default: with the default settings the
   - Doctor mode and Next Visitor space their buzzes start to start too, like HomeKit unlocks (release review).
   - The time from one buzz to the next is at most 15 s (was 30 s, which let 5 buzzes run for 2 minutes after one unlock); a larger value is logged as not valid and 6 s is used (release review).
 
-## 2.3.3 (2026-11-13)
+## 2.3.3 - 2026-11-13
 
 ### Fixed
 
@@ -342,7 +342,7 @@ Pre-release. Both new features are off by default: with the default settings the
 
 The pre-release entries below have the details.
 
-## 2.3.3-beta.2 (2026-11-12)
+## 2.3.3-beta.2 - 2026-11-12
 
 ### Fixed
 
@@ -350,7 +350,7 @@ The pre-release entries below have the details.
 - With debug on, `Doorbell camera: skipped the intercom's first keyframe (… bytes, its old picture): a fresh one followed 1.0 s later …`, and the recording line says `…, the intercom's second keyframe: its first (… bytes, 1.0 s before) was its old picture`. With `mediaCaptureDir`, the skipped picture is also saved, as `ring-…-skipped.jpg` next to the ring's `ring-….jpg`, to compare.
 - From the 2.3.3-beta.1 review (they missed that release): the keyframe log traces the ring preview and the live view apart (`call: ring preview keyframe 1 …`, `call: live view keyframe 1 …`), and ignores video that arrives just after a call has ended.
 
-## 2.3.3-beta.1 (2026-11-12)
+## 2.3.3-beta.1 - 2026-11-12
 
 Pre-release for a field test; the plugin behaves exactly like 2.3.2.
 
@@ -362,7 +362,7 @@ Pre-release for a field test; the plugin behaves exactly like 2.3.2.
 
 - Debug log of the keyframes at the start of each call, to decide how to skip the old picture: for the ring preview and, if the call is answered, the live view, the first 4 keyframes of each in the 15 s after the ring, when each arrived, how long after the one before, its size and a short fingerprint, and whether it is a copy of a keyframe of the previous call (`call: keyframe 1 3.00 s after the ring, … (a copy of the previous call's keyframe from 6.50 s after its ring)`). At the end of each call, one line about its last keyframe. The lines show only with Homebridge debug mode on (the small bookkeeping runs either way); nothing else changes. "new" means the picture's bytes differ from the previous call's: an old picture encoded again would also say "new", but its time and size still tell.
 
-## 2.3.2 (2026-11-12)
+## 2.3.2 - 2026-11-12
 
 Packaging only, for the Homebridge Verified checks; the plugin itself doesn't change.
 
@@ -373,14 +373,14 @@ Packaging only, for the Homebridge Verified checks; the plugin itself doesn't ch
 - ffmpeg is started without passing the environment explicitly (it was passed unchanged, which is also the default); the verification scan flagged `process.env` as "accesses environment files".
 - The settings schema lists its required settings (name, IP address, token) the standard JSON Schema way, in one `required` list, instead of `"required": true` on each setting. The settings screen looks and works the same.
 
-## 2.3.1 (2026-11-12)
+## 2.3.1 - 2026-11-12
 
 ### Changed
 
 - **No more files in the system's temporary folder (`/tmp`).** The pictures the live view loops when there is no call (the last visitor's, and the dark placeholder when the built-in picture is missing) are now written to a `comelit-doorbell` folder inside Homebridge's storage folder (usually `/var/lib/homebridge/comelit-doorbell`), as Homebridge asks of verified plugins. Copies left behind if Homebridge stops during a live view are cleared at the next start (each file carries its Homebridge process's id, so a second child bridge's files in use are kept). If that folder can't be written, the live view shows the idle picture instead of failing. Nothing else changes.
 - CI also runs the tests on Node.js 24.
 
-## 2.3.0 (2026-11-12)
+## 2.3.0 - 2026-11-12
 
 Stable release after six pre-releases (2.3.0-beta.1 to beta.6), tested at the door on 2026-11-11. Everything below is compared with 2.2.0; the pre-release entries further down give the details. No setting was renamed or removed, and nothing changes until you turn on **Record rings**.
 
@@ -408,7 +408,7 @@ Stable release after six pre-releases (2.3.0-beta.1 to beta.6), tested at the do
 
 Tests: 175 in all, including a real ffmpeg run fed at the intercom's pace.
 
-## 2.3.0-beta.6 (2026-11-11)
+## 2.3.0-beta.6 - 2026-11-11
 
 ### Fixed
 
@@ -420,7 +420,7 @@ Tests: 175 in all, including a real ffmpeg run fed at the intercom's pace.
 - **Talk-back with less delay:** the ffmpeg that turns the Home app's microphone into the intercom's sound no longer buffers its input, probes it, or waits to reorder late network packets. How much of the ~2 s heard at the door this saves is to be measured; the iPhone, HomeKit and the panel add their own delay.
 - **A quieter debug log:** the registration renewals every 2 minutes and the planned reconnects are no longer logged line by line (about 150 lines an hour); one debug line an hour sums them up (`Connection, last 60 min: …`). If the intercom answered none of the renewals in that hour, the line is a warning instead, since rings may not be reaching HomeKit. A registration the intercom doesn't answer at all is also a warning now, even on a planned reconnect. Other failures are still logged when they happen. The intercom's plain acknowledgements outside a call aren't logged either.
 
-## 2.3.0-beta.5 (2026-11-11)
+## 2.3.0-beta.5 - 2026-11-11
 
 Debug lines only, to find out two things from real rings; nothing else changes.
 
@@ -433,7 +433,7 @@ Debug lines only, to find out two things from real rings; nothing else changes.
 
 - The test with ffmpeg is skipped where ffprobe isn't installed (the Homebridge Raspberry Pi image has ffmpeg but not ffprobe).
 
-## 2.3.0-beta.4 (2026-11-11)
+## 2.3.0-beta.4 - 2026-11-11
 
 ### Fixed
 
@@ -444,7 +444,7 @@ Debug lines only, to find out two things from real rings; nothing else changes.
 - The 6741W sends **no sound before the call is answered**: four rings, `sound before answering: none`, and no reply to the request. Unanswered rings are recorded silent.
 - A Next Visitor ring with **open after** at 5 s is now recorded: one short piece, from the first picture to the open.
 
-## 2.3.0-beta.3 (2026-11-11)
+## 2.3.0-beta.3 - 2026-11-11
 
 ### Added
 
@@ -464,7 +464,7 @@ Tests: 167 in all, including a real ffmpeg run fed at the intercom's pace that c
 
 An independent review before release found, and this beta fixes: with sound on, a recording could fail entirely when the hub asked after the first picture (ffmpeg found no sound in the first 32 KB, which one of the intercom's keyframes can fill); sound arriving late after a Wi-Fi stall pushed all later sound behind the picture; when the picture stopped before the call ended, the sound ran on for 5 s, making the last piece too long; the preview's sound request was never stopped, and the intercom's reply to it could be taken as the call's talk-back channel; turning the switch off while a live view was answering hung up the live view's call.
 
-## 2.3.0-beta.2 (2026-11-11)
+## 2.3.0-beta.2 - 2026-11-11
 
 ### Fixed
 
@@ -476,7 +476,7 @@ An independent review before release found, and this beta fixes: with sound on, 
 
 Tests: 158 in all, including one that restarts a camera accessory through Homebridge's cache with recording turned on and off.
 
-## 2.3.0-beta.1 (2026-11-11)
+## 2.3.0-beta.1 - 2026-11-11
 
 ### Added
 
@@ -489,17 +489,17 @@ Tests: 158 in all, including one that restarts a camera accessory through Homebr
 
 Tests: 157 in all, including a run of ffmpeg on intercom-like video that checks every fragment starts with a keyframe and is at most 4 s long. Also checked by hand by running two of the intercom's real ring recordings through the recorder.
 
-## 2.2.0 (2026-11-11)
+## 2.2.0 - 2026-11-11
 
 Stable release after three pre-releases (2.1.1-beta.1, 2.1.1-beta.2, 2.2.0-beta.1). Everything below is compared with 2.1.0; the pre-release entries further down give the details. No setting was renamed or removed, but settings are checked more strictly: see **Changed** below.
+
+### Breaking
+
+- **Settings are checked more strictly.** A number above the config editor's maximum is now replaced by the default (2.1.0 used it as it was): for example `ringWindowSeconds: 900` becomes 90 s, `leaseRecycleMinutes: 60` becomes 50. Text that isn't a plain number (`"90s"`, `"1e3"`, `false`, blank) and choices with typos are also replaced by the default. Each one is reported once at startup: after updating, look in the log for lines with `is not valid` and fix those values. Before, `false` as **Unlock allowed for** meant "any time".
 
 ### Added
 
 - **Next Visitor switch** (`nextVisitorSwitch`, off by default, in the **Door** section): while it is on, the next ring opens the door the same way as doctor mode (after **open after**, `doctorModeDelaySeconds`), then the switch turns itself off. If the open doesn't go through, it stays on for the next ring; with doctor mode also on, a ring opens once. If nobody rings, it turns off after **Next Visitor: turn off after** (`nextVisitorMinutes`, 2 hours). Its state survives a restart, and turning it off during the seconds before the open cancels the open.
-
-### Changed (check these when updating)
-
-- **Settings are checked more strictly.** A number above the config editor's maximum is now replaced by the default (2.1.0 used it as it was): for example `ringWindowSeconds: 900` becomes 90 s, `leaseRecycleMinutes: 60` becomes 50. Text that isn't a plain number (`"90s"`, `"1e3"`, `false`, blank) and choices with typos are also replaced by the default. Each one is reported once at startup: after updating, look in the log for lines with `is not valid` and fix those values. Before, `false` as **Unlock allowed for** meant "any time".
 
 ### Fixed
 
@@ -514,7 +514,7 @@ Stable release after three pre-releases (2.1.1-beta.1, 2.1.1-beta.2, 2.2.0-beta.
 
 Tests: 133 in all.
 
-## 2.2.0-beta.1 (2026-11-11)
+## 2.2.0-beta.1 - 2026-11-11
 
 Fixes from an independent review of the whole plugin, before the stable 2.2.0. Includes everything from 2.1.1-beta.1 and beta.2 (no black notification picture; the Next Visitor switch).
 
@@ -539,7 +539,7 @@ Fixes from an independent review of the whole plugin, before the stable 2.2.0. I
 
 Tests: 133 in all, including tests for three rules that had none (one open per ring during the delay, only a ring opens the unlock window, a stopped view kills its ffmpeg).
 
-## 2.1.1-beta.2 (2026-11-10)
+## 2.1.1-beta.2 - 2026-11-10
 
 ### Added
 
@@ -547,7 +547,7 @@ Tests: 133 in all, including tests for three rules that had none (one open per r
 
 Tests: 125 in all.
 
-## 2.1.1-beta.1 (2026-11-10)
+## 2.1.1-beta.1 - 2026-11-10
 
 ### Fixed
 
@@ -556,9 +556,20 @@ Tests: 125 in all.
 
 Tests: 114 in all.
 
-## 2.1.0 (2026-11-10)
+## 2.1.0 - 2026-11-10
 
 The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, tested on a Comelit 6741W). Everything below is compared with 2.0.4; the pre-release entries further down give the details.
+
+### Breaking
+
+- **Node.js 20, 22 or 24 is required** (2.0.x allowed Node.js 18).
+- **Registration refresh mode** defaults to `inplace`: no gap in which rings are missed. Set `leaseRefreshMode: reconnect` for the old behaviour.
+- **Doorbell camera trigger URL** (`doorbellTriggerUrl`) has no default any more. If you used it with homebridge-camera-ffmpeg's default port, set it explicitly; with the plugin's own doorbell camera you don't need it.
+- **A short normal log**: rings, door opens, doctor mode, one summary per live view, and problems. The rest (the connection's steps, renewals, `call:` and `diag:` lines) needs the child bridge's debug mode. The log prefixes `zman-call` and `zman-diag` are now `call:` and `diag:`.
+- **The settings screen** is regrouped: Intercom, Doorbell camera and answering, and Door first; Picture and sound, Advanced and Troubleshooting folded away. No setting was renamed or removed, so your JSON keeps working.
+- **Invalid settings**, and numbers below the config editor's minimum, are replaced by their default and reported once at startup. `true`/`false` written as text are accepted: `"false"` now really turns a setting off (2.0.x read it as on).
+- In `reconnect` mode, a planned refresh reconnects after about 2 s instead of the reconnect delay.
+- Rewritten in TypeScript; two intercoms in one Homebridge no longer share settings; the accessory model shown in the Home app is `ViP door relay` / `ViP doorbell`.
 
 ### Added
 
@@ -573,17 +584,6 @@ The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, te
 - **A reconnect back-off** up to **Longest reconnect wait** (5 minutes) when the intercom can't be reached.
 - **Troubleshooting**: one summary line per live view, and **Save each call's video and audio to** (`mediaCaptureDir`) keeps the raw media of the last 10 calls and the picture each ring's notification got.
 
-### Changed (check these when updating)
-
-- **Node.js 20, 22 or 24 is required** (2.0.x allowed Node.js 18).
-- **Registration refresh mode** defaults to `inplace`: no gap in which rings are missed. Set `leaseRefreshMode: reconnect` for the old behaviour.
-- **Doorbell camera trigger URL** (`doorbellTriggerUrl`) has no default any more. If you used it with homebridge-camera-ffmpeg's default port, set it explicitly; with the plugin's own doorbell camera you don't need it.
-- **A short normal log**: rings, door opens, doctor mode, one summary per live view, and problems. The rest (the connection's steps, renewals, `call:` and `diag:` lines) needs the child bridge's debug mode. The log prefixes `zman-call` and `zman-diag` are now `call:` and `diag:`.
-- **The settings screen** is regrouped: Intercom, Doorbell camera and answering, and Door first; Picture and sound, Advanced and Troubleshooting folded away. No setting was renamed or removed, so your JSON keeps working.
-- **Invalid settings**, and numbers below the config editor's minimum, are replaced by their default and reported once at startup. `true`/`false` written as text are accepted: `"false"` now really turns a setting off (2.0.x read it as on).
-- In `reconnect` mode, a planned refresh reconnects after about 2 s instead of the reconnect delay.
-- Rewritten in TypeScript; two intercoms in one Homebridge no longer share settings; the accessory model shown in the Home app is `ViP door relay` / `ViP doorbell`.
-
 ### Fixed
 
 - **Rings could stop silently**: unacknowledged messages during a call (the intercom kept repeating them), a ring arriving while registering being taken as the registration's answer, a dropped connection during setup never reconnecting, and half-open channels taking the next channel's answer.
@@ -594,13 +594,13 @@ The first stable release since 2.0.4, after 31 pre-releases (from beta.15 on, te
 
 See [Known limits](README.md#known-limits): tested on one 6741W; RTSP cameras listed by the intercom are placeholders; a door output of `0` is sent as `1` inside a call; the gate output is untested.
 
-## 2.1.0-beta.31 (2026-11-10)
+## 2.1.0-beta.31 - 2026-11-10
 
 ### Changed
 
 - **Debug log: the size of each picture HomeKit asks for after a ring**, e.g. `Doorbell camera: HomeKit asked for a 640x360 picture 0.4 s after the ring; gave this ring's picture after waiting 3.0 s (saved)`. HomeKit asks several times per ring (the home hub for the notification, and your devices); the size shows which request is which, and `(saved)` marks the one kept in `mediaCaptureDir`. Logged whether the ring preview is on or off; it replaces the `Ring preview: HomeKit asked for the picture …` line.
 
-## 2.1.0-beta.30 (2026-11-10)
+## 2.1.0-beta.30 - 2026-11-10
 
 ### Added
 
@@ -608,7 +608,7 @@ See [Known limits](README.md#known-limits): tested on one 6741W; RTSP cameras li
 
 Tests: 108 in all.
 
-## 2.1.0-beta.29 (2026-11-09)
+## 2.1.0-beta.29 - 2026-11-09
 
 Clean-up for the stable 2.1.0: the log and the settings screen. No change to how the plugin works.
 
@@ -631,7 +631,7 @@ Clean-up for the stable 2.1.0: the log and the settings screen. No change to how
 
 Tests: 106 in all.
 
-## 2.1.0-beta.28 (2026-11-09)
+## 2.1.0-beta.28 - 2026-11-09
 
 Towards the stable 2.1.0: the HomeKit experience during a ring.
 
@@ -647,7 +647,7 @@ Towards the stable 2.1.0: the HomeKit experience during a ring.
 
 Tests: 100 in all.
 
-## 2.1.0-beta.27 (2026-11-09)
+## 2.1.0-beta.27 - 2026-11-09
 
 A test build for the visitor's picture in the ring notification. Everything else is as in beta.26.
 
@@ -656,7 +656,7 @@ A test build for the visitor's picture in the ring notification. Everything else
 - **Visitor's picture in the ring notification (test)** (`ringPreview`, off by default, in the troubleshooting section): on a ring, asks the intercom for video before anyone answers, so the notification can show who is at the door instead of an older picture. It doesn't answer: the phones and the monitor keep ringing, and it stops at the first picture, after 8 s at most, or as soon as the call is answered (the live view and doctor mode work as before). The log says what happened (`Ring preview (test): video before answering works / no video before answering …`), and when HomeKit asked for the notification's picture, to see whether the picture comes in time.
 - **The last visitor's picture survives a restart**: it is saved in Homebridge's storage folder (`comelit-last-visitor.h264`) and shown again after a restart or update, until **Show the last visitor for** has passed since it was taken. Before, any restart reset the camera to the idle picture.
 
-## 2.1.0-beta.26 (2026-11-09)
+## 2.1.0-beta.26 - 2026-11-09
 
 Fixes from an independent review of beta.25, before the stable 2.1.0.
 
@@ -681,7 +681,7 @@ Tests for the fixes (89 in all).
 - The troubleshooting row for a closed ring channel gives the real reconnect delay; recordings are kept per call (last 10 calls), not per view; two new known limits (door output 0 inside a call; door channels left open with rings off).
 - README only, from a second review of 2.1.0-beta.25: setting up the Comelit user (a user needs one activation in the Comelit app before it has a token, and must not be deactivated afterwards; where the token is in `users.cfg`); a section on updating from 2.0.x; a real summary line as the example; troubleshooting rows that rely on the summary line instead of debug-only lines, and one for rings missed right after a restart; hedged statements that aren't observed yet (the phones stopping when HomeKit answers); a duplicate line removed; the doctor mode switch in the module list and known limits.
 
-## 2.1.0-beta.25 (2026-11-08)
+## 2.1.0-beta.25 - 2026-11-08
 
 Preparing the stable 2.1.0 release.
 
@@ -704,7 +704,7 @@ Preparing the stable 2.1.0 release.
 - README: the tested-hardware section is a table of tested features; the new defaults; which log lines need debug mode; the example config no longer sets `leaseRefreshMode`; `copy` isn't a usable encoder; wording for users updating from 2.0.x instead of beta numbers.
 - Tests for the `copy` fallback and the keyframe reset (75 in all).
 
-## 2.1.0-beta.24 (2026-11-08)
+## 2.1.0-beta.24 - 2026-11-08
 
 From the eighth real test (beta.23): clean video, sound without delay, doctor mode working.
 
@@ -716,7 +716,7 @@ From the eighth real test (beta.23): clean video, sound without delay, doctor mo
 
 - Test for the acknowledgements: the empty check, a repeated message, the media request, and no acknowledgement of acknowledgements (73 in all).
 
-## 2.1.0-beta.23 (2026-11-08)
+## 2.1.0-beta.23 - 2026-11-08
 
 From the seventh real test (beta.22): the picture was still smeared at the start, and the sound from the door arrived a few seconds late. Both reproduced here with a recorded call and the Pi's ffmpeg 7.0.2, and both had the same kind of cause: ffmpeg's start-up handling of its input.
 
@@ -729,7 +729,7 @@ From the seventh real test (beta.22): the picture was still smeared at the start
 
 - Tests for both input options (72 in all).
 
-## 2.1.0-beta.22 (2026-11-08)
+## 2.1.0-beta.22 - 2026-11-08
 
 From the sixth real test (beta.21, doctor mode off): video, talk-back and the last visitor's picture work; the picture was smeared at the start, and the sound from the door was hard to hear.
 
@@ -743,7 +743,7 @@ From the sixth real test (beta.21, doctor mode off): video, talk-back and the la
 - `doorVolume` (12 dB, 0–24): how much to turn up the sound from the door. 0 leaves it as it is.
 - README: the setting, the picture size, the quiet microphone. Tests (72).
 
-## 2.1.0-beta.21 (2026-11-08)
+## 2.1.0-beta.21 - 2026-11-08
 
 ### Added
 
@@ -751,7 +751,7 @@ From the sixth real test (beta.21, doctor mode off): video, talk-back and the la
 - Tests for doctor mode (72 in all).
 - README: the settings, the switch, how it works.
 
-## 2.1.0-beta.20 (2026-11-08)
+## 2.1.0-beta.20 - 2026-11-08
 
 Live video works on the Raspberry Pi with 2.1.0-beta.19 (565 frames in a 39 s call), and the last visitor's picture shows the visitor.
 
@@ -763,7 +763,7 @@ Live video works on the Raspberry Pi with 2.1.0-beta.19 (565 frames in a 39 s ca
 
 - README: live video confirmed on the Pi (ffmpeg 7.0.2); the camera's tested features; a smeared start clears within 2 s.
 
-## 2.1.0-beta.19 (2026-11-08)
+## 2.1.0-beta.19 - 2026-11-08
 
 ### Fixed
 
@@ -775,14 +775,14 @@ Live video works on the Raspberry Pi with 2.1.0-beta.19 (565 frames in a 39 s ca
 - Tests for the new video filter and the last-visitor picture (68 in all).
 - README: troubleshooting row updated; when the last visitor's picture is taken.
 
-## 2.1.0-beta.18 (2026-11-08)
+## 2.1.0-beta.18 - 2026-11-08
 
 ### Fixed
 
 - **The last visitor's picture was replaced by the idle picture when you opened the camera.** After a call, the camera's tile showed the last visitor, but opening the camera outside a call streamed the idle picture, and the tile then showed that. Within `lastVisitorMinutes`, the live view outside a call now shows the last visitor too.
 - The last visitor's picture was squashed (640x240). It is now shown as 4:3, like the live video.
 
-## 2.1.0-beta.17 (2026-11-08)
+## 2.1.0-beta.17 - 2026-11-08
 
 From the third real test, with the new diagnostics and a recording of the call: **talk-back works** (your voice is heard at the panel), and the picture was almost frozen. Replaying the recording through the plugin's ffmpeg command reproduced and explained it.
 
@@ -798,7 +798,7 @@ From the third real test, with the new diagnostics and a recording of the call: 
 - Test with the real SPS (640x240) and the new ffmpeg input options (67 in all).
 - README: talk-back tested; the 6741W sends 640x240 whatever `videoQuality` is; when the picture appears; troubleshooting for a frozen picture.
 
-## 2.1.0-beta.16 (2026-11-08)
+## 2.1.0-beta.16 - 2026-11-08
 
 From the second real test: in two of three calls the live view stayed blank for the few seconds it was open, although video was arriving, the picture with `hd` looked about the same as with `sd`, and it was unclear whether talk-back sent anything. This version logs enough to answer these from the log alone, and tries one fix.
 
@@ -819,7 +819,7 @@ From the second real test: in two of three calls the live view stayed blank for 
 
 - After a live view closed, the intercom's last packets were logged as `diag: frame … on unknown channel`. They are now dropped quietly.
 
-## 2.1.0-beta.15 (2026-11-08)
+## 2.1.0-beta.15 - 2026-11-08
 
 First test on a real intercom (6741W, firmware 2.1.0): answering from the live view, live video, the intercom's audio and unlocking during the call all worked.
 
@@ -834,11 +834,11 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Test replaying the intercom's audio request from the real call (62 in all).
 - README: tested features, what a call looks like (start time, muted start, the intercom ending the call after an open), a troubleshooting row.
 
-## 2.1.0-beta.14 (2026-11-08)
+## 2.1.0-beta.14 - 2026-11-08
 
 - No changes to the plugin. CI runs with read-only repository access, and the connection tests wait for events instead of fixed delays, so a slow CI machine can't make them fail.
 
-## 2.1.0-beta.13 (2026-11-08)
+## 2.1.0-beta.13 - 2026-11-08
 
 ### Fixed
 
@@ -848,7 +848,7 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 
 - README: the feature list mentions the doorbell camera; `videoQuality: hd` asks for up to 800x480 (it said 640x240); the ring flow says where the doorbell notification comes from; known limits mention the gap in `reconnect` mode.
 
-## 2.1.0-beta.12 (2026-11-08)
+## 2.1.0-beta.12 - 2026-11-08
 
 ### Fixed
 
@@ -860,7 +860,7 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Test for the missing-picture fallback (61 in all).
 - README and config editor: what happens when the picture file is missing.
 
-## 2.1.0-beta.11 (2026-11-08)
+## 2.1.0-beta.11 - 2026-11-08
 
 ### Fixed
 
@@ -876,7 +876,7 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Tests for the above (60 in all).
 - README: troubleshooting row for a closed ring channel.
 
-## 2.1.0-beta.10 (2026-11-08)
+## 2.1.0-beta.10 - 2026-11-08
 
 ### Fixed
 
@@ -892,7 +892,7 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Tests for the above (58 in all).
 - README: how invalid values are handled, the settings summary, a troubleshooting row.
 
-## 2.1.0-beta.9 (2026-11-08)
+## 2.1.0-beta.9 - 2026-11-08
 
 ### Fixed
 
@@ -905,7 +905,7 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Tests for the above (54 in all).
 - README: the full list of source modules, and a note on rings during re-registration.
 
-## 2.1.0-beta.8 (2026-11-08)
+## 2.1.0-beta.8 - 2026-11-08
 
 ### Fixed
 
@@ -926,7 +926,7 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Tests for the above (51 in all).
 - README: the 2 s reconnect gap, ignored extra taps, troubleshooting for `video ffmpeg stopped`, the release tag rule.
 
-## 2.1.0-beta.7 (2026-11-08)
+## 2.1.0-beta.7 - 2026-11-08
 
 ### Fixed
 
@@ -945,11 +945,11 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - Tests for the connection lifecycle: reconnect and in-place leases, waiting during a call, the reconnect back-off (47 in all).
 - README: the new setting, the trigger URL change, supported Node versions, troubleshooting for an unreachable intercom.
 
-## 2.1.0-beta.6 (2026-11-08)
+## 2.1.0-beta.6 - 2026-11-08
 
 - No changes to the plugin. The publish workflow checks the release tag with a script, so the log reads "Release tag … matches package.json" instead of printing the failure text.
 
-## 2.1.0-beta.5 (2026-11-07)
+## 2.1.0-beta.5 - 2026-11-07
 
 ### Fixed
 
@@ -966,16 +966,16 @@ First test on a real intercom (6741W, firmware 2.1.0): answering from the live v
 - README: both ways to get a doorbell notification, ffmpeg requirements, camera troubleshooting.
 - Tests for two viewers, a failed media setup, keyframe age, the ffmpeg arguments and the warnings (40 in all).
 
-## 2.1.0-beta.4 (2026-11-07)
+## 2.1.0-beta.4 - 2026-11-07
 
 - Doorbell camera: outside a call it shows a picture that comes with the plugin (a doorbell and "Live video starts when someone rings") instead of a dark frame. `snapshotImage` still overrides it.
 - ffmpeg is found automatically in more places: inside homebridge-camera-ffmpeg (scoped package `@homebridge-plugins/...`) and `/usr/local/bin/ffmpeg` (Homebridge Raspberry Pi image).
 
-## 2.1.0-beta.3 (2026-11-07)
+## 2.1.0-beta.3 - 2026-11-07
 
 - No changes to the plugin. Published with setup-node v6, which removes the `always-auth` warnings from the publish run.
 
-## 2.1.0-beta.2 (2026-11-07)
+## 2.1.0-beta.2 - 2026-11-07
 
 Experimental features, all off by default.
 
@@ -995,11 +995,11 @@ Experimental features, all off by default.
 - The camera streaming against ffmpeg-for-homebridge: synthetic H.264 and A-law in, SRTP video and AAC-ELD audio out, a snapshot from the live keyframe, the still picture without a call, and talk-back from a simulated Home app microphone.
 - Not yet on a real intercom.
 
-## 2.0.4 (2026-11-07, 2.0.x line)
+## 2.0.4 - 2026-11-07 (2.0.x line)
 
 - The fix for lost intercom messages from 2.1.0-beta.1, backported to 2.0.3.
 
-## 2.1.0-beta.1 (2026-11-07)
+## 2.1.0-beta.1 - 2026-11-07
 
 Rewritten in TypeScript, with the same behavior as 2.0.3: the CTP frames the plugin sends were checked byte for byte against 2.0.3 for a ring, the handshake, renewals, closes, door opens and registration.
 
@@ -1019,7 +1019,7 @@ Rewritten in TypeScript, with the same behavior as 2.0.3: the CTP frames the plu
 
 - Unit tests for the frame encoding, ACK words, rings, door-open answers, the handshake, registration across reconnects, the lock states and the settings defaults, most of them using frames captured from a real intercom.
 
-## 2.0.3 (2026-11-07)
+## 2.0.3 - 2026-11-07
 
 ### Fixed
 
@@ -1034,17 +1034,17 @@ Rewritten in TypeScript, with the same behavior as 2.0.3: the CTP frames the plu
 
 - Tests built from frames captured from a real intercom, run by CI and before each publish.
 
-## 2.0.2 (2026-11-07)
+## 2.0.2 - 2026-11-07
 
 - Documentation: the README covers every setting, the accessories the plugin creates, migration, the ring-to-open flow and troubleshooting.
 - Config editor: every setting has a description, settings are grouped into sections, and host and token are required.
 - No changes to how the plugin behaves.
 
-## 2.0.1 (2026-11-07)
+## 2.0.1 - 2026-11-07
 
 - No functional changes. First release published through npm trusted publishing from GitHub Actions, to test the release pipeline and the update in the Homebridge UI.
 
-## 2.0.0 (2026-11-07)
+## 2.0.0 - 2026-11-07
 
 First release as `homebridge-comelit-doorbell`, based on `homebridge-comelit-intercom` 1.1.1.
 
