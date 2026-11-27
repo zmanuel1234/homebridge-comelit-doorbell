@@ -131,11 +131,11 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 | Doorbell (named after **Name**) | Motion sensor | Detected for 5 seconds on every ring. Use it in automations. Shows **No Response** while the intercom has been unreachable for more than 30 s, like the lock. |
 | RTSP cameras listed on the intercom, if any | Motion sensor | Placeholder only: no video yet. Their RTSP URL is written to the log. No Response while the intercom is unreachable, as above. |
 | Offline sensor (named **Name** + `Offline`), only with **Add an Offline contact sensor** on | Contact sensor | Open while the intercom has been unreachable for 2 minutes, Closed again once it is back. Turn on its notifications in the Home app to hear when the intercom goes away. |
-
-Every accessory's **Firmware** row in Home and Eve shows the intercom's firmware (read once per start from the intercom, when it is a plain number such as 2.1.0). The Model row stays the part it is (ViP door relay, ViP doorbell, and so on), since the intercom's own model id (such as `MSVU`) says little.
 | Doctor mode switch (named **Name** + `Doctor Mode`), only with **Doctor mode** set to *With a HomeKit switch* | Switch | While on, every ring opens the door. Keeps its state across restarts. See [doctor mode](#doctor-mode). |
 | Next Visitor switch (named **Name** + `Next Visitor`), only with **Next Visitor switch** on | Switch | While on, the next ring opens the door, then it turns itself off. See [next visitor](#next-visitor). |
 | Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera). With **Record rings** on, it also has a motion sensor, which is on while a ring is recorded. |
+
+Every accessory's **Firmware** row in Home and Eve shows the intercom's firmware (read once per start from the intercom, when it is a plain number such as 2.1.0). The Model row stays the part it is (ViP door relay, ViP doorbell, and so on), since the intercom's own model id (such as `MSVU`) says little.
 
 Without the doorbell camera, the plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
 

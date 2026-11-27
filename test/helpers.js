@@ -42,7 +42,12 @@ function fakeApi() {
     constructor() { this.chars = new Map(); }
     getCharacteristic(k) { if (!this.chars.has(k)) this.chars.set(k, mkChar()); return this.chars.get(k); }
     setCharacteristic() { return this; }
-    updateCharacteristic(k, v) { this.getCharacteristic(k).value = v; return this; }
+    // As HAP-NodeJS: an error only sets the status (no value change, nothing sent to Home).
+    updateCharacteristic(k, v) {
+      const c = this.getCharacteristic(k);
+      if (v instanceof Error) { c.statusCode = v.hapStatus; } else { c.value = v; c.statusCode = 0; c.events = (c.events ?? 0) + 1; }
+      return this;
+    }
   }
   class Acc {
     constructor(name, uuid) { this.displayName = name; this.UUID = uuid; this.context = {}; this.s = { info: new Svc() }; }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { ComelitIntercomPlatform, UNREACHABLE_AFTER_MS, OFFLINE_AFTER_MS } = require('../dist/platform');
+const { ComelitIntercomPlatform, OFFLINE_AFTER_MS } = require('../dist/platform');
 const { quietLog, fakeApi } = require('./helpers');
 
 
@@ -850,43 +850,37 @@ test('actuators: two actuators with the listed name are reported', () => {
 // ─── No Response, Offline sensor and firmware (2.8.0-beta.2) ───
 
 const withCamera = { ...deviceConfig, cameras: [{ id: 'c1', name: 'Gate camera', rtspUrl: '' }] };
-const noResponse = (v) => v instanceof Error && v.hapStatus === -70402;
 
-test('the ring sensor and cameras show No Response after 30 s without the intercom, and recover', () => {
-  const { p, api } = platform();
+test('the ring sensor and cameras answer No Response after 30 s without the intercom, and recover', () => {
+  const { p } = platform();
   p.discoverAccessories(JSON.parse(JSON.stringify(withCamera)));
   const ring = p.doorbellAccessory.sensor.getCharacteristic('md');
-  const cam = api.registered.has('uuid:homebridge-comelit-intercom-camera-c1') && p.cameraAccessories[0].service.getCharacteristic('md');
-  assert.ok(cam);
+  const cam = p.cameraAccessories[0].service.getCharacteristic('md');
   assert.strictEqual(ring.get(), false);
   assert.strictEqual(cam.get(), false);
   p.downSince = Date.now() - 31_000;
   assert.throws(() => ring.get(), (e) => e.hapStatus === -70402);
   assert.throws(() => cam.get(), (e) => e.hapStatus === -70402);
-  // pushed at the moment it becomes unreachable, for every lock and sensor
-  p.refreshReachability();
-  assert.ok(noResponse(ring.value));
-  assert.ok(noResponse(cam.value));
-  const lock = [...p.lockAccessories.values()][0];
-  assert.ok(noResponse(lock.service.getCharacteristic(p.Characteristic.LockCurrentState).value));
-  // back
+  // back: the state is sent again
   p.downSince = undefined;
   p.refreshReachability();
+  assert.strictEqual(ring.get(), false);
   assert.strictEqual(ring.value, false);
   assert.strictEqual(cam.value, false);
+  const lock = [...p.lockAccessories.values()][0];
   assert.strictEqual(lock.service.getCharacteristic(p.Characteristic.LockCurrentState).value, 1);
 });
 
-test('going down pushes No Response once the 30 s are up (timer)', async () => {
-  const { p } = platform();
+test('going offline opens the Offline sensor once the 2 minutes are up (timer)', async () => {
+  const { p } = platform({ offlineSensor: true });
   p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
-  p.downSince = Date.now() - UNREACHABLE_AFTER_MS;
+  const state = p.offlineSensor.service.getCharacteristic(p.Characteristic.ContactSensorState);
+  p.downSince = Date.now() - OFFLINE_AFTER_MS;
   p.watchDown();
   await new Promise((r) => setTimeout(r, 300));
-  const lock = [...p.lockAccessories.values()][0];
-  assert.ok(noResponse(lock.service.getCharacteristic(p.Characteristic.LockCurrentState).value));
-  assert.ok(noResponse(p.doorbellAccessory.sensor.getCharacteristic('md').value));
+  assert.strictEqual(state.value, 1);
   p.clearDownTimers();
+  assert.strictEqual(p.offlineTimer, undefined);
 });
 
 test('markDown keeps the first moment the connection went down', () => {
@@ -939,8 +933,10 @@ function infoClient(reply, existing) {
   return {
     sent,
     opened: 0,
+    closed: 0,
     getChannel(name) { return existing && name === 'INFO' ? channel : undefined; },
     async openChannel() { this.opened++; return channel; },
+    async closeChannel() { this.closed++; },
     async sendJson(_ch, msg) { sent.push(msg); if (reply instanceof Error) { throw reply; } return reply; },
   };
 }
@@ -951,6 +947,7 @@ test('firmware: the intercom version goes on every accessory, also ones added la
   const client = infoClient({ model: 'MSVU', version: '2.1.0' }, true);
   await p.readFirmware(client);
   assert.strictEqual(client.opened, 0, 'reuses the open INFO channel');
+  assert.strictEqual(client.closed, 0, 'and leaves it open for the keepalive');
   assert.strictEqual(client.sent[0].message, 'server-info');
   assert.strictEqual(p.firmware, '2.1.0');
   for (const a of p.accessories.values()) {
@@ -959,7 +956,7 @@ test('firmware: the intercom version goes on every accessory, also ones added la
   p.discoverAccessories(JSON.parse(JSON.stringify(withCamera)));
   const cam = [...p.accessories.values()].find((a) => a.UUID.includes('camera-c1'));
   assert.strictEqual(cam.getService('info').getCharacteristic('fw').value, '2.1.0');
-  assert.ok(api.registered.size >= 4);
+  assert.ok(api.registered.has('uuid:homebridge-comelit-intercom-offline'));
 });
 
 test('firmware: a version HomeKit cannot take, or no answer, leaves the row alone', async () => {
@@ -968,6 +965,7 @@ test('firmware: a version HomeKit cannot take, or no answer, leaves the row alon
   const bad = infoClient({ version: '2.1.0-rc1' }, false);
   await p.readFirmware(bad);
   assert.strictEqual(bad.opened, 1);
+  assert.strictEqual(bad.closed, 1, 'its own channel is closed again');
   assert.strictEqual(p.firmware, '', 'not asked again');
   for (const a of p.accessories.values()) {
     assert.strictEqual(a.getService('info').getCharacteristic('fw').value, undefined);
@@ -976,4 +974,6 @@ test('firmware: a version HomeKit cannot take, or no answer, leaves the row alon
   p2.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
   await p2.readFirmware(infoClient(new Error('timeout'), true));
   assert.strictEqual(p2.firmware, undefined, 'asked again on the next connection');
+  await p2.readFirmware(infoClient(new Error('timeout'), true));
+  assert.strictEqual(p2.firmwareTries, 2, 'then no more');
 });

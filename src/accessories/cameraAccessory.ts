@@ -34,14 +34,8 @@ export class CameraAccessory {
     }
   }
 
-  /** Shows No Response now (the intercom has just become unreachable), or the state again. */
+  /** The intercom is back: tell Home the sensor's state again (clears No Response). */
   refresh(): void {
-    const { hap } = this.platform.api;
-    const { MotionDetected } = this.platform.Characteristic;
-    if (this.platform.unreachable()) {
-      this.service.updateCharacteristic(MotionDetected, new hap.HapStatusError(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE));
-    } else {
-      this.service.updateCharacteristic(MotionDetected, false);
-    }
+    this.service.updateCharacteristic(this.platform.Characteristic.MotionDetected, false);
   }
 }

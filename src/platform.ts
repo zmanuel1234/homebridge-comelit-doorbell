@@ -42,10 +42,11 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private doorbellAccessory?: DoorbellAccessory;
   private cameraAccessories: CameraAccessory[] = [];
   private offlineSensor?: OfflineSensor;
-  /** Timers that show No Response and open the Offline sensor once the intercom stays away. */
-  private downTimers: NodeJS.Timeout[] = [];
-  /** The intercom's firmware (from its server-info), for the accessories' Firmware row. */
+  /** Opens the Offline sensor once the intercom has stayed away for OFFLINE_AFTER_MS. */
+  private offlineTimer?: NodeJS.Timeout;
+  /** The intercom's firmware (from its server-info), for the accessories' Firmware row; '' if it has none HomeKit takes. */
   private firmware?: string;
+  private firmwareTries = 0;
   private client?: IconaBridgeClient;
   private deviceConfig?: DeviceConfig;
   private vipListener?: VipEventListener;
@@ -157,7 +158,10 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     return this.downSince !== undefined && Date.now() - this.downSince > OFFLINE_AFTER_MS;
   }
 
-  /** The connection is down: note since when, and push No Response and Offline when they are due. */
+  /**
+   * The connection is down: note since when. Locks and sensors answer No Response from then on
+   * when Home asks (HomeKit can't be told an error unasked); the Offline sensor is pushed.
+   */
   private markDown(): void {
     if (this.downSince !== undefined) {
       return;
@@ -171,25 +175,17 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (this.downSince === undefined || this.shuttingDown) {
       return;
     }
-    const since = Date.now() - this.downSince;
-    // A little past each limit, so unreachable() and offline() are already true when they fire.
-    this.downTimers = [
-      setTimeout(() => this.refreshReachability(), Math.max(0, UNREACHABLE_AFTER_MS - since) + 100),
-      setTimeout(() => this.offlineSensor?.refresh(), Math.max(0, OFFLINE_AFTER_MS - since) + 100),
-    ];
-    for (const t of this.downTimers) {
-      t.unref?.();
-    }
+    // A little past the limit, so offline() is already true when it fires.
+    this.offlineTimer = setTimeout(() => this.offlineSensor?.refresh(), Math.max(0, OFFLINE_AFTER_MS - (Date.now() - this.downSince)) + 100);
+    this.offlineTimer.unref?.();
   }
 
   private clearDownTimers(): void {
-    for (const t of this.downTimers) {
-      clearTimeout(t);
-    }
-    this.downTimers = [];
+    clearTimeout(this.offlineTimer);
+    this.offlineTimer = undefined;
   }
 
-  /** Pushes each sensor's and lock's state, or No Response while the intercom is unreachable. */
+  /** The intercom is back: push each lock's and sensor's state again, clearing No Response. */
   private refreshReachability(): void {
     for (const lock of this.lockAccessories.values()) {
       lock.refresh();
@@ -394,7 +390,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.info('Comelit Intercom ready');
       this.events.add('connected', 'Connected to the intercom');
     }
-    if (this.firmware === undefined) {
+    if (this.firmware === undefined && this.firmwareTries < 2) {
       void this.readFirmware(client);
     }
     this.plannedReconnect = false;
@@ -421,9 +417,13 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
    * Eve. Not needed for anything else: a failure is only noted in the debug log.
    */
   private async readFirmware(client: IconaBridgeClient): Promise<void> {
+    // Tried on two connections at most: an intercom that doesn't answer isn't asked on every reconnect.
+    this.firmwareTries++;
+    // The INFO channel the keepalive already uses, if open (its sends take turns); otherwise
+    // (registerPush on) one of our own, closed again after.
+    const shared = client.getChannel('INFO');
     try {
-      // The INFO channel the keepalive already uses, if open (its sends take turns).
-      const channel = client.getChannel('INFO') ?? await client.openChannel('INFO', ChannelType.INFO);
+      const channel = shared ?? await client.openChannel('INFO', ChannelType.INFO);
       const info = await client.sendJson(channel, {
         message: 'server-info',
         'message-type': 'request',
@@ -441,6 +441,10 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.applyFirmware();
     } catch (e) {
       this.log.debug(`Reading the intercom's firmware failed: ${(e as Error).message}`);
+    } finally {
+      if (!shared) {
+        await client.closeChannel('INFO').catch(() => undefined);
+      }
     }
   }
 
