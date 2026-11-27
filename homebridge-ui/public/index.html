@@ -166,11 +166,15 @@
     }
 
     async function loadEvents() {
+      const gen = generation;
       try {
         const { config } = await current();
         const days = Number(config.eventHistoryDays);
         $('keepDays').textContent = Number.isInteger(days) && days >= 1 && days <= 365 ? String(days) : '30';
-        const r = await homebridge.request('/events', { name: (await current()).config.name ?? '' });
+        const r = await homebridge.request('/events', { name: config.name ?? '' });
+        if (gen !== generation) {
+          return; // another intercom was chosen meanwhile: its own events are on their way
+        }
         all = r.events ?? [];
         render();
       } catch (e) {
@@ -204,6 +208,16 @@
     const DEFAULT_NAME = 'Comelit Intercom';
     const nameOf = (b) => (typeof b?.name === 'string' && b.name.trim()) || DEFAULT_NAME;
     const labelOf = (b) => (b?.host ? `${nameOf(b)} (${b.host})` : nameOf(b));
+    /** Which Recent events file a block uses: as eventsFileFor in src/events.ts ('' for the plain file). */
+    const eventsKeyOf = (b) => {
+      const n = nameOf(b);
+      return n === DEFAULT_NAME ? '' : n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    };
+    /**
+     * Counts each change of intercom (switch, add, remove). Searches, tests and backups started
+     * for one intercom drop their results if another one was chosen before they finished.
+     */
+    let generation = 0;
 
     /**
      * Gives Homebridge a new list of blocks. Homebridge merges each block into the one already at
@@ -229,7 +243,12 @@
     async function renderIntercoms(given) {
       const blocks = given ?? (await homebridge.getPluginConfig());
       const many = blocks.length > 1;
-      $('which').innerHTML = blocks.map((b, i) => `<option value="${i}">${esc(labelOf(b))}</option>`).join('');
+      // In name order, so the menu stays put although the chosen block moves to the front.
+      $('which').innerHTML = blocks
+        .map((b, i) => ({ i, label: labelOf(b) }))
+        .sort((a, b) => a.label.localeCompare(b.label) || a.i - b.i)
+        .map(({ i, label }) => `<option value="${i}">${esc(label)}</option>`)
+        .join('');
       $('which').value = '0';
       $('which').classList.toggle('d-none', !many);
       $('removeIntercom').classList.toggle('d-none', !many);
@@ -238,9 +257,10 @@
       }
       const notes = [];
       if (many) {
-        const names = blocks.map(nameOf);
-        if (new Set(names).size < names.length) {
-          notes.push('Two intercoms have the same <b>Name</b>: give each its own, since Recent events are kept by name.');
+        // Names that differ only in case or punctuation ("Front Door", "front-door") share a file too.
+        const keys = blocks.map(eventsKeyOf);
+        if (new Set(keys).size < keys.length) {
+          notes.push('Two intercoms have the same <b>Name</b> (or names that differ only in capitals or punctuation): give each its own, since Recent events are kept by name.');
         }
         const bridges = blocks.map((b) => b?._bridge?.username);
         if (bridges.some((u) => !u) || new Set(bridges).size < bridges.length) {
@@ -255,6 +275,8 @@
 
     /** After the intercom changes: the previous one's search, test and backup results go. */
     function clearResults() {
+      generation++;
+      cancelRemove();
       for (const id of ['found', 'users', 'result']) {
         $(id).innerHTML = '';
       }
@@ -302,6 +324,8 @@
 
     // Remove asks once more on the button itself, for a few seconds.
     let removeTimer;
+    let removeGeneration;
+    let removeName;
     function cancelRemove() {
       clearTimeout(removeTimer);
       removeTimer = undefined;
@@ -311,18 +335,26 @@
     $('removeIntercom').addEventListener('click', async () => {
       if (!removeTimer) {
         const { config } = await current();
-        $('removeIntercom').textContent = `Remove ${nameOf(config)}?`;
+        removeName = nameOf(config);
+        $('removeIntercom').textContent = `Remove ${removeName}?`;
         $('removeIntercom').classList.replace('btn-elegant', 'btn-danger');
         removeTimer = setTimeout(cancelRemove, 5000);
+        removeGeneration = generation;
         return;
       }
+      const armed = removeGeneration === generation;
       cancelRemove();
-      editBlocks((blocks) => blocks.slice(1), 'Intercom removed. Save to keep it.');
+      if (armed) {
+        editBlocks((blocks) => blocks.slice(1), 'Intercom removed. Save to keep it.');
+      }
     });
 
     // The menu follows names and addresses typed into the form.
     homebridge.addEventListener('configChanged', (event) => {
       if (Array.isArray(event?.data)) {
+        if (removeTimer && nameOf(event.data[0]) !== removeName) {
+          cancelRemove();
+        }
         renderIntercoms(event.data);
       }
     });
@@ -336,7 +368,11 @@
     }
 
     /** Changes the form's settings; the user still saves them. */
-    async function change(patch, message) {
+    async function change(patch, message, gen = generation) {
+      if (gen !== generation) {
+        homebridge.toast.info('Another intercom is chosen now: run the search, test or backup again for it.', 'Comelit');
+        return false;
+      }
       try {
         const { blocks, config } = await current();
         blocks[0] = { ...config, ...patch };
@@ -351,10 +387,14 @@
 
     $('find').addEventListener('click', async () => {
       $('found').innerHTML = '';
+      const gen = generation;
       homebridge.showSpinner();
       try {
         const { config } = await current();
         const devices = await homebridge.request('/discover', { host: config.host ?? '' });
+        if (gen !== generation) {
+          return;
+        }
         if (!devices.length) {
           $('found').innerHTML =
             '<div class="alert alert-warning small mb-0">No Comelit device answered. It may be on another network ' +
@@ -380,7 +420,7 @@
             })
             .join('');
         for (const b of $('found').querySelectorAll('button[data-host]')) {
-          b.addEventListener('click', () => change({ host: devices[Number(b.dataset.host)].host }, 'Intercom IP address set.').then((ok) => ok && b.replaceWith(Object.assign(document.createElement('span'), { className: 'badge bg-success', textContent: 'in use' }))));
+          b.addEventListener('click', () => change({ host: devices[Number(b.dataset.host)].host }, 'Intercom IP address set.', gen).then((ok) => ok && b.replaceWith(Object.assign(document.createElement('span'), { className: 'badge bg-success', textContent: 'in use' }))));
         }
       } catch (e) {
         homebridge.toast.error(e.message ?? String(e), 'Search failed');
@@ -391,10 +431,14 @@
 
     $('test').addEventListener('click', async () => {
       $('result').innerHTML = '';
+      const gen = generation;
       homebridge.showSpinner();
       try {
         const { config } = await current();
         const r = await homebridge.request('/test', config);
+        if (gen !== generation) {
+          return;
+        }
         const rows = r.steps
           .map(
             (s) =>
@@ -411,7 +455,7 @@
         $('result').innerHTML =
           `<div class="small fw-bold mb-1">${allOk ? 'Everything works.' : 'Something needs attention:'}</div>` +
           `<ul class="list-group">${rows}</ul>${fix}`;
-        $('useRow')?.addEventListener('click', () => change({ subaddress: r.subaddress }, `User row set to ${r.subaddress}.`).then((ok) => ok && $('useRow').remove()));
+        $('useRow')?.addEventListener('click', () => change({ subaddress: r.subaddress }, `User row set to ${r.subaddress}.`, gen).then((ok) => ok && $('useRow').remove()));
         $('diagText').value = r.diagnostics;
         $('diag').classList.remove('d-none');
         $('copy').classList.remove('d-none');
@@ -439,6 +483,7 @@
         homebridge.toast.error(`${file.name} is too big for an intercom backup.`, "Couldn't read the backup");
         return;
       }
+      const gen = generation;
       homebridge.showSpinner();
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -447,8 +492,11 @@
           bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         }
         const users = await homebridge.request('/backup', { data: btoa(bin) });
+        if (gen !== generation) {
+          return;
+        }
         const { config } = await current();
-        showUsers(users, config);
+        showUsers(users, config, gen);
       } catch (e) {
         homebridge.toast.error(e.message ?? String(e), "Couldn't read the backup");
       } finally {
@@ -457,7 +505,7 @@
     });
 
     /** The backup's users; the one in the settings is marked "in use". */
-    function showUsers(users, config) {
+    function showUsers(users, config, gen) {
       if (!users.length) {
         $('users').innerHTML =
           '<div class="alert alert-warning small mb-0">This backup has no user with a token. If you made it before setting up ' +
@@ -485,8 +533,8 @@
       for (const b of $('users').querySelectorAll('button[data-user]')) {
         b.addEventListener('click', async () => {
           const u = users[Number(b.dataset.user)];
-          if (await change({ token: u.token, subaddress: u.row }, `Token and user row ${u.row} set.`)) {
-            showUsers(users, (await current()).config); // only this one is "in use" now
+          if (await change({ token: u.token, subaddress: u.row }, `Token and user row ${u.row} set.`, gen)) {
+            showUsers(users, (await current()).config, gen); // only this one is "in use" now
           }
         });
       }

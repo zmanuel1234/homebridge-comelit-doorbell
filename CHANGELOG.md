@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+Fixes to the settings page for several intercoms (2.8.0-beta.1):
+
+- **Remove could remove the wrong intercom.** After clicking **Remove** once, choosing another intercom in the menu within 5 s and clicking again removed the newly chosen one. Choosing, adding or renaming an intercom now resets the button.
+- A search, test or backup still running when you choose another intercom no longer shows its results under the new one, and its **Use this** buttons can't change the new one's settings. Recent events likewise show only the chosen intercom's.
+- The menu lists the intercoms in name order, instead of moving the chosen one to the top each time.
+- The warning about two intercoms with the same **Name** also catches names that differ only in capitals or punctuation ("Front Door" and "front-door"), which share Recent events too.
+- Development only: tests that run the settings page's own code for adding, choosing and removing intercoms.
+
 ## 2.8.0-beta.2 - 2026-11-27
 
 - **No Response on the doorbell sensor and the camera placeholders too.** Like the lock, they show No Response in Home while the intercom has been unreachable for more than 30 s, so the Home app shows when rings can't arrive. It appears when Home next asks (opening the Home app, say): HomeKit can't be told about an outage unasked. Once the intercom is back, the state is sent again at once.
