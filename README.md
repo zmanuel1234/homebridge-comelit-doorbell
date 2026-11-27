@@ -135,7 +135,7 @@ HomeKit only sends a proper doorbell notification for a doorbell camera. There a
 | Next Visitor switch (named **Name** + `Next Visitor`), only with **Next Visitor switch** on | Switch | While on, the next ring opens the door, then it turns itself off. See [next visitor](#next-visitor). |
 | Doorbell camera (named **Name** + `Camera`), only with **Doorbell camera** on | Video doorbell | Rings in HomeKit and shows the intercom's video and audio during a call. See [the doorbell camera](#doorbell-camera). With **Record rings** on, it also has a motion sensor, which is on while a ring is recorded. |
 
-Every accessory's **Firmware** row in Home and Eve shows the intercom's firmware (read once per start from the intercom, when it is a plain number such as 2.1.0). The Model row stays the part it is (ViP door relay, ViP doorbell, and so on), since the intercom's own model id (such as `MSVU`) says little.
+Every accessory's **Firmware** row in Home and Eve shows the intercom's firmware (read from the intercom after it connects, when it is a plain number such as 2.1.0). The Model row stays the part it is (ViP door relay, ViP doorbell, and so on), since the intercom's own model id (such as `MSVU`) says little.
 
 Without the doorbell camera, the plugin's own doorbell accessory doesn't produce a HomeKit doorbell notification. Use the camera doorbell from step 4 for that.
 
