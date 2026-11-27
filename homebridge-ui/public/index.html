@@ -11,9 +11,9 @@
   .nav-tabs .nav-link:not(.active) { opacity: 0.75; }
   .nav-tabs .nav-link.active { background-color: #efefef; color: inherit; }
   body.dark-mode .nav-tabs .nav-link.active { background-color: #2b2b2b; color: #fff; }
-  body.dark-mode #range,
-  body.dark-mode #range option { background-color: #333; color: #eee; }
-  body.dark-mode #range {
+  body.dark-mode .form-select,
+  body.dark-mode .form-select option { background-color: #333; color: #eee; }
+  body.dark-mode .form-select {
     border-color: #333;
     --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23eeeeee' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
   }
@@ -24,7 +24,14 @@
 <ul class="nav nav-tabs mb-3" role="tablist">
   <li class="nav-item"><button type="button" class="nav-link active" id="tabSettings">Settings</button></li>
   <li class="nav-item"><button type="button" class="nav-link" id="tabEvents">Recent events</button></li>
+  <!-- Several intercoms: the one chosen here is the one the settings, assistant and events show. -->
+  <li class="nav-item ms-auto d-flex flex-wrap align-items-center gap-2">
+    <select id="which" class="form-select form-select-sm w-auto d-none" aria-label="Intercom"></select>
+    <button type="button" class="btn btn-elegant btn-sm d-none" id="removeIntercom">Remove</button>
+    <button type="button" class="btn btn-elegant btn-sm" id="addIntercom">Add an intercom</button>
+  </li>
 </ul>
+<div id="intercomNotes"></div>
 
 <div id="paneEvents" class="d-none">
   <div class="card mb-3">
@@ -191,10 +198,141 @@
     homebridge.showSchemaForm();
     homebridge.addEventListener('ready', () => tab === 'settings' && homebridge.showSchemaForm());
 
-    /** The first ComelitIntercom block as the form has it now (maybe unsaved). */
+    // Several intercoms. Homebridge's settings form always edits the first block, so the intercom
+    // chosen in the menu is moved to the front: the form, the assistant and Recent events then all
+    // work on it. The order of the blocks makes no difference to the plugin.
+    const DEFAULT_NAME = 'Comelit Intercom';
+    const nameOf = (b) => (typeof b?.name === 'string' && b.name.trim()) || DEFAULT_NAME;
+    const labelOf = (b) => (b?.host ? `${nameOf(b)} (${b.host})` : nameOf(b));
+
+    /**
+     * Gives Homebridge a new list of blocks. Homebridge merges each block into the one already at
+     * its place instead of replacing it, so a setting only the old block had (another intercom's
+     * actuators, say) would stay: such settings are sent as undefined, which clears them, and
+     * Homebridge leaves them out when it saves.
+     */
+    async function setBlocks(next) {
+      const prev = await homebridge.getPluginConfig();
+      const blocks = next.map((b, i) => {
+        const out = { ...b };
+        for (const k of Object.keys(prev[i] ?? {})) {
+          if (!(k in out)) {
+            out[k] = undefined;
+          }
+        }
+        return out;
+      });
+      await homebridge.updatePluginConfig(blocks);
+    }
+
+    /** The intercom menu, Remove, and what needs attention with several intercoms. */
+    async function renderIntercoms(given) {
+      const blocks = given ?? (await homebridge.getPluginConfig());
+      const many = blocks.length > 1;
+      $('which').innerHTML = blocks.map((b, i) => `<option value="${i}">${esc(labelOf(b))}</option>`).join('');
+      $('which').value = '0';
+      $('which').classList.toggle('d-none', !many);
+      $('removeIntercom').classList.toggle('d-none', !many);
+      if (!many) {
+        cancelRemove();
+      }
+      const notes = [];
+      if (many) {
+        const names = blocks.map(nameOf);
+        if (new Set(names).size < names.length) {
+          notes.push('Two intercoms have the same <b>Name</b>: give each its own, since Recent events are kept by name.');
+        }
+        const bridges = blocks.map((b) => b?._bridge?.username);
+        if (bridges.some((u) => !u) || new Set(bridges).size < bridges.length) {
+          notes.push(
+            'Each intercom needs its own child bridge (their accessories would clash on one bridge): after saving, open ' +
+              "<b>Child Bridge Config</b> in this plugin's menu on the Plugins page and give every intercom its own.",
+          );
+        }
+      }
+      $('intercomNotes').innerHTML = notes.map((n) => `<div class="alert alert-warning small py-2 mb-3">${n}</div>`).join('');
+    }
+
+    /** After the intercom changes: the previous one's search, test and backup results go. */
+    function clearResults() {
+      for (const id of ['found', 'users', 'result']) {
+        $(id).innerHTML = '';
+      }
+      $('diag').classList.add('d-none');
+      $('copy').classList.add('d-none');
+      $('diagText').value = '';
+      if (tab === 'events') {
+        loadEvents();
+      }
+    }
+
+    async function editBlocks(edit, message) {
+      try {
+        const blocks = await homebridge.getPluginConfig();
+        const next = edit(blocks);
+        await setBlocks(next);
+        await renderIntercoms(next);
+        clearResults();
+        if (message) {
+          homebridge.toast.success(message, 'Comelit');
+        }
+      } catch (e) {
+        homebridge.toast.error(e.message ?? String(e), "Couldn't change the settings");
+      }
+    }
+
+    $('which').addEventListener('change', () => {
+      const i = Number($('which').value);
+      editBlocks((blocks) => [blocks[i], ...blocks.filter((_, j) => j !== i)]);
+    });
+
+    $('addIntercom').addEventListener('click', () => {
+      editBlocks(
+        (blocks) => {
+          const names = new Set(blocks.map(nameOf));
+          let n = blocks.length + 1;
+          while (names.has(`${DEFAULT_NAME} ${n}`)) {
+            n++;
+          }
+          return [{ platform: 'ComelitIntercom', name: `${DEFAULT_NAME} ${n}` }, ...blocks];
+        },
+        'New intercom added: fill in its settings (the Setup assistant helps), then Save.',
+      );
+    });
+
+    // Remove asks once more on the button itself, for a few seconds.
+    let removeTimer;
+    function cancelRemove() {
+      clearTimeout(removeTimer);
+      removeTimer = undefined;
+      $('removeIntercom').textContent = 'Remove';
+      $('removeIntercom').classList.replace('btn-danger', 'btn-elegant');
+    }
+    $('removeIntercom').addEventListener('click', async () => {
+      if (!removeTimer) {
+        const { config } = await current();
+        $('removeIntercom').textContent = `Remove ${nameOf(config)}?`;
+        $('removeIntercom').classList.replace('btn-elegant', 'btn-danger');
+        removeTimer = setTimeout(cancelRemove, 5000);
+        return;
+      }
+      cancelRemove();
+      editBlocks((blocks) => blocks.slice(1), 'Intercom removed. Save to keep it.');
+    });
+
+    // The menu follows names and addresses typed into the form.
+    homebridge.addEventListener('configChanged', (event) => {
+      if (Array.isArray(event?.data)) {
+        renderIntercoms(event.data);
+      }
+    });
+    renderIntercoms().catch(() => {});
+    homebridge.addEventListener('ready', () => renderIntercoms().catch(() => {}));
+
+    /** The ComelitIntercom block chosen in the menu (the first one), as the form has it now (maybe unsaved). */
     async function current() {
       const blocks = await homebridge.getPluginConfig();
-      return { blocks, config: blocks[0] ?? { platform: 'ComelitIntercom', name: 'Comelit Intercom' } };
+      return { blocks, config: blocks[0] ?? { platform: 'ComelitIntercom', name: DEFAULT_NAME } };
     }
 
     /** Changes the form's settings; the user still saves them. */
