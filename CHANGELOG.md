@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.8.0 - 2026-11-27
+
+Several intercoms on the settings page, tiles that follow the names in the settings, No Response on the ring sensor too, an optional Offline sensor, and the intercom's firmware in Home. Rings, the camera, unlocking, Doctor Mode and Next Visitor work as in 2.7.3.
+
+### What changes when you update
+
+Nothing is renamed by the update itself, and no setting changes. You'll notice:
+
+- **Firmware** in each tile's settings in Home and Eve now shows the intercom's firmware (such as 2.1.0).
+- The doorbell sensor and the RTSP camera placeholders show **No Response** after 30 s without the intercom, like the lock.
+
+### New
+
+- **Offline sensor** (**Add an Offline contact sensor**, `offlineSensor`, off by default): Open while the intercom has been unreachable for 2 minutes, Closed once it is back. Turn on its notifications in the Home app.
+- **Tiles follow the names in the settings.** Changing **Name** renames the doorbell sensor, the camera, the switches and their sensors and the Offline sensor after the restart; renaming a door on the intercom renames its lock. Tiles renamed in the Home app from 2.8.0 on keep their name. Recent events move with the Name.
+- **Several intercoms on the settings page:** **Add an intercom**, a menu to choose which one the settings, the Setup assistant and Recent events show, and **Remove**. The page warns when two intercoms share a Name or a child bridge.
+
+### Fixed since the betas
+
+- The log's "ready" line uses the **Name** ("Intercom ready"), and the note under **Name** says what it now does.
+
+The betas below list each change in detail.
+
 ## 2.8.0-beta.3 - 2026-11-27
 
 Fixes to the settings page for several intercoms (new in 2.8.0-beta.1):

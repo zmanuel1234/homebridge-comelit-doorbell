@@ -51,6 +51,9 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Unlocking during the call | ✅ | The intercom ends the call about 13 s after the door opens |
 | Last visitor's picture | ✅ | Taken at the ring or the start of the call; kept across restarts |
 | Lock shows No Response when the intercom is unreachable | ❓ | Covered by the plugin's tests, not yet tried with a real outage |
+| Offline sensor | ❓ | New in 2.8.0, off by default; covered by the plugin's tests, not yet tried with a real outage |
+| Tiles follow a changed Name | ✅ | 2.8.0-beta.3 on a 6741W: every tile took the new Name after the restart, the lock kept its door's name, and Recent events were carried over |
+| Settings page with several intercoms | ❓ | New in 2.8.0; the page's own code is covered by the plugin's tests, not yet tried with a second intercom |
 | Doctor mode (always, or with its switch) | ✅ | |
 | Next Visitor switch | ❓ | New in 2.2.0: the same open as doctor mode; covered by the plugin's tests |
 | Recording rings (HomeKit Secure Video) | ✅ | 2.3.0 betas at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. The door's sound is in the clips of answered calls (the intercom sends none before answering); the Home app shows the clips at the exact start time. A Wi-Fi stall can still cost a few seconds of the door's sound in a clip |

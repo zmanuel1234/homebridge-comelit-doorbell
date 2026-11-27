@@ -11,7 +11,7 @@
         "title": "Name",
         "type": "string",
         "default": "Comelit Intercom",
-        "description": "Name of the platform in the log, and of the Doorbell accessory when it is first created."
+        "description": "Names the tiles (the doorbell sensor, the camera, the switches and sensors: Name, Name Camera, and so on) and Recent events. Changing it renames them after the restart, except tiles renamed in the Home app."
       },
       "host": {
         "title": "Intercom IP address",
