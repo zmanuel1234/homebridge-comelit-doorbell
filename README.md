@@ -5,7 +5,10 @@
 # homebridge-comelit-doorbell
 
 [![npm](https://img.shields.io/npm/v/homebridge-comelit-doorbell)](https://www.npmjs.com/package/homebridge-comelit-doorbell)
+[![npm downloads](https://img.shields.io/npm/dt/homebridge-comelit-doorbell)](https://www.npmjs.com/package/homebridge-comelit-doorbell)
+[![verified-by-homebridge](https://img.shields.io/badge/homebridge-verified-491F59?logo=homebridge&logoColor=white)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 [![CI](https://github.com/zmanuel1234/homebridge-comelit-doorbell/actions/workflows/ci.yml/badge.svg)](https://github.com/zmanuel1234/homebridge-comelit-doorbell/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/zmanuel1234/homebridge-comelit-doorbell)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-zmanuel1234-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/zmanuel1234)
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-zmanuel-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/zmanuel)
 
