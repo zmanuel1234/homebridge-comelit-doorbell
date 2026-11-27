@@ -60,10 +60,10 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint",
     "test": "node --test test/*.test.js",
-    "prepublishOnly": "npm run lint && npm run build && npm test",
-    "verify": "npm run check && npm run lint && npm run build && npm test && node -e \"JSON.parse(require('fs').readFileSync('config.schema.json','utf8'))\"",
+    "prepublishOnly": "npm run verify",
+    "verify": "npm run check && npm run lint && npm run build && npm test && node .github/scripts/check-homebridge.mjs && node .github/scripts/check-config-schema.mjs",
     "test:matrix": "npm run build && npm test",
-    "release:check": "npm run verify"
+    "release:check": "npm run verify && node .github/scripts/check-homebridge.mjs --release"
   },
   "engines": {
     "homebridge": ">=2.0.0-beta.0",
@@ -71,8 +71,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "ajv": "8.20.0",
     "homebridge": "^2.5.0",
-    "oxlint": "1.94.0",
+    "oxlint": "1.95.0",
     "oxlint-tsgolint": "7.0.2008",
     "typescript": "7.0.2"
   },

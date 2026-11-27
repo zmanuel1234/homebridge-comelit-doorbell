@@ -86,7 +86,7 @@
   "overrides": [
     // typescript-eslint's recommended rules and the shared checks, on this repository's TypeScript files.
     {
-      "files": ["src/**/*.ts"], // this repository
+      "files": ["**/*.ts"], // this repository
       "rules": {
         "eslint/constructor-super": "off",
         "eslint/getter-return": "off",
@@ -174,7 +174,7 @@
     // ---- This repository ----
     // No `any`: values from the intercom, HAP and the config get a type (or `unknown`, checked);
     // and none logged or shown as "[object Object]".
-    {"files": ["src/**/*.ts", "test/**/*.ts"], "rules": {"typescript/no-explicit-any": "error", "typescript/no-unsafe-argument": "error", "typescript/no-unsafe-assignment": "error", "typescript/no-unsafe-call": "error", "typescript/no-unsafe-member-access": "error", "typescript/no-unsafe-return": "error", "typescript/no-base-to-string": "error"}}
+    {"files": ["**/*.ts"], "rules": {"typescript/no-explicit-any": "error", "typescript/no-unsafe-argument": "error", "typescript/no-unsafe-assignment": "error", "typescript/no-unsafe-call": "error", "typescript/no-unsafe-member-access": "error", "typescript/no-unsafe-return": "error", "typescript/no-base-to-string": "error"}}
     // -------------------------
   ]
 }
