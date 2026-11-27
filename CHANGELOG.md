@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.8.0-beta.2 - 2026-11-27
 
 - **No Response on the doorbell sensor and the camera placeholders too.** Like the lock, they show No Response in Home while the intercom has been unreachable for more than 30 s, so the Home app shows when rings can't arrive. It appears when Home next asks (opening the Home app, say): HomeKit can't be told about an outage unasked. Once the intercom is back, the state is sent again at once.
 - **New: an Offline contact sensor** (**Add an Offline contact sensor**, `offlineSensor`, off by default). It is Open while the intercom has been unreachable for 2 minutes and Closed once it is back; turn on its notifications in the Home app to hear when the intercom goes away. It is a separate accessory (**Name** + `Offline`), and it never shows No Response itself.
