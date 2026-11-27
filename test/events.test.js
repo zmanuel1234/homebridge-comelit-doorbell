@@ -60,7 +60,7 @@ test('event log: a ring reported twice is one ring; no IP addresses; events in t
   const log = new EventLog(undefined);
   log.add('ring', 'Ring');
   log.add('ring', 'Ring'); // the same ring, from the other channel
-  log.add('open-failed', "Unlock failed (Can't connect to 10.0.4.79:64100: timeout)");
+  log.add('open-failed', "Unlock failed (Can't connect to 192.168.1.50:64100: timeout)");
   log.add('view', 'Live view, 200 s', Date.now() - 200_000); // noted at its end, timed from its start
   const list = log.list();
   assert.deepStrictEqual(list.map((e) => e.kind), ['view', 'ring', 'open-failed']);

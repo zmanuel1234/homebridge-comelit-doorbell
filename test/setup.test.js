@@ -20,8 +20,8 @@ function msvuReply() {
 }
 
 test('discovery: reads the address, firmware and model from a device answer', () => {
-  assert.deepStrictEqual(parseDiscoveryReply(msvuReply(), '10.0.4.79'), {
-    host: '10.0.4.79',
+  assert.deepStrictEqual(parseDiscoveryReply(msvuReply(), '192.168.1.50'), {
+    host: '192.168.1.50',
     address: 'SB100001',
     firmware: '2.1.0',
     model: 'MSVU',
@@ -228,8 +228,8 @@ test('redact: URLs (webhooks, RTSP) and lists of secrets go; codecs and switches
 
 test('redact: MAC addresses and token-like strings inside any text go too', () => {
   assert.deepStrictEqual(
-    redact({ base: 'MSVU/0025291845E9/vip/SB000002/sdp', note: 'mac 00:25:29:18:45:e9 and 00-25-29-18-45-E9', blob: 'x a62784fe60e26b3e445687e99f469aa8 y', host: '10.0.4.79', addr: 'SB100001', fw: '2.1.0', server: 'tls://hub-vc-generic.cloud.comelitgroup.com:443' }),
-    { base: 'MSVU/<removed>/vip/SB000002/sdp', note: 'mac <removed> and <removed>', blob: 'x <removed> y', host: '10.0.4.79', addr: 'SB100001', fw: '2.1.0', server: 'tls://hub-vc-generic.cloud.comelitgroup.com:443' },
+    redact({ base: 'MSVU/0025291845E9/vip/SB000002/sdp', note: 'mac 00:25:29:18:45:e9 and 00-25-29-18-45-E9', blob: 'x a62784fe60e26b3e445687e99f469aa8 y', host: '192.168.1.50', addr: 'SB100001', fw: '2.1.0', server: 'tls://hub-vc-generic.cloud.comelitgroup.com:443' }),
+    { base: 'MSVU/<removed>/vip/SB000002/sdp', note: 'mac <removed> and <removed>', blob: 'x <removed> y', host: '192.168.1.50', addr: 'SB100001', fw: '2.1.0', server: 'tls://hub-vc-generic.cloud.comelitgroup.com:443' },
   );
 });
 
