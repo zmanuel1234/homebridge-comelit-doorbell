@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.8.0-beta.3 - 2026-11-27
 
 Fixes to the settings page for several intercoms (new in 2.8.0-beta.1):
 
