@@ -62,7 +62,7 @@ Tested on a 6741W / 6701W Mini hands-free Wi-Fi (model id `MSVU`, firmware 2.1.0
 | Recording rings (HomeKit Secure Video) | ✅ | 2.3.0 betas at the door with a home hub: unanswered rings, calls, quick unlocks and Next Visitor rings (open after 5 s) recorded. The door's sound is in the clips of answered calls (the intercom sends none before answering); the Home app shows the clips at the exact start time. A Wi-Fi stall can still cost a few seconds of the door's sound in a clip |
 | Live view without a ring | ✅ | On the EX-7000HW kit, once the entrance panel's address was set to 0 (see [live view without a ring](#live-view-without-a-ring)). Also tried on another 6741W on 2026-11-16 (Homebridge on macOS, ffmpeg 8.0): first picture in the Home app 2.6 s after opening, 37 s of live video at about 16 frames per second, clean hang-up when the view closed; and on a 6741W with firmware 2.1.3. With **Sound in live view without a ring** (2.4.0-beta.2): the entrance heard in the Home app (1,756 sound packets in a 40 s view, none lost) and talk-back heard at the panel, 2026-11-19 |
 | Buzzes per unlock | ❓ | New in 2.4.0, off by default (1 buzz); tried on another installation with an entrance behind two doors; covered by the plugin's tests |
-| Gate / actuator output | ✅ | On a 6741W (#59, 2.4.0-beta.6): opens with no call, during an answered ring, while it rings before anyone answers, and during a live view without a ring. Actuators never confirm, so the log says `open sent (an actuator gives no confirmation)`. During a ring it didn't open before 2.4.0 |
+| Gate / actuator output | ✅ | On a 6741W (#59, 2.4.0-beta.6): opens with no call, during an answered ring, while it rings before anyone answers, and during a live view without a ring. Actuators never confirm, so the log says `open sent (an actuator gives no confirmation)`. During a ring it didn't open before 2.4.0. Shown as a switch (2.7.3): opens on the first press without a ring, and the switch goes back to Off |
 | Sound in live view without a ring | ✅ | **Always** and **When you talk** on the EX-7000HW kit and on a 6741W with firmware 2.1.3 (#58): the entrance heard in the Home app and talk-back heard at the panel. With **When you talk**, the picture pauses about 5 s when the microphone turns the sound on |
 | Unlocking during a live view without a ring | ✅ | EX-7000HW kit: the view's call pauses, the door opens, the view comes back after about 7 s (the panel refuses an open while in a call with the plugin). On a 6741W (#59, 2.4.0-beta.6): the Entrance lock and the Actuator both opened and the view came back; before 2.4.0, no open worked during the view. In a view with sound (EX-7000HW kit): the picture and sound come back, then the panel ends the view a few seconds after the door opens, as it does for an answered ring |
 | A ring during a live view without a ring | ✅ | EX-7000HW kit: the panel ends the plugin's call at once and rings the flat; HomeKit and the Comelit app notify, and opening the view answers the ring |
@@ -301,7 +301,7 @@ Each actuator the intercom has (a relay such as a gate or the stair light) shows
 
 - **`switch`** shows a switch, and **`light`** a light (Siri's "turn on the lights" then presses it too). Turning it on sends the actuator's command at any time, with no ring needed, as the Comelit app's button does. It shows On for a moment, then Off; the relay's own timer decides how long the light stays on.
 - HomeKit asks for no confirmation for a switch or light, and doctor mode and Next Visitor never use one. So **only use it for lights and other things that aren't doors**.
-- Changing an actuator from lock to switch or light replaces its HomeKit accessory: automations that used the lock need to be set up again.
+- Changing an actuator from lock to switch or light, or back, makes it a new accessory in Home: set its name, room and place again, and automations that used it need to be set up again. This is on purpose, so HomeKit forgets the lock and its automations.
 - A name that matches no actuator is reported in the log, with the actuators the intercom has.
 
 ### Doctor mode
@@ -477,7 +477,6 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 - One intercom per Homebridge bridge: for two intercoms, run each in its own child bridge (the accessories' IDs and the saved visitor picture aren't separate per intercom). Give each intercom its own **Name**: Recent events keeps a file per name. The settings page handles several intercoms (see [Several intercoms](#several-intercoms)).
 - With **Listen for rings** off, each open sets up a door channel that is left open on the intercom until the next full reconnect (every **Full reconnect every** minutes).
 - **Find my intercom** needs Homebridge on the same network as the intercom (broadcasts don't cross VLANs or routers); the IP address can always be entered by hand.
-- **Actuators shown as a switch or light** is covered by tests but not yet tried on a real actuator.
 
 ## Development
 

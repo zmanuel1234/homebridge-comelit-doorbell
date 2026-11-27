@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.2 - 2026-11-27
+
+- **Actuators shown as a switch or light** can be filled in on the settings page again. The section showed its title and note, but no rows and no button to add one, so an actuator could only be added in JSON Config. It now has **Add an actuator**, and each row has the actuator's name and **Show as** (#59, thanks @diegutus; checked in Homebridge UI 5.30.1).
+- The setting's note and the README say that changing an actuator between lock and switch or light makes it a new accessory in Home, so its name, room and place need setting again. This is on purpose, so HomeKit forgets the lock and its automations.
+- README: an actuator shown as a switch is now tested on a real 6741W (opens on the first press without a ring; the switch goes back to Off).
+
 ## 2.8.1 - 2026-11-27
 
 No change to how the plugin works.
