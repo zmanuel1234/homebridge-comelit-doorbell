@@ -1,0 +1,69 @@
+name: Bug report
+description: Something doesn't work as the README describes.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please **never paste your intercom **token**, activation codes or email addresses**: replace them with `xxx` in anything you paste or attach.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: What you did, step by step, and whether it happens every time.
+      placeholder: |
+        1. ...
+        2. ...
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: This plugin, Homebridge and Node.js.
+      placeholder: "1.0.0, Homebridge 2.5.0, Node.js 24.11.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Intercom model and firmware
+      description: "**Test connection** in the plugin's Setup assistant shows both."
+      placeholder: "6741W, firmware 2.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Plugin settings
+      description: "The plugin's part of config.json (Homebridge UI → the plugin → JSON config). **Replace the token with xxx.**"
+      render: json
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: "The plugin's lines from the Homebridge log around the problem, best with **debug mode** on for the plugin's child bridge. Remove anything private."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: "Settings page → **Test connection**, then **Copy diagnostics**, and paste it here. The token, passwords, codes, serial numbers, MAC addresses and URLs are already removed; door and user names stay, so look it over first."
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I'm on the latest version of the plugin.
+          required: true
+        - label: I searched the existing issues.
+          required: true
+        - label: There are no secrets in what I pasted.
+          required: true

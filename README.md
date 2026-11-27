@@ -296,7 +296,7 @@ Every message of the call is logged with the prefix `call:` at debug level: turn
 Each actuator the intercom has (a relay such as a gate or the stair light) shows as a **lock** by default, which opens only after a ring, like the entrance. For a relay that isn't a door, list it under **Actuators shown as a switch or light** (`actuators`), with its name as the intercom gives it. **Test connection** in the Setup assistant lists them, marked `[actuator]`.
 
 ```json
-"actuators": [{ "name": "Stair light", "type": "light" }]
+{ "actuators": [{ "name": "Stair light", "type": "light" }] }
 ```
 
 - **`switch`** shows a switch, and **`light`** a light (Siri's "turn on the lights" then presses it too). Turning it on sends the actuator's command at any time, with no ring needed, as the Comelit app's button does. It shows On for a moment, then Off; the relay's own timer decides how long the light stays on.
@@ -486,6 +486,7 @@ The plugin is written in TypeScript (`src/`) and compiled to `dist/`.
 npm ci
 npm run build   # compile src/ to dist/
 npm test        # unit tests, using frames captured from a real intercom
+npm run verify  # everything CI checks: types, oxlint, build, tests, the settings schema and README examples
 ```
 
 CI runs the checks on Node 24 (the required `check` job) and the build and tests on Node 22, 24 and 26.
