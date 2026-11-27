@@ -230,3 +230,9 @@ test('invalid choices are reported; non-text paths are reported instead of crash
   assert.deepStrictEqual([v.answerMode, v.doctorMode, v.leaseMode, v.videoQuality, v.ffmpegPath], ['answer-on-view', 'switch', 'reconnect', 'hd', '/usr/local/bin/ffmpeg']);
   assert.deepStrictEqual(v.invalid, []);
 });
+
+test('offline sensor: off by default, on with true or "true" (2.8.0-beta.2)', () => {
+  assert.strictEqual(resolveSettings({}).offlineSensor, false);
+  assert.strictEqual(resolveSettings({ offlineSensor: true }).offlineSensor, true);
+  assert.strictEqual(resolveSettings({ offlineSensor: 'true' }).offlineSensor, true);
+});

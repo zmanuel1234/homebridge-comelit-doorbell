@@ -57,7 +57,7 @@ function fakeApi() {
     duplicates: 0,
     hap: {
       Service: { AccessoryInformation: 'info', LockMechanism: 'lock', MotionSensor: 'motion', Doorbell: 'db', Speaker: 'sp', Switch: 'sw', ContactSensor: 'cs', Lightbulb: 'lb' },
-      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n', On: 'on', ContactSensorState: Object.assign('css', { CONTACT_DETECTED: 0, CONTACT_NOT_DETECTED: 1 }) },
+      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', FirmwareRevision: 'fw', SerialNumber: 's', Name: 'n', On: 'on', ContactSensorState: Object.assign('css', { CONTACT_DETECTED: 0, CONTACT_NOT_DETECTED: 1 }) },
       uuid: { generate: (s) => `uuid:${s}` },
       HapStatusError,
       HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412, SERVICE_COMMUNICATION_FAILURE: -70402 },

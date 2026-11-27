@@ -2,6 +2,7 @@ import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAcces
 import { CameraAccessory } from './accessories/cameraAccessory';
 import { DoctorModeSwitch } from './accessories/doctorModeSwitch';
 import { NextVisitorSwitch } from './accessories/nextVisitorSwitch';
+import { OfflineSensor } from './accessories/offlineSensor';
 import { DoorbellAccessory } from './accessories/doorbellAccessory';
 import { ActuatorSwitchAccessory } from './accessories/actuatorSwitch';
 import { LockAccessory } from './accessories/lockAccessory';
@@ -9,7 +10,7 @@ import { authenticate } from './auth';
 import { CallHandler } from './call';
 import { DoorbellCamera } from './camera';
 import { EventLog, eventsFileFor } from './events';
-import { ChannelType } from './channels';
+import { ChannelType, ViperMessageId } from './channels';
 import { IconaBridgeClient } from './client';
 import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings, actuatorKey, type ActuatorType } from './config';
 import { getDeviceConfig } from './configReader';
@@ -25,6 +26,8 @@ import path from 'node:path';
 
 /** How long the intercom must be unreachable before the lock shows No Response. */
 export const UNREACHABLE_AFTER_MS = 30_000;
+/** How long the intercom must be unreachable before the Offline sensor opens. */
+export const OFFLINE_AFTER_MS = 2 * 60_000;
 
 /** How often the routine work (renewals, planned reconnects) is summed up in the debug log. */
 const ROUTINE_SUMMARY_MS = 60 * 60_000;
@@ -37,6 +40,12 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
   private readonly accessories = new Map<string, PlatformAccessory>();
   private readonly lockAccessories = new Map<string, LockAccessory>();
   private doorbellAccessory?: DoorbellAccessory;
+  private cameraAccessories: CameraAccessory[] = [];
+  private offlineSensor?: OfflineSensor;
+  /** Timers that show No Response and open the Offline sensor once the intercom stays away. */
+  private downTimers: NodeJS.Timeout[] = [];
+  /** The intercom's firmware (from its server-info), for the accessories' Firmware row. */
+  private firmware?: string;
   private client?: IconaBridgeClient;
   private deviceConfig?: DeviceConfig;
   private vipListener?: VipEventListener;
@@ -105,6 +114,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     }
     api.on('didFinishLaunching', () => {
       this.restoreCached();
+      this.watchDown();
       this.setupDevice().catch((e) => this.onSetupError('Initial setup', e));
     });
     api.on('shutdown', () => this.teardown());
@@ -140,6 +150,54 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
    */
   unreachable(): boolean {
     return this.downSince !== undefined && Date.now() - this.downSince > UNREACHABLE_AFTER_MS;
+  }
+
+  /** The intercom has been unreachable for more than OFFLINE_AFTER_MS: the Offline sensor is Open. */
+  offline(): boolean {
+    return this.downSince !== undefined && Date.now() - this.downSince > OFFLINE_AFTER_MS;
+  }
+
+  /** The connection is down: note since when, and push No Response and Offline when they are due. */
+  private markDown(): void {
+    if (this.downSince !== undefined) {
+      return;
+    }
+    this.downSince = Date.now();
+    this.watchDown();
+  }
+
+  private watchDown(): void {
+    this.clearDownTimers();
+    if (this.downSince === undefined || this.shuttingDown) {
+      return;
+    }
+    const since = Date.now() - this.downSince;
+    // A little past each limit, so unreachable() and offline() are already true when they fire.
+    this.downTimers = [
+      setTimeout(() => this.refreshReachability(), Math.max(0, UNREACHABLE_AFTER_MS - since) + 100),
+      setTimeout(() => this.offlineSensor?.refresh(), Math.max(0, OFFLINE_AFTER_MS - since) + 100),
+    ];
+    for (const t of this.downTimers) {
+      t.unref?.();
+    }
+  }
+
+  private clearDownTimers(): void {
+    for (const t of this.downTimers) {
+      clearTimeout(t);
+    }
+    this.downTimers = [];
+  }
+
+  /** Pushes each sensor's and lock's state, or No Response while the intercom is unreachable. */
+  private refreshReachability(): void {
+    for (const lock of this.lockAccessories.values()) {
+      lock.refresh();
+    }
+    this.doorbellAccessory?.refresh();
+    for (const camera of this.cameraAccessories) {
+      camera.refresh();
+    }
   }
 
   /**
@@ -321,17 +379,23 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     this.discoverAccessories(deviceConfig);
     this.failures = 0;
     const wasUnreachable = this.unreachable();
+    const wasOffline = this.offline();
     this.downSince = undefined;
+    this.clearDownTimers();
     if (wasUnreachable) {
-      for (const lock of this.lockAccessories.values()) {
-        lock.refresh();
-      }
+      this.refreshReachability();
+    }
+    if (wasOffline) {
+      this.offlineSensor?.refresh();
     }
     if (this.plannedReconnect) {
       this.routine.reconnects++;
     } else {
       this.log.info('Comelit Intercom ready');
       this.events.add('connected', 'Connected to the intercom');
+    }
+    if (this.firmware === undefined) {
+      void this.readFirmware(client);
     }
     this.plannedReconnect = false;
     this.startRoutineSummary();
@@ -350,6 +414,44 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       audio: (c, data) => this.camera?.recorder?.onCallAudio(c, data),
       ended: (c) => this.camera?.recorder?.onCallEnded(c),
     };
+  }
+
+  /**
+   * Reads the intercom's firmware version once, for the accessories' Firmware row in Home and
+   * Eve. Not needed for anything else: a failure is only noted in the debug log.
+   */
+  private async readFirmware(client: IconaBridgeClient): Promise<void> {
+    try {
+      // The INFO channel the keepalive already uses, if open (its sends take turns).
+      const channel = client.getChannel('INFO') ?? await client.openChannel('INFO', ChannelType.INFO);
+      const info = await client.sendJson(channel, {
+        message: 'server-info',
+        'message-type': 'request',
+        'message-id': ViperMessageId.SERVER_INFO,
+      });
+      const version = typeof info.version === 'string' ? info.version.trim() : '';
+      // HomeKit takes only numbers here (x, x.y or x.y.z).
+      if (!/^\d+(\.\d+){0,2}$/.test(version)) {
+        this.log.debug(`Intercom firmware ${version ? `'${version}'` : 'not given'}; the Firmware row is left as is`);
+        this.firmware = '';
+        return;
+      }
+      this.firmware = version;
+      this.log.debug(`Intercom firmware ${version}`);
+      this.applyFirmware();
+    } catch (e) {
+      this.log.debug(`Reading the intercom's firmware failed: ${(e as Error).message}`);
+    }
+  }
+
+  /** Puts the intercom's firmware on every accessory's Firmware row. */
+  private applyFirmware(): void {
+    if (!this.firmware) {
+      return;
+    }
+    for (const accessory of this.accessories.values()) {
+      accessory.getService(this.Service.AccessoryInformation)?.updateCharacteristic(this.Characteristic.FirmwareRevision, this.firmware);
+    }
   }
 
   private async openCtppChannels(client: IconaBridgeClient, config: DeviceConfig): Promise<void> {
@@ -426,6 +528,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       .catch(() => undefined)
       .then(() => this.events.flush());
     this.stopKeepalive();
+    this.clearDownTimers();
     clearInterval(this.routineTimer);
     this.routineTimer = undefined;
     clearTimeout(this.reconnectTimer);
@@ -442,7 +545,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       this.log.warn('Device disconnected — scheduling reconnect');
       this.events.add('disconnected', 'Connection to the intercom lost; reconnecting');
     }
-    this.downSince ??= Date.now();
+    this.markDown();
     this.camera?.recorder?.reset();
     this.stopKeepalive();
     // Keep the listener's count of renewal checks for the hourly summary.
@@ -463,7 +566,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     if (this.shuttingDown) {
       return;
     }
-    this.downSince ??= Date.now();
+    this.markDown();
     const failed = why === true;
     if (failed) {
       this.plannedReconnect = false; // a failed attempt is worth seeing when it comes back
@@ -703,7 +806,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
     const doors = [...config.doors].sort((a, b) => a.index - b.index);
     const cameras = [...config.cameras].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const from = JSON.stringify([doors, cameras, this.settings.camera, this.settings.doctorMode, this.settings.nextVisitorSwitch,
-      this.settings.doctorModeSensor, this.settings.nextVisitorSensor, doors.map((d) => this.actuatorType(d))]);
+      this.settings.doctorModeSensor, this.settings.nextVisitorSensor, this.settings.offlineSensor, doors.map((d) => this.actuatorType(d))]);
     if (from === this.builtFrom) {
       return;
     }
@@ -764,9 +867,15 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
         this.cameraConfigured = true;
       }
     }
-    for (const camera of config.cameras) {
+    this.cameraAccessories = config.cameras.map((camera) => {
       const accessory = this.accessoryFor(`camera-${camera.id}`, camera.name || `Camera ${camera.id}`, keep, undefined, { camera });
-      new CameraAccessory(this, accessory, camera);
+      return new CameraAccessory(this, accessory, camera);
+    });
+    if (this.settings.offlineSensor) {
+      const sensor = this.accessoryFor('offline', `${this.displayName} Offline`, keep);
+      this.offlineSensor = new OfflineSensor(this, sensor);
+    } else {
+      this.offlineSensor = undefined;
     }
     // Locks of doors the intercom no longer has: drop them from the list too (they are removed below).
     for (const uuid of [...this.lockAccessories.keys()]) {
@@ -782,6 +891,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       }
       this.log.info(`Removed ${stale.length} stale accessory/accessories`);
     }
+    this.applyFirmware();
   }
 }
 

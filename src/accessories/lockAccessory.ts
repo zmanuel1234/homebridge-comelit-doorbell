@@ -51,9 +51,19 @@ export class LockAccessory {
     }
   }
 
-  /** The intercom is back: tell Home the lock's state again (clears No Response). */
+  /**
+   * Tells Home the lock's state again (clears No Response), or shows No Response now when the
+   * intercom has just become unreachable.
+   */
   refresh(): void {
     const { Characteristic } = this.platform;
+    if (this.platform.unreachable()) {
+      const { hap } = this.platform.api;
+      const failure = new hap.HapStatusError(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      this.service.updateCharacteristic(Characteristic.LockCurrentState, failure);
+      this.service.updateCharacteristic(Characteristic.LockTargetState, failure);
+      return;
+    }
     this.service.updateCharacteristic(Characteristic.LockCurrentState, this.lockState);
     this.service.updateCharacteristic(
       Characteristic.LockTargetState,
