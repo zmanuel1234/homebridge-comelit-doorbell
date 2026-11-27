@@ -44,7 +44,7 @@ export function parseDiscoveryReply(msg: Buffer, host: string): FoundIntercom | 
   return { host, address, firmware, model };
 }
 
-/** The broadcast address of each of this machine's IPv4 networks (e.g. 10.0.4.255). */
+/** The broadcast address of each of this machine's IPv4 networks (e.g. 192.168.1.255). */
 export function broadcastAddresses(): string[] {
   const out = new Set<string>();
   for (const list of Object.values(os.networkInterfaces())) {
