@@ -9,4 +9,8 @@ The original package ships an Apache License 2.0 LICENSE file (its package.json
 declares MIT). Both permit this redistribution; this project is distributed
 under the Apache License 2.0 (see LICENSE).
 
+The original package's LICENSE file carries the notice "Copyright 2026 Antonio
+Ibáñez". Its license text differed in wording from the official Apache License
+2.0; LICENSE now holds the official text.
+
 Modifications since 1.1.1 are listed in CHANGELOG.md and in the git history.
