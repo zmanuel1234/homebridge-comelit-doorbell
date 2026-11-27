@@ -173,6 +173,11 @@ function scrub(text: string): string {
     .replace(/[0-9a-f]{24,}/gi, '<removed>');
 }
 
+/** A name the intercom sent, as text: '' for anything but a string or number (never "[object Object]") */
+function nameOf(v: unknown): string {
+  return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+}
+
 function list(v: unknown): Record<string, unknown>[] {
   return Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
 }
@@ -282,10 +287,10 @@ export async function testConnection(config: ComelitPlatformConfig, opts: TestOp
     const vip = (conf.vip ?? {}) as Record<string, unknown>;
     const up = (vip['user-parameters'] ?? {}) as Record<string, unknown>;
     result.doors = [
-      ...list(up['opendoor-address-book']).map((d) => ({ name: String(d.name ?? ''), kind: 'door' as const })),
-      ...list(up['actuator-address-book']).map((d) => ({ name: String(d.name ?? ''), kind: 'actuator' as const })),
+      ...list(up['opendoor-address-book']).map((d) => ({ name: nameOf(d.name), kind: 'door' as const })),
+      ...list(up['actuator-address-book']).map((d) => ({ name: nameOf(d.name), kind: 'actuator' as const })),
     ];
-    result.cameras = list(up['rtsp-camera-address-book']).map((c) => String(c.name ?? ''));
+    result.cameras = list(up['rtsp-camera-address-book']).map((c) => nameOf(c.name));
     const entrances = list(up['entrance-address-book']).length;
     const row = typeof vip['apt-subaddress'] === 'number' ? vip['apt-subaddress'] : undefined;
     result.subaddress = row;
