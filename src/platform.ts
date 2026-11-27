@@ -482,15 +482,16 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
       return;
     }
     const before = JSON.stringify(accessory.context.givenNames ?? null);
-    let renamed = followName(this.api, this.log, accessory, main, name);
+    const renamed = followName(this.api, this.log, accessory, main, name);
     const sensor = main === accessory.getService(S.Switch) ? accessory.getService(S.ContactSensor) : undefined;
     if (sensor) {
-      renamed = followName(this.api, this.log, accessory, sensor, `${name} Sensor`) || renamed;
+      followName(this.api, this.log, accessory, sensor, `${name} Sensor`);
     }
+    // Homebridge's own name for it (logs, the camera's tile) only when its tile took the new name.
     if (renamed && accessory.displayName !== name) {
       accessory.updateDisplayName(name);
     }
-    if (renamed || JSON.stringify(accessory.context.givenNames ?? null) !== before) {
+    if (JSON.stringify(accessory.context.givenNames ?? null) !== before) {
       this.api.updatePlatformAccessories([accessory]); // saves the names noted with it
     }
   }

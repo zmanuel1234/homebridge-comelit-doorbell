@@ -997,7 +997,6 @@ test('names: a new Name renames the tiles named by the plugin, not ones renamed 
   start('Comelit Intercom');
   // first start: only noted, nothing renamed
   assert.strictEqual(shown('doorbell', 'motion'), undefined);
-  // renamed in the Home app (after the plugin had a ConfiguredName on it): kept
   start('Intercom');
   assert.strictEqual(shown('doorbell', 'motion'), 'Intercom');
   assert.strictEqual(shown('offline', 'cs'), 'Intercom Offline');
@@ -1005,10 +1004,35 @@ test('names: a new Name renames the tiles named by the plugin, not ones renamed 
   assert.strictEqual(shown('doctor-mode', 'cs'), 'Intercom Doctor Mode Sensor');
   assert.strictEqual(cache.get('uuid:homebridge-comelit-intercom-doorbell').displayName, 'Intercom');
   assert.strictEqual(shown('lock-0', 'lock'), undefined, "the door's name didn't change");
+  // renamed in the Home app, now that the plugin has a ConfiguredName on them: kept
   cache.get('uuid:homebridge-comelit-intercom-offline').getService('cs').getCharacteristic('cn').value = 'Intercom gone';
+  cache.get('uuid:homebridge-comelit-intercom-doctor-mode').getService('sw').getCharacteristic('cn').value = 'Doctor';
   start('Front');
   assert.strictEqual(shown('doorbell', 'motion'), 'Front');
   assert.strictEqual(shown('offline', 'cs'), 'Intercom gone', 'renamed in Home: kept');
+  assert.strictEqual(shown('doctor-mode', 'sw'), 'Doctor');
+  assert.strictEqual(shown('doctor-mode', 'cs'), 'Front Doctor Mode Sensor', 'its sensor still follows');
+  assert.strictEqual(cache.get('uuid:homebridge-comelit-intercom-doctor-mode').displayName, 'Intercom Doctor Mode', 'kept with its tile');
+});
+
+test('names: Recent events from before a Name change are taken over at the next start', () => {
+  const fs = require('node:fs');
+  const dir = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'names-'));
+  const api = fakeApi();
+  api.user = { storagePath: () => dir };
+  let launched;
+  api.on = (event, f) => { if (event === 'didFinishLaunching') launched = f; };
+  const p1 = new ComelitIntercomPlatform(quietLog(), { platform: 'ComelitIntercom', name: 'Comelit Intercom' }, api);
+  p1.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  const bell = [...p1.accessories.values()].find((a) => a.UUID.endsWith('-doorbell'));
+  assert.strictEqual(bell.context.intercomName, 'Comelit Intercom');
+  fs.writeFileSync(require('node:path').join(dir, 'comelit-doorbell-events.json'), JSON.stringify([{ t: Date.now() - 5000, kind: 'ring', text: 'Ring' }]));
+  const p2 = new ComelitIntercomPlatform(quietLog(), { platform: 'ComelitIntercom', name: 'Intercom' }, api);
+  p2.configureAccessory(bell);
+  p2.setupDevice = async () => {};
+  launched();
+  assert.ok(p2.events.list().some((e) => e.kind === 'ring'), 'the old ring is listed under the new Name');
+  p2.clearDownTimers();
 });
 
 test('names: a door renamed on the intercom renames its lock', () => {
