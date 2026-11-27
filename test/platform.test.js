@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { ComelitIntercomPlatform } = require('../dist/platform');
+const { ComelitIntercomPlatform, OFFLINE_AFTER_MS } = require('../dist/platform');
 const { quietLog, fakeApi } = require('./helpers');
 
 
@@ -845,4 +845,135 @@ test('actuators: two actuators with the listed name are reported', () => {
   const p = new ComelitIntercomPlatform(log, { platform: 'ComelitIntercom', name: 'Comelit Intercom', actuators: [{ name: 'Stair Light', type: 'light' }] }, fakeApi());
   p.discoverAccessories({ ...withLight, doors: [...withLight.doors, { ...stairLight, index: 2, outputIndex: 1 }] });
   assert.ok(lines.some(([l, m]) => l === 'warn' && /more than one actuator is named 'stair light'/.test(m)), JSON.stringify(lines));
+});
+
+// ─── No Response, Offline sensor and firmware (2.8.0-beta.2) ───
+
+const withCamera = { ...deviceConfig, cameras: [{ id: 'c1', name: 'Gate camera', rtspUrl: '' }] };
+
+test('the ring sensor and cameras answer No Response after 30 s without the intercom, and recover', () => {
+  const { p } = platform();
+  p.discoverAccessories(JSON.parse(JSON.stringify(withCamera)));
+  const ring = p.doorbellAccessory.sensor.getCharacteristic('md');
+  const cam = p.cameraAccessories[0].service.getCharacteristic('md');
+  assert.strictEqual(ring.get(), false);
+  assert.strictEqual(cam.get(), false);
+  p.downSince = Date.now() - 31_000;
+  assert.throws(() => ring.get(), (e) => e.hapStatus === -70402);
+  assert.throws(() => cam.get(), (e) => e.hapStatus === -70402);
+  // back: the state is sent again
+  p.downSince = undefined;
+  p.refreshReachability();
+  assert.strictEqual(ring.get(), false);
+  assert.strictEqual(ring.value, false);
+  assert.strictEqual(cam.value, false);
+  const lock = [...p.lockAccessories.values()][0];
+  assert.strictEqual(lock.service.getCharacteristic(p.Characteristic.LockCurrentState).value, 1);
+});
+
+test('going offline opens the Offline sensor once the 2 minutes are up (timer)', async () => {
+  const { p } = platform({ offlineSensor: true });
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  const state = p.offlineSensor.service.getCharacteristic(p.Characteristic.ContactSensorState);
+  p.downSince = Date.now() - OFFLINE_AFTER_MS;
+  p.watchDown();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.strictEqual(state.value, 1);
+  p.clearDownTimers();
+  assert.strictEqual(p.offlineTimer, undefined);
+});
+
+test('markDown keeps the first moment the connection went down', () => {
+  const { p } = platform();
+  p.downSince = undefined;
+  p.markDown();
+  const first = p.downSince;
+  assert.ok(first > 0);
+  p.downSince = first - 5_000;
+  p.markDown();
+  assert.strictEqual(p.downSince, first - 5_000);
+  p.clearDownTimers();
+});
+
+test('offline sensor: only when turned on; Open after 2 minutes away, Closed when back', () => {
+  const off = platform();
+  off.p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  assert.ok(![...off.api.registered].some((u) => u.includes('offline')));
+
+  const { p, api } = platform({ offlineSensor: true });
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  assert.ok(api.registered.has('uuid:homebridge-comelit-intercom-offline'));
+  const state = p.offlineSensor.service.getCharacteristic(p.Characteristic.ContactSensorState);
+  p.downSince = undefined;
+  assert.strictEqual(state.get(), 0);
+  // unreachable but not yet offline: still Closed, and never No Response
+  p.downSince = Date.now() - 31_000;
+  assert.strictEqual(state.get(), 0);
+  p.downSince = Date.now() - OFFLINE_AFTER_MS - 1;
+  assert.strictEqual(state.get(), 1);
+  p.offlineSensor.refresh();
+  assert.strictEqual(state.value, 1);
+  p.downSince = undefined;
+  p.offlineSensor.refresh();
+  assert.strictEqual(state.value, 0);
+});
+
+test('offline sensor: turning the setting off removes it', () => {
+  const { p, api } = platform({ offlineSensor: true });
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  p.settings.offlineSensor = false;
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  assert.ok(![...api.registered].some((u) => u.includes('offline')));
+  assert.strictEqual(p.offlineSensor, undefined);
+});
+
+function infoClient(reply, existing) {
+  const sent = [];
+  const channel = { name: 'INFO', isOpen: true };
+  return {
+    sent,
+    opened: 0,
+    closed: 0,
+    getChannel(name) { return existing && name === 'INFO' ? channel : undefined; },
+    async openChannel() { this.opened++; return channel; },
+    async closeChannel() { this.closed++; },
+    async sendJson(_ch, msg) { sent.push(msg); if (reply instanceof Error) { throw reply; } return reply; },
+  };
+}
+
+test('firmware: the intercom version goes on every accessory, also ones added later', async () => {
+  const { p, api } = platform({ offlineSensor: true });
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  const client = infoClient({ model: 'MSVU', version: '2.1.0' }, true);
+  await p.readFirmware(client);
+  assert.strictEqual(client.opened, 0, 'reuses the open INFO channel');
+  assert.strictEqual(client.closed, 0, 'and leaves it open for the keepalive');
+  assert.strictEqual(client.sent[0].message, 'server-info');
+  assert.strictEqual(p.firmware, '2.1.0');
+  for (const a of p.accessories.values()) {
+    assert.strictEqual(a.getService('info').getCharacteristic('fw').value, '2.1.0', a.displayName);
+  }
+  p.discoverAccessories(JSON.parse(JSON.stringify(withCamera)));
+  const cam = [...p.accessories.values()].find((a) => a.UUID.includes('camera-c1'));
+  assert.strictEqual(cam.getService('info').getCharacteristic('fw').value, '2.1.0');
+  assert.ok(api.registered.has('uuid:homebridge-comelit-intercom-offline'));
+});
+
+test('firmware: a version HomeKit cannot take, or no answer, leaves the row alone', async () => {
+  const { p } = platform();
+  p.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  const bad = infoClient({ version: '2.1.0-rc1' }, false);
+  await p.readFirmware(bad);
+  assert.strictEqual(bad.opened, 1);
+  assert.strictEqual(bad.closed, 1, 'its own channel is closed again');
+  assert.strictEqual(p.firmware, '', 'not asked again');
+  for (const a of p.accessories.values()) {
+    assert.strictEqual(a.getService('info').getCharacteristic('fw').value, undefined);
+  }
+  const { p: p2 } = platform();
+  p2.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
+  await p2.readFirmware(infoClient(new Error('timeout'), true));
+  assert.strictEqual(p2.firmware, undefined, 'asked again on the next connection');
+  await p2.readFirmware(infoClient(new Error('timeout'), true));
+  assert.strictEqual(p2.firmwareTries, 2, 'then no more');
 });

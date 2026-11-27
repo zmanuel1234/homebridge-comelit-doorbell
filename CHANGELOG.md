@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **No Response on the doorbell sensor and the camera placeholders too.** Like the lock, they show No Response in Home while the intercom has been unreachable for more than 30 s, so the Home app shows when rings can't arrive. It appears when Home next asks (opening the Home app, say): HomeKit can't be told about an outage unasked. Once the intercom is back, the state is sent again at once.
+- **New: an Offline contact sensor** (**Add an Offline contact sensor**, `offlineSensor`, off by default). It is Open while the intercom has been unreachable for 2 minutes and Closed once it is back; turn on its notifications in the Home app to hear when the intercom goes away. It is a separate accessory (**Name** + `Offline`), and it never shows No Response itself.
+- **The intercom's firmware on every accessory.** The Firmware row in Home and Eve now shows the intercom's firmware (such as 2.1.0), read from the intercom after it connects (tried on two connections at most). A version that isn't a plain number is left out (HomeKit only takes numbers there), and the Model row is unchanged.
+
 ## 2.8.0-beta.1 - 2026-11-26
 
 - **Several intercoms on the settings page.** **Add an intercom**, next to the tabs, adds a block for another intercom; with more than one, a menu there chooses which one the settings, the Setup assistant and Recent events show, and **Remove** (click twice) removes the one shown. Until now the page showed only the first intercom, and a second one had to be edited in JSON Config.

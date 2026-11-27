@@ -42,7 +42,12 @@ function fakeApi() {
     constructor() { this.chars = new Map(); }
     getCharacteristic(k) { if (!this.chars.has(k)) this.chars.set(k, mkChar()); return this.chars.get(k); }
     setCharacteristic() { return this; }
-    updateCharacteristic(k, v) { this.getCharacteristic(k).value = v; return this; }
+    // As HAP-NodeJS: an error only sets the status (no value change, nothing sent to Home).
+    updateCharacteristic(k, v) {
+      const c = this.getCharacteristic(k);
+      if (v instanceof Error) { c.statusCode = v.hapStatus; } else { c.value = v; c.statusCode = 0; c.events = (c.events ?? 0) + 1; }
+      return this;
+    }
   }
   class Acc {
     constructor(name, uuid) { this.displayName = name; this.UUID = uuid; this.context = {}; this.s = { info: new Svc() }; }
@@ -57,7 +62,7 @@ function fakeApi() {
     duplicates: 0,
     hap: {
       Service: { AccessoryInformation: 'info', LockMechanism: 'lock', MotionSensor: 'motion', Doorbell: 'db', Speaker: 'sp', Switch: 'sw', ContactSensor: 'cs', Lightbulb: 'lb' },
-      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', SerialNumber: 's', Name: 'n', On: 'on', ContactSensorState: Object.assign('css', { CONTACT_DETECTED: 0, CONTACT_NOT_DETECTED: 1 }) },
+      Characteristic: { LockCurrentState: { SECURED: 1, UNSECURED: 0 }, LockTargetState: { SECURED: 1, UNSECURED: 0 }, MotionDetected: 'md', Manufacturer: 'm', Model: 'mo', FirmwareRevision: 'fw', SerialNumber: 's', Name: 'n', On: 'on', ContactSensorState: Object.assign('css', { CONTACT_DETECTED: 0, CONTACT_NOT_DETECTED: 1 }) },
       uuid: { generate: (s) => `uuid:${s}` },
       HapStatusError,
       HAPStatus: { NOT_ALLOWED_IN_CURRENT_STATE: -70412, SERVICE_COMMUNICATION_FAILURE: -70402 },

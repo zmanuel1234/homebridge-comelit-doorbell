@@ -36,6 +36,7 @@ export interface ComelitPlatformConfig extends PlatformConfig {
   nextVisitorSwitch?: boolean | string;
   nextVisitorMinutes?: number | string;
   nextVisitorSensor?: boolean | string;
+  offlineSensor?: boolean | string;
   openRepeat?: number | string;
   openRepeatSeconds?: number | string;
   camera?: boolean;
@@ -95,6 +96,8 @@ export interface Settings {
   nextVisitorMs: number;
   /** A contact sensor that follows the Next Visitor switch (Open while on). */
   nextVisitorSensor: boolean;
+  /** A contact sensor that opens while the intercom has been unreachable for 2 minutes. */
+  offlineSensor: boolean;
   /**
    * Buzzes per unlock: the door release is sent this many times, for an entrance behind two
    * doors (the first buzz opens the street door, the next ones the inner door).
@@ -283,6 +286,7 @@ export function resolveSettings(c: ComelitPlatformConfig): Settings {
     nextVisitorSwitch: bool('nextVisitorSwitch', false),
     nextVisitorMs: num('nextVisitorMinutes', 120, (n) => n >= 1 && n <= 1440) * 60_000,
     nextVisitorSensor: bool('nextVisitorSensor', false),
+    offlineSensor: bool('offlineSensor', false),
     openRepeat: num('openRepeat', 1, (n) => Number.isInteger(n) && n >= 1 && n <= 5),
     openRepeatMs: num('openRepeatSeconds', 6, (n) => n >= 1 && n <= 15) * 1000,
     camera: bool('camera', false),

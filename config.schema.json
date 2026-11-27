@@ -213,6 +213,12 @@
         "default": false,
         "description": "Adds a contact sensor to the Next Visitor switch: Open while it is on, Closed once it turns off (the visitor was let in, or its time limit passed). Turn on its notifications in the Home app."
       },
+      "offlineSensor": {
+        "title": "Add an Offline contact sensor",
+        "type": "boolean",
+        "default": false,
+        "description": "Adds a contact sensor that is Open while the intercom has been unreachable for 2 minutes, and Closed again once it is back. Turn on its notifications in the Home app to hear when the intercom goes away."
+      },
       "registerPush": {
         "title": "Register as a push device (original behavior)",
         "type": "boolean",
@@ -434,6 +440,7 @@
         "nextVisitorSwitch",
         "nextVisitorMinutes",
         "nextVisitorSensor",
+        "offlineSensor",
         "openRepeat",
         "openRepeatSeconds",
         "actuators"

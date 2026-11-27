@@ -34,7 +34,18 @@ export class DoorbellAccessory {
       }
     }
     this.sensor = accessory.getService(Service.MotionSensor) || accessory.addService(Service.MotionSensor, accessory.displayName);
-    this.sensor.getCharacteristic(Characteristic.MotionDetected).onGet(() => this.active);
+    this.sensor.getCharacteristic(Characteristic.MotionDetected).onGet(() => {
+      if (this.platform.unreachable()) {
+        const { hap } = this.platform.api;
+        throw new hap.HapStatusError(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      }
+      return this.active;
+    });
+  }
+
+  /** The intercom is back: tell Home the sensor's state again (clears No Response). */
+  refresh(): void {
+    this.sensor.updateCharacteristic(this.platform.Characteristic.MotionDetected, this.active);
   }
 
   triggerRing(): void {
