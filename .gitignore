@@ -1,9 +1,11 @@
+# Shared by the author's plugins (the same block in all of them).
 node_modules/
 dist/
 *.tgz
+*.log
 .DS_Store
 
-# Shared by the author's five plugins: never commit secrets, tokens or keys.
+# Never commit secrets, tokens or keys.
 .env
 .env.*
 .npmrc
