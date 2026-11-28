@@ -486,7 +486,7 @@ the build). It's published as compiled JavaScript (`dist/`), which npm builds on
 
 ```
 npm ci          # installs and builds
-npm test        # runs the tests against the build (dist/)
+npm test        # runs the tests against the build (dist/), using frames captured from a real intercom
 npm run check   # type checking
 npm run lint    # oxlint
 npm run build   # build only
@@ -495,6 +495,26 @@ npm run watch   # rebuilds and restarts a local Homebridge (test/hbConfig) on ev
 ```
 
 `npm publish` runs `npm run verify` first.
+
+| Module | What it does |
+|---|---|
+| `client.ts` | TCP connection, channels, and the registration lease |
+| `ctp.ts` | CTP frames on the CTPP channel: building, parsing, ACK/FIN words |
+| `vipListener.ts` | Rings and other intercom messages; acknowledgements; answers to door opens |
+| `call.ts` | Taking part in a ringing call (`answerMode`), the ring preview, and the call's media |
+| `media.ts` | RTP, H.264 depacketizing, keyframes |
+| `camera.ts` | Doorbell camera: HomeKit streaming through ffmpeg, talk-back, the visitor's picture |
+| `door.ts` | Door release, waiting for the intercom's answer |
+| `platform.ts` | Homebridge platform: connection lifecycle, accessories, ring window |
+| `config.ts` | Settings and their defaults, the reconnect back-off |
+| `protocol.ts` | ICONA frame headers, channel open/close commands, JSON messages, the CTPP registration |
+| `channels.ts` | Channel state and the message queue each channel reads from |
+| `ctpp.ts` | Registering on the CTPP channel after connecting |
+| `auth.ts`, `configReader.ts`, `push.ts` | Login with the token, reading doors and cameras from the intercom, keepalive |
+| `accessories/` | The HomeKit lock, ring sensor, doctor mode and Next Visitor switches, and (unused) RTSP camera placeholders |
+| `settings.ts` | Names and fixed timings |
+| `homebridge-ui/` | The settings page (`public/index.html`) and its server: finding the intercom, testing the settings, reading a backup, Recent events |
+
 
 Releases are published to npm by GitHub Actions (`.github/workflows/publish.yml`, the same in the author's other plugins) when a GitHub release is published. The tag must be `v` followed by the version in `package.json`, and **Set as a pre-release** must be ticked exactly for a version with a `-`; a release without notes gets the CHANGELOG section for the version. The workflow runs `npm run release:check`, adds the package and its `SHA256SUMS` to the release, and publishes that package with npm's trusted publishing: a `-dev-` version to npm's `dev` tag, any other pre-release to `beta`, a stable version to `latest` (and then removes an older `beta`). **Run workflow** with a release's tag publishes a release that already exists. CI (`.github/workflows/ci.yml`, also shared) runs `npm run verify` on Node 24 and `npm run test:matrix` on Node 22, 24 and 26.
 
