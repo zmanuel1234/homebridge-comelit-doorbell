@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.0 - 2026-11-28
+
+No change to how the intercom works: the same accessories, doorbell, door, camera, Recent events and settings page as 2.8.3.
+
+- Published as an ES module, on the author's Homebridge plugin template (which is built on Homebridge's own), like the author's other plugins. The settings page now comes from `dist/homebridge-ui`; the package no longer includes the TypeScript sources, type declarations or source maps.
+- Development only: the template's TypeScript and lint setup; the tests are ES modules; `npm run watch` runs a local Homebridge that restarts on every change.
+
 ## 2.8.3 - 2026-11-27
 
 No change to how the plugin works.
