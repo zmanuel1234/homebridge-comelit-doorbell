@@ -1,7 +1,7 @@
 {
   "name": "homebridge-comelit-doorbell",
   "displayName": "Comelit Doorbell",
-  "version": "2.8.2",
+  "version": "2.8.3",
   "description": "Comelit ViP intercoms (6701W/6741W Mini) in HomeKit: a video doorbell with live video, talk-back, the visitor's picture in the ring notification and HomeKit Secure Video recording, plus door unlock from Home, Siri or Apple Watch. Fully local.",
   "author": "Manuel Zamfir",
   "contributors": [
