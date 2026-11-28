@@ -1,6 +1,10 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { resolveSettings, settingsWarnings } = require('../dist/config');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { resolveSettings, settingsWarnings } from '../dist/config.js';
+import mod_fs from 'fs';
+import mod_path from 'path';
+import * as mod_config from '../dist/config.js';
 
 test('defaults', () => {
   const s = resolveSettings({ platform: 'ComelitIntercom', host: 'h', token: 't' });
@@ -117,14 +121,14 @@ test('camera, talkBack and registerPush accept true/false as text (beta.26)', ()
 });
 
 test('the settings screen shows every setting exactly once, and the README documents each (beta.29)', () => {
-  const fs = require('fs');
-  const path = require('path');
-  const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.schema.json'), 'utf8'));
+  const fs = mod_fs;
+  const path = mod_path;
+  const schema = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'config.schema.json'), 'utf8'));
   const keys = Object.keys(schema.schema.properties);
   const shown = schema.layout.flatMap((s) => s.items.map((i) => (typeof i === 'string' ? i : i.key)));
   assert.deepStrictEqual([...shown].sort(), [...keys].sort());
   assert.strictEqual(new Set(shown).size, shown.length);
-  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  const readme = fs.readFileSync(path.join(import.meta.dirname, '..', 'README.md'), 'utf8');
   for (const k of keys) {
     assert.ok(readme.includes(`(\`${k}\`)`), `README documents ${k}`);
   }
@@ -179,13 +183,12 @@ test('doctor mode time limit and sensors: defaults, 0, limits, warnings (2.5.0)'
 });
 
 test('calls are followed (handshake) for doctor mode or the Next Visitor switch with answering off (review)', () => {
-  const { callHandlerMode } = require('../dist/config');
+  const { callHandlerMode } = mod_config;
   assert.strictEqual(callHandlerMode(resolveSettings({})), 'off');
   assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true })), 'handshake');
   assert.strictEqual(callHandlerMode(resolveSettings({ doctorMode: 'switch' })), 'handshake');
   assert.strictEqual(callHandlerMode(resolveSettings({ nextVisitorSwitch: true, answerMode: 'answer-on-view' })), 'answer-on-view');
 });
-
 
 test('non-numbers never become 0: the ring window keeps 90 s and is reported (2.2.0 review)', () => {
   for (const v of [false, true, ' ', [], '0x0', '1e3', 'abc', {}]) {
@@ -240,7 +243,7 @@ test('offline sensor: off by default, on with true or "true" (2.8.0-beta.2)', ()
 test('settings form: the actuators list has its rows and an Add button (#59, 2.8.2)', () => {
   // Listed by bare key, Homebridge's form showed the section's title and note but no rows and no
   // Add button; an array needs its items spelled out in the layout.
-  const schema = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'config.schema.json'), 'utf8'));
+  const schema = JSON.parse(mod_fs.readFileSync(mod_path.join(import.meta.dirname, '..', 'config.schema.json'), 'utf8'));
   const found = [];
   const walk = (x) => {
     if (Array.isArray(x)) x.forEach(walk);

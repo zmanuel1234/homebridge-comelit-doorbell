@@ -1,8 +1,9 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { IconaBridgeClient } = require('../dist/client');
-const { encodeHeader } = require('../dist/protocol');
-const { quietLog } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { IconaBridgeClient } from '../dist/client.js';
+import { encodeHeader } from '../dist/protocol.js';
+import { quietLog } from './helpers.js';
 
 test('a channel the intercom opens is acknowledged and reported with its name and handle', () => {
   const client = new IconaBridgeClient('127.0.0.1', 1, quietLog());

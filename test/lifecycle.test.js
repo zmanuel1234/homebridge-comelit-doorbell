@@ -1,10 +1,11 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const net = require('node:net');
-const { IconaBridgeClient } = require('../dist/client');
-const { CallHandler } = require('../dist/call');
-const { reconnectDelay, resolveSettings } = require('../dist/config');
-const { quietLog } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import net from 'node:net';
+import { IconaBridgeClient } from '../dist/client.js';
+import { CallHandler } from '../dist/call.js';
+import { reconnectDelay, resolveSettings } from '../dist/config.js';
+import { quietLog } from './helpers.js';
 
 /** A TCP server that accepts and stays silent, so the client's lease timer is all that acts. */
 async function silentServer() {

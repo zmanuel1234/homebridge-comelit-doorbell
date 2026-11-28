@@ -1,9 +1,10 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { VipEventListener } = require('../dist/vipListener');
-const { CallHandler } = require('../dist/call');
-const { openDoor } = require('../dist/door');
-const { hex, frames, fakeClient, quietLog } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { VipEventListener } from '../dist/vipListener.js';
+import { CallHandler } from '../dist/call.js';
+import { openDoor } from '../dist/door.js';
+import { hex, frames, fakeClient, quietLog } from './helpers.js';
 
 const config = { aptAddress: 'SB000002', aptSubaddress: 3, doors: [], cameras: [] };
 const door = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false, index: 0 };

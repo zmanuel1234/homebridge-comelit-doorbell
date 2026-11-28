@@ -1,11 +1,14 @@
-// The setup assistant (homebridge-ui/): finding the intercom, testing the settings, diagnostics.
-const test = require('node:test');
-const assert = require('node:assert');
-const dgram = require('node:dgram');
-const fs = require('node:fs');
-const path = require('node:path');
-const { parseDiscoveryReply, discoverIntercoms, testConnection, redact } = require('../dist/setup');
-const { FakeIntercom } = require('./fake-intercom');
+// The setup assistant (src/homebridge-ui/): finding the intercom, testing the settings, diagnostics.
+
+import test from 'node:test';
+import assert from 'node:assert';
+import dgram from 'node:dgram';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseDiscoveryReply, discoverIntercoms, testConnection, redact } from '../dist/setup.js';
+import { FakeIntercom } from './fake-intercom.js';
+import * as mod_setup from '../dist/setup.js';
+import mod_child_process from 'node:child_process';
 
 /**
  * An answer to the INFO search, laid out like the author's MSVU (firmware 2.1.0) sends it; the MAC
@@ -74,7 +77,7 @@ test('discovery: found when only a later search gets through, and asks a known a
 });
 
 test('discovery: the broadcast address of each network', () => {
-  const { broadcastAddresses } = require('../dist/setup');
+  const { broadcastAddresses } = mod_setup;
   for (const b of broadcastAddresses()) assert.match(b, /^\d+\.\d+\.\d+\.\d+$/);
 });
 
@@ -243,18 +246,19 @@ test('redact: keeps the structure, removes only secret fields', () => {
 });
 
 test('setup assistant: the UI files are published, and the settings use them', () => {
-  const root = path.join(__dirname, '..');
+  const root = path.join(import.meta.dirname, '..');
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  assert.ok(pkg.files.includes('homebridge-ui'));
+  assert.ok(pkg.files.includes('dist'), 'the settings page is built into dist/homebridge-ui');
   assert.ok(pkg.dependencies['@homebridge/plugin-ui-utils']);
   const schema = JSON.parse(fs.readFileSync(path.join(root, 'config.schema.json'), 'utf8'));
   assert.strictEqual(schema.customUi, true);
+  assert.strictEqual(schema.customUiPath, './dist/homebridge-ui');
   // Homebridge shows the normal settings under a custom page only for a single settings block.
   assert.strictEqual(schema.singular, true);
   for (const f of ['server.js', 'public/index.html']) {
-    assert.ok(fs.existsSync(path.join(root, 'homebridge-ui', f)), f);
+    assert.ok(fs.existsSync(path.join(root, 'dist', 'homebridge-ui', f)), f);
   }
-  const html = fs.readFileSync(path.join(root, 'homebridge-ui/public/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'src/homebridge-ui/public/index.html'), 'utf8');
   assert.match(html, /homebridge\.showSchemaForm\(\)/, 'the normal settings stay below the assistant');
   assert.match(html, /addEventListener\('ready', \(\) => tab === 'settings' && homebridge\.showSchemaForm\(\)\)/, 'asked again once the page is ready (on the Settings tab)');
   assert.ok(!html.includes('text-muted'), 'readable in the dark theme');
@@ -268,14 +272,14 @@ test('setup assistant: the UI files are published, and the settings use them', (
   assert.match(html, /\.nav-tabs \.nav-link\.active \{ background-color: #efefef;/);
   assert.match(html, /body\.dark-mode \.nav-tabs \.nav-link\.active \{ background-color: #2b2b2b;/);
   for (const route of ['/discover', '/test']) {
-    assert.ok(html.includes(`'${route}'`) && fs.readFileSync(path.join(root, 'homebridge-ui/server.js'), 'utf8').includes(`'${route}'`), route);
+    assert.ok(html.includes(`'${route}'`) && fs.readFileSync(path.join(root, 'src/homebridge-ui/server.ts'), 'utf8').includes(`'${route}'`), route);
   }
 });
 
 test('setup assistant server: answers the settings page over IPC, as Homebridge runs it', () =>
   withFake({}, async (fake) => {
-    const { fork } = require('node:child_process');
-    const child = fork(path.join(__dirname, '..', 'homebridge-ui', 'server.js'), [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    const { fork } = mod_child_process;
+    const child = fork(path.join(import.meta.dirname, '..', 'dist', 'homebridge-ui', 'server.js'), [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     const replies = new Map();
     let ready;
     const isReady = new Promise((r) => (ready = r));

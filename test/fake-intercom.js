@@ -2,8 +2,9 @@
 // as the real one: an 8-byte header (00 06, body length, channel id), channel opens as
 // COMMAND messages on channel 0, JSON requests and answers on a channel's id, and binary CTPP
 // frames on the CTPP channel. It answers the plugin's start-up the way the author's kit does.
-const net = require('node:net');
-const { encodeChannelOpenResponse, encodeJsonMessage, encodeHeader } = require('../dist/protocol');
+
+import net from 'node:net';
+import { encodeChannelOpenResponse, encodeJsonMessage, encodeHeader } from '../dist/protocol.js';
 
 const COMMAND = 0xabcd;
 const END = 0x01ef;
@@ -135,4 +136,4 @@ class FakeIntercom {
   }
 }
 
-module.exports = { FakeIntercom, intercomConfig };
+export { FakeIntercom, intercomConfig };

@@ -1,10 +1,18 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { EventEmitter } = require('events');
+import test from 'node:test';
+import assert from 'node:assert';
+import { EventEmitter } from 'events';
+import { DoorbellCamera } from '../dist/camera.js';
+import { resolveSettings } from '../dist/config.js';
+import { quietLog } from './helpers.js';
+import mod_fs from 'fs';
+import mod_os from 'os';
+import mod_path from 'path';
+import * as mod_camera from '../dist/camera.js';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
 const hap = require('@homebridge/hap-nodejs');
-const { DoorbellCamera } = require('../dist/camera');
-const { resolveSettings } = require('../dist/config');
-const { quietLog } = require('./helpers');
 
 function fakeProcess() {
   const p = new EventEmitter();
@@ -143,9 +151,9 @@ test("ring preview video becomes the visitor's picture (test build)", () => {
 });
 
 test("the last visitor's picture survives a restart, and expires with lastVisitorMinutes (beta.27)", async () => {
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
+  const fs = mod_fs;
+  const os = mod_os;
+  const path = mod_path;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-visitor-'));
   const make = (config = {}) => {
     const settings = resolveSettings({ camera: true, answerMode: 'answer-on-view', host: 'h', token: 't', ...config });
@@ -246,9 +254,9 @@ test('the wait ends 1.5 s after the ring if no preview starts (beta.29)', async 
 });
 
 test("with mediaCaptureDir, each ring's notification picture is saved once, last 10 kept (beta.30)", async () => {
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
+  const fs = mod_fs;
+  const os = mod_os;
+  const path = mod_path;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-rings-'));
   for (let i = 0; i < 12; i++) fs.writeFileSync(path.join(dir, `ring-20250101-0000${String(i).padStart(2, '0')}.jpg`), 'old');
   fs.writeFileSync(path.join(dir, 'call-20250101-000000.h264'), 'call');
@@ -355,9 +363,9 @@ test('stopping a view kills its ffmpeg; shutdown stops every view (2.2.0 review)
 });
 
 test('short-lived live view files are kept in Homebridge\'s storage folder; a stopped process\'s leftovers are cleared at startup, another running one\'s kept (2.3.1)', async () => {
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
+  const fs = mod_fs;
+  const os = mod_os;
+  const path = mod_path;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comelit-storage-'));
   try {
     const work = path.join(dir, 'comelit-doorbell');
@@ -429,7 +437,7 @@ test('a live view that fails to start after the answer is stopped in HomeKit (2.
 });
 
 test('talk-back: a timeout with no sound from the Home app microphone is logged as debug, other ffmpeg output as a warning (2.6.1)', async () => {
-  const { isTalkBackTimeout } = require('../dist/camera');
+  const { isTalkBackTimeout } = mod_camera;
   const media = fakeMedia();
   const cam = camera({ talkBack: true }, media);
   let expected;

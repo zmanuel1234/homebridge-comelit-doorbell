@@ -1,10 +1,13 @@
 // Token from a backup: reading the intercom's backup (.tar.gz with a gzipped users.cfg inside).
 // Every token, email and activation code here is made up.
-const test = require('node:test');
-const assert = require('node:assert');
-const path = require('node:path');
-const { gzipSync } = require('node:zlib');
-const { readBackup, parseUsersCfg, untar, MAX_BACKUP_BYTES } = require('../dist/backup');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import path from 'node:path';
+import { gzipSync } from 'node:zlib';
+import { readBackup, parseUsersCfg, untar, MAX_BACKUP_BYTES } from '../dist/backup.js';
+import mod_child_process from 'node:child_process';
+import mod_fs from 'node:fs';
 
 const TOKEN_A = '0123456789abcdef0123456789abcdef';
 const TOKEN_B = 'fedcba9876543210fedcba9876543210';
@@ -101,8 +104,8 @@ test('backup: users.cfg lines with odd spacing or quotes inside a description', 
 });
 
 test('settings page server: /backup reads an uploaded backup, and explains a wrong file', async () => {
-  const { fork } = require('node:child_process');
-  const child = fork(path.join(__dirname, '..', 'homebridge-ui', 'server.js'), [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  const { fork } = mod_child_process;
+  const child = fork(path.join(import.meta.dirname, '..', 'dist', 'homebridge-ui', 'server.js'), [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   const replies = new Map();
   child.on('message', (m) => m.action === 'response' && replies.get(m.payload.requestId)?.(m.payload));
   const ask = (requestId, body) =>
@@ -124,7 +127,7 @@ test('settings page server: /backup reads an uploaded backup, and explains a wro
 });
 
 test('settings page: a Token from a backup button that fills in the token and user row', () => {
-  const html = require('node:fs').readFileSync(path.join(__dirname, '..', 'homebridge-ui', 'public', 'index.html'), 'utf8');
+  const html = mod_fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'homebridge-ui', 'public', 'index.html'), 'utf8');
   assert.match(html, /id="readBackup"/);
   assert.match(html, /request\('\/backup'/);
   assert.match(html, /change\(\{ token: u\.token, subaddress: u\.row \}/);
