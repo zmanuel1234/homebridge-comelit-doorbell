@@ -66,5 +66,10 @@
     "oxlint-tsgolint": "7.0.2008",
     "tsx": "^4.23.15",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "nodemon": {
+      "minimatch": "^11.0.9"
+    }
   }
 }
