@@ -1,12 +1,12 @@
 import type { Logging } from 'homebridge';
-import type { CallHandler } from './call';
-import { ChannelType, type Channel } from './channels';
-import type { IconaBridgeClient } from './client';
-import { buildFrame, CAUSE_BUSY, Flag, logicalAddress, Opcode } from './ctp';
-import { ctppInitSequence } from './ctpp';
-import type { DeviceConfig, Door, OpenResult } from './models';
-import { encodeActuatorInit, encodeActuatorOpen } from './protocol';
-import type { VipEventListener } from './vipListener';
+import type { CallHandler } from './call.js';
+import { ChannelType, type Channel } from './channels.js';
+import type { IconaBridgeClient } from './client.js';
+import { buildFrame, CAUSE_BUSY, Flag, logicalAddress, Opcode } from './ctp.js';
+import { ctppInitSequence } from './ctpp.js';
+import type { DeviceConfig, Door, OpenResult } from './models.js';
+import { encodeActuatorInit, encodeActuatorOpen } from './protocol.js';
+import type { VipEventListener } from './vipListener.js';
 
 const CTPP_INIT_TIMEOUT_MS = 5_000;
 const ACTUATOR_RESPONSE_TIMEOUT_MS = 2_000;

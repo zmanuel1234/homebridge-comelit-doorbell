@@ -1,9 +1,10 @@
 // The platform's connection to a fake intercom over TCP: start-up, failures, drops and reconnects.
-const test = require('node:test');
-const assert = require('node:assert');
-const { ComelitIntercomPlatform } = require('../dist/platform');
-const { FakeIntercom } = require('./fake-intercom');
-const { quietLog, fakeApi } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { ComelitIntercomPlatform } from '../dist/platform.js';
+import { FakeIntercom } from './fake-intercom.js';
+import { quietLog, fakeApi } from './helpers.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(cond, what, ms = 5000) {

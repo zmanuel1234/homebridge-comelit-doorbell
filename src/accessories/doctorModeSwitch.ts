@@ -1,6 +1,6 @@
 import type { PlatformAccessory } from 'homebridge';
-import type { ComelitIntercomPlatform } from '../platform';
-import { ModeSwitch } from './modeSwitch';
+import type { ComelitIntercomPlatform } from '../platform.js';
+import { ModeSwitch } from './modeSwitch.js';
 
 /**
  * Doctor mode's HomeKit switch (doctorMode: switch): while it is on, every ring opens the door.

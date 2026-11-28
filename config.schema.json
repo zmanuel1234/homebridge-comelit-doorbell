@@ -1,6 +1,7 @@
 {
   "pluginAlias": "ComelitIntercom",
   "customUi": true,
+  "customUiPath": "./dist/homebridge-ui",
   "pluginVersion": ">=2.0.0-beta.0",
   "pluginType": "platform",
   "singular": true,

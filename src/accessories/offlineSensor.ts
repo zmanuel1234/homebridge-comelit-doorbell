@@ -1,5 +1,5 @@
 import type { PlatformAccessory, Service } from 'homebridge';
-import type { ComelitIntercomPlatform } from '../platform';
+import type { ComelitIntercomPlatform } from '../platform.js';
 
 /**
  * A contact sensor that is Open while the intercom has been unreachable for a while

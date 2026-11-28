@@ -480,16 +480,21 @@ For picture or sound problems, set **Save each call's video and audio to**, test
 
 ## Development
 
-The plugin is written in TypeScript (`src/`) and compiled to `dist/`.
+The plugin is written in TypeScript (`src/`) and its tests in JavaScript (`test/`, run against
+the build). It's published as compiled JavaScript (`dist/`), which npm builds on `npm ci`,
+`npm pack` and `npm publish`.
 
-```bash
-npm ci
-npm run build   # compile src/ to dist/
-npm test        # unit tests, using frames captured from a real intercom
-npm run verify  # everything CI checks: types, oxlint, build, tests, the settings schema and README examples
+```
+npm ci          # installs and builds
+npm test        # runs the tests against the build (dist/), using frames captured from a real intercom
+npm run check   # type checking
+npm run lint    # oxlint
+npm run build   # build only
+npm run verify  # everything CI checks, including the settings schema and README examples
+npm run watch   # rebuilds and restarts a local Homebridge (test/hbConfig) on every change
 ```
 
-CI runs the checks on Node 24 (the required `check` job) and the build and tests on Node 22, 24 and 26.
+`npm publish` runs `npm run verify` first.
 
 | Module | What it does |
 |---|---|
@@ -508,8 +513,10 @@ CI runs the checks on Node 24 (the required `check` job) and the build and tests
 | `auth.ts`, `configReader.ts`, `push.ts` | Login with the token, reading doors and cameras from the intercom, keepalive |
 | `accessories/` | The HomeKit lock, ring sensor, doctor mode and Next Visitor switches, and (unused) RTSP camera placeholders |
 | `settings.ts` | Names and fixed timings |
+| `homebridge-ui/` | The settings page (`public/index.html`) and its server: finding the intercom, testing the settings, reading a backup, Recent events |
 
-Releases are published to npm by GitHub Actions (`.github/workflows/publish.yml`, the same in the author's other plugins) when a GitHub release is published. The tag must be `v` followed by the version in `package.json`, the release needs notes (the CHANGELOG section for the version), and **Set as a pre-release** must be ticked exactly for a version with a `-`. The workflow runs `npm run release:check`, adds the package and its `SHA256SUMS` to the release, and publishes that package with npm's trusted publishing: a `-dev-` version to npm's `dev` tag, any other pre-release to `beta`, a stable version to `latest`. **Run workflow** with a release's tag publishes a release that already exists. CI (`.github/workflows/ci.yml`, also shared) runs `npm run verify` on Node 24 and `npm run test:matrix` on Node 22, 24 and 26.
+
+Releases are published to npm by GitHub Actions (`.github/workflows/publish.yml`, the same in the author's other plugins) when a GitHub release is published. The tag must be `v` followed by the version in `package.json`, and **Set as a pre-release** must be ticked exactly for a version with a `-`; a release without notes gets the CHANGELOG section for the version. The workflow runs `npm run release:check`, adds the package and its `SHA256SUMS` to the release, and publishes that package with npm's trusted publishing: a `-dev-` version to npm's `dev` tag, any other pre-release to `beta`, a stable version to `latest` (and then removes an older `beta`). **Run workflow** with a release's tag publishes a release that already exists. CI (`.github/workflows/ci.yml`, also shared) runs `npm run verify` on Node 24 and `npm run test:matrix` on Node 22, 24 and 26.
 
 Each version has a section in `CHANGELOG.md`: `## 1.2.3 - date`, an optional one-line summary, then bullets (no Added/Changed/Fixed headings). A release published without notes takes that section as its notes.
 

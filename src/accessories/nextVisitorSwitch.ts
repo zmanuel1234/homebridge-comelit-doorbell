@@ -1,6 +1,6 @@
 import type { PlatformAccessory } from 'homebridge';
-import type { ComelitIntercomPlatform } from '../platform';
-import { ModeSwitch } from './modeSwitch';
+import type { ComelitIntercomPlatform } from '../platform.js';
+import { ModeSwitch } from './modeSwitch.js';
 
 /**
  * The Next Visitor switch (nextVisitorSwitch): while it is on, the next ring opens the door, as

@@ -1,6 +1,14 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { parseRtp, buildRtp, H264Depacketizer, KeyframeCache, nalType } = require('../dist/media');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { parseRtp, buildRtp, H264Depacketizer, KeyframeCache, nalType } from '../dist/media.js';
+import mod_fs from 'fs';
+import mod_os from 'os';
+import mod_path from 'path';
+import * as mod_camera from '../dist/camera.js';
+import mod_package_json from '../package.json' with { type: 'json' };
+import * as mod_helpers from './helpers.js';
+import * as mod_media from '../dist/media.js';
 
 const rtp = (seq, payload, pt = 96) => buildRtp({ marker: false, payloadType: pt, sequence: seq, timestamp: 0, ssrc: 1 }, Buffer.from(payload));
 
@@ -39,13 +47,13 @@ test('keyframe cache keeps SPS, PPS and the latest keyframe', () => {
 });
 
 test('the built-in still picture ships with the package and ffmpeg is found in known places', () => {
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
-  const { DEFAULT_STILL, resolveFfmpeg } = require('../dist/camera');
+  const fs = mod_fs;
+  const os = mod_os;
+  const path = mod_path;
+  const { DEFAULT_STILL, resolveFfmpeg } = mod_camera;
   const jpg = fs.readFileSync(DEFAULT_STILL);
   assert.ok(jpg[0] === 0xff && jpg[1] === 0xd8, 'JPEG');
-  assert.ok(require('../package.json').files.includes('assets'));
+  assert.ok(mod_package_json.files.includes('assets'));
   assert.strictEqual(resolveFfmpeg('/opt/my/ffmpeg'), '/opt/my/ffmpeg');
   // ffmpeg inside the scoped camera-ffmpeg package
   const nm = fs.mkdtempSync(path.join(os.tmpdir(), 'nm-'));
@@ -67,7 +75,7 @@ test('an old keyframe is not used', async () => {
 });
 
 test('ffmpeg video arguments stream SRTP to HomeKit', () => {
-  const { videoArgs, audioArgs, talkSdp } = require('../dist/camera');
+  const { videoArgs, audioArgs, talkSdp } = mod_camera;
   const srtp = Buffer.alloc(30, 1);
   const v = videoArgs({ width: 1280, height: 720, fps: 15, bitrate: 299, pt: 99, ssrc: 5, srtp, address: '10.0.0.9', port: 5000, mtu: 1316, codec: 'libx264' });
   assert.deepStrictEqual(v.slice(v.indexOf('-f'), v.indexOf('-f') + 2), ['-f', 'h264']);
@@ -84,8 +92,8 @@ test('ffmpeg video arguments stream SRTP to HomeKit', () => {
 });
 
 test('a snapshotImage that does not exist falls back to the built-in picture, with one warning', async () => {
-  const { DoorbellCamera, DEFAULT_STILL } = require('../dist/camera');
-  const { quietLog } = require('./helpers');
+  const { DoorbellCamera, DEFAULT_STILL } = mod_camera;
+  const { quietLog } = mod_helpers;
   const log = quietLog();
   const self = { settings: { snapshotImage: '/nonexistent/doorbell.jpg' }, log, warnedMissingImage: false };
   const pick = DoorbellCamera.prototype.placeholderPath;
@@ -97,7 +105,7 @@ test('a snapshotImage that does not exist falls back to the built-in picture, wi
 });
 
 test('parseSps reads the picture size (SPS made by x264)', () => {
-  const { parseSps } = require('../dist/media');
+  const { parseSps } = mod_media;
   const cases = {
     '000000016742c00cd90141fb011000000300100000030200f142a480': [320, 240, 66],
     '000000016742c01ed900c83db011000003000100000300200f162e48': [800, 480, 66],
@@ -114,7 +122,7 @@ test('parseSps reads the picture size (SPS made by x264)', () => {
 });
 
 test('countRtcpReports counts receiver and sender reports in a compound packet', () => {
-  const { countRtcpReports } = require('../dist/camera');
+  const { countRtcpReports } = mod_camera;
   const rr = Buffer.from('81c90007' + '00'.repeat(28), 'hex'); // RR with one report block (8 words)
   const sdes = Buffer.from('81ca0002' + '00'.repeat(8), 'hex');
   assert.strictEqual(countRtcpReports(Buffer.concat([rr, sdes])), 1);
@@ -123,10 +131,10 @@ test('countRtcpReports counts receiver and sender reports in a compound packet',
 });
 
 test('media capture keeps the last 10 calls', async () => {
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
-  const { MediaCapture } = require('../dist/camera');
+  const fs = mod_fs;
+  const os = mod_os;
+  const path = mod_path;
+  const { MediaCapture } = mod_camera;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-'));
   for (let i = 0; i < 12; i++) {
     for (const ext of ['.h264', '.alaw', '-talkback.alaw']) {
@@ -143,8 +151,8 @@ test('media capture keeps the last 10 calls', async () => {
 });
 
 test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle it', () => {
-  const { parseSps } = require('../dist/media');
-  const { videoArgs, LIVE_INPUT } = require('../dist/camera');
+  const { parseSps } = mod_media;
+  const { videoArgs, LIVE_INPUT } = mod_camera;
   // SPS from a real call (2026-11-08); its timing says 1,200,000 fps.
   const s = parseSps(Buffer.from('000000016742001fe90140fd00b1021280', 'hex'));
   assert.deepStrictEqual([s.width, s.height, s.profile], [640, 240, 66]);
@@ -164,7 +172,7 @@ test('the 6741W video: its SPS reads as 640x240, and the ffmpeg arguments handle
 });
 
 test('the last visitor picture is the call\'s first keyframe, not its last', () => {
-  const { KeyframeCache } = require('../dist/media');
+  const { KeyframeCache } = mod_media;
   const k = new KeyframeCache();
   k.leftoverGapMs = 0; // the old-picture check has its own tests
   // keyframes (type 5) of a realistic size: a few bytes would be an empty (black) picture
@@ -188,7 +196,7 @@ test('the last visitor picture is the call\'s first keyframe, not its last', () 
 });
 
 test("a new call doesn't start from the previous call's keyframe", () => {
-  const { KeyframeCache } = require('../dist/media');
+  const { KeyframeCache } = mod_media;
   const k = new KeyframeCache();
   k.leftoverGapMs = 0; // the old-picture check has its own tests
   // keyframes (type 5) of a realistic size: a few bytes would be an empty (black) picture
@@ -204,7 +212,7 @@ test("a new call doesn't start from the previous call's keyframe", () => {
 });
 
 test('an empty (black) keyframe is not taken as the visitor picture; the next real one is (2.1.1)', () => {
-  const { KeyframeCache, MIN_PICTURE_BYTES } = require('../dist/media');
+  const { KeyframeCache, MIN_PICTURE_BYTES } = mod_media;
   const k = new KeyframeCache();
   k.leftoverGapMs = 0; // the old-picture check has its own tests
   const empty = [];
@@ -222,7 +230,7 @@ test('an empty (black) keyframe is not taken as the visitor picture; the next re
 
 test("the intercom's old picture: a keyframe followed by another within 2 s is skipped, the second becomes the visitor's picture (2.3.3)", (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
-  const { KeyframeCache, LEFTOVER_GAP_MS } = require('../dist/media');
+  const { KeyframeCache, LEFTOVER_GAP_MS } = mod_media;
   const k = new KeyframeCache();
   const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
   const skipped = [];
@@ -260,7 +268,7 @@ test("the intercom's old picture: a keyframe followed by another within 2 s is s
 
 test("the intercom's old picture: an empty (black) keyframe doesn't count as the first one (2.3.3)", (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
-  const { KeyframeCache } = require('../dist/media');
+  const { KeyframeCache } = mod_media;
   const k = new KeyframeCache();
   const unit = (type, size, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(size), Buffer.from([tag])]);
   k.newCall({});
@@ -272,7 +280,7 @@ test("the intercom's old picture: an empty (black) keyframe doesn't count as the
 
 test("the intercom's old picture: a candidate left pending by the previous call is kept, but doesn't answer this ring's picture requests (2.3.3 review)", (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
-  const { KeyframeCache } = require('../dist/media');
+  const { KeyframeCache } = mod_media;
   const k = new KeyframeCache();
   const u = (type, tag) => Buffer.concat([Buffer.from([0, 0, 0, 1, type]), Buffer.alloc(type === 5 ? 2100 : 0), Buffer.from([tag])]);
   const calls = [];

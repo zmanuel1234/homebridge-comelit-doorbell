@@ -9,7 +9,7 @@
  * again would also be "new" (its time and size still tell).
  */
 import { createHash } from 'crypto';
-import { nalType } from './media';
+import { nalType } from './media.js';
 
 /** Keyframes logged at the start of each call. */
 export const TRACE_KEYFRAMES = 4;

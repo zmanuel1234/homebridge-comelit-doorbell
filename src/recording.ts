@@ -1,8 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import type { CameraRecordingConfiguration, CameraRecordingDelegate, Logging, RecordingPacket } from 'homebridge';
-import { RESTORE_ASPECT } from './camera';
-import { LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType } from './media';
-import { RECORDING_MAX_MS } from './settings';
+import { RESTORE_ASPECT } from './camera.js';
+import { LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType } from './media.js';
+import { RECORDING_MAX_MS } from './settings.js';
 
 /**
  * HomeKit Secure Video for the doorbell camera (setting `recording`).

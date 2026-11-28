@@ -1,6 +1,7 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { AsyncQueue } = require('../dist/channels');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { AsyncQueue } from '../dist/channels.js';
 
 test('an item enqueued after a dequeue timed out is not lost', async () => {
   const q = new AsyncQueue();

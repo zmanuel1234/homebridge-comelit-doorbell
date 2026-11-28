@@ -1,9 +1,17 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { EventEmitter } = require('events');
-const { spawnSync } = require('child_process');
+import test from 'node:test';
+import assert from 'node:assert';
+import { EventEmitter } from 'events';
+import { spawnSync } from 'child_process';
+import { FlvWriter, Mp4Splitter, PREBUFFER_MS, RingFeeder, RingRecorder, RingSource, recordingArgs, spawnFfmpeg } from '../dist/recording.js';
+import { DoorbellCamera } from '../dist/camera.js';
+import { callHandlerMode, resolveSettings, settingsWarnings } from '../dist/config.js';
+import { quietLog } from './helpers.js';
+import mod_path from 'path';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
 const hap = require('@homebridge/hap-nodejs');
-const { FlvWriter, Mp4Splitter, PREBUFFER_MS, RingFeeder, RingRecorder, RingSource, recordingArgs, spawnFfmpeg } = require('../dist/recording');
 const P = PREBUFFER_MS; // every recording starts with this much of its first picture held still
 
 /** The tags of an FLV stream: type (8 sound, 9 video), time in ms, and the data. */
@@ -20,9 +28,6 @@ function flvTags(buffers) {
 }
 const videoTags = (buffers) => flvTags(buffers).filter((t) => t.type === 9);
 const soundBytes = (buffers) => flvTags(buffers).filter((t) => t.type === 8).reduce((n, t) => n + t.data.length - 1, 0);
-const { DoorbellCamera } = require('../dist/camera');
-const { callHandlerMode, resolveSettings, settingsWarnings } = require('../dist/config');
-const { quietLog } = require('./helpers');
 
 const box = (type, size = 16) => {
   const b = Buffer.alloc(size, 0);
@@ -544,7 +549,7 @@ test('recording with ffmpeg: fragments start with a keyframe and are no longer t
 });
 
 test('camera: a camera Homebridge already had gets the recording services and motion sensor, and loses them when recording is turned off', () => {
-  const { PlatformAccessory } = require(require('path').join(__dirname, '../node_modules/homebridge/dist/platformAccessory.js'));
+  const { PlatformAccessory } = require(mod_path.join(import.meta.dirname, '../node_modules/homebridge/dist/platformAccessory.js'));
   const make = (recording) => new DoorbellCamera({ hap }, quietLog(), resolveSettings({ camera: true, recording, host: 'h', token: 't' }), () => undefined);
   const restart = (a) => PlatformAccessory.deserialize(JSON.parse(JSON.stringify(PlatformAccessory.serialize(a))));
   const has = (a, s, subtype) => a.services.some((x) => x.UUID === s.UUID && (subtype === undefined || x.subtype === subtype));

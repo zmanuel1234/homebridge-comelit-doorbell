@@ -1,13 +1,15 @@
 // Live view without a ring: our own call to the entrance panel (as the Comelit app's camera button).
-const test = require('node:test');
-const assert = require('node:assert');
-const { EventEmitter } = require('events');
-const { CallHandler } = require('../dist/call');
-const { parseFrame, buildFrame } = require('../dist/ctp');
-const { buildRtp } = require('../dist/media');
-const { VipEventListener } = require('../dist/vipListener');
-const { callHandlerMode, resolveSettings, settingsWarnings } = require('../dist/config');
-const { frames, quietLog } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { EventEmitter } from 'events';
+import { CallHandler } from '../dist/call.js';
+import { parseFrame, buildFrame } from '../dist/ctp.js';
+import { buildRtp } from '../dist/media.js';
+import { VipEventListener } from '../dist/vipListener.js';
+import { callHandlerMode, resolveSettings, settingsWarnings } from '../dist/config.js';
+import { frames, quietLog } from './helpers.js';
+import * as mod_door from '../dist/door.js';
 
 function fakeClient() {
   const c = new EventEmitter();
@@ -549,7 +551,7 @@ test('the lock during a live view without a ring: a failed open is reported, and
 });
 
 test('the door: a ring is opened inside the ring, otherwise the normal way; a busy refusal is retried once only when asked', async () => {
-  const { openDoor } = require('../dist/door');
+  const { openDoor } = mod_door;
   const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
   const door = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };
   const order = [];
@@ -614,7 +616,7 @@ test('the lock during a live view: the viewer closing during the pause still ope
 });
 
 test('an actuator during a ring gets its own command, never the entrance open inside the call', async () => {
-  const { openDoor } = require('../dist/door');
+  const { openDoor } = mod_door;
   const config = { aptAddress: 'SB000002', aptSubaddress: '3' };
   const actuator = { name: 'Actuator', aptAddress: 'SB100001', outputIndex: 1, isActuator: true, moduleIndex: 0 };
   const entrance = { name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false };

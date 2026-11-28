@@ -6,12 +6,12 @@
  * opcode (`flags`). See ctp.ts for the frame format.
  */
 import type { Logging } from 'homebridge';
-import type { Channel } from './channels';
-import type { IconaBridgeClient } from './client';
-import type { CallHandler } from './call';
-import { ackWord, finWord, Opcode, parseFrame, peerKey } from './ctp';
-import type { DeviceConfig, IntercomEvent, IntercomEventType } from './models';
-import { encodeCallResponseAck } from './protocol';
+import type { Channel } from './channels.js';
+import type { IconaBridgeClient } from './client.js';
+import type { CallHandler } from './call.js';
+import { ackWord, finWord, Opcode, parseFrame, peerKey } from './ctp.js';
+import type { DeviceConfig, IntercomEvent, IntercomEventType } from './models.js';
+import { encodeCallResponseAck } from './protocol.js';
 
 const PREFIX_VIDEO_EVENT = 0x1840;
 /** The intercom acknowledging a frame. */

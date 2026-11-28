@@ -1,7 +1,7 @@
-import { CHANNEL_TYPE_PUSH, ChannelType, ViperMessageId } from './channels';
-import type { IconaBridgeClient } from './client';
-import type { DeviceConfig, IntercomEvent } from './models';
-import type { JsonMessage } from './protocol';
+import { CHANNEL_TYPE_PUSH, ChannelType, ViperMessageId } from './channels.js';
+import type { IconaBridgeClient } from './client.js';
+import type { DeviceConfig, IntercomEvent } from './models.js';
+import type { JsonMessage } from './protocol.js';
 
 const BUNDLE_ID = 'com.comelitgroup.friendhome';
 const PROFILE_ID = '3';

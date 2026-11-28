@@ -1,7 +1,7 @@
 import http from 'http';
 import https from 'https';
 import type { PlatformAccessory, Service } from 'homebridge';
-import type { ComelitIntercomPlatform } from '../platform';
+import type { ComelitIntercomPlatform } from '../platform.js';
 
 const RING_DURATION_MS = 5_000;
 const TRIGGER_TIMEOUT_MS = 5_000;

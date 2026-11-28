@@ -1,6 +1,7 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { KeyframeTrace, TRACE_KEYFRAMES } = require('../dist/keyframes');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { KeyframeTrace, TRACE_KEYFRAMES } from '../dist/keyframes.js';
 
 const nal = (type, fill, len = 20) => Buffer.concat([Buffer.from([0, 0, 0, 1, 0x60 | type]), Buffer.alloc(len - 5, fill)]);
 const SPS = nal(7, 1, 8);

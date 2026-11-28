@@ -1,12 +1,13 @@
 // Runs the settings page's own script against a small fake page and a fake Homebridge, to check
 // what several intercoms do: switching, adding, removing, and results that arrive late.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'homebridge-ui', 'public', 'index.html'), 'utf8');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+
+const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'homebridge-ui', 'public', 'index.html'), 'utf8');
 const script = html.slice(html.lastIndexOf('<script>') + '<script>'.length, html.lastIndexOf('</script>'));
 
 function element(id) {

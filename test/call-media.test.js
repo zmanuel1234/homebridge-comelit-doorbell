@@ -1,12 +1,13 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { EventEmitter } = require('events');
-const { CallHandler, videoSettings } = require('../dist/call');
-const { parseFrame } = require('../dist/ctp');
-const { buildRtp } = require('../dist/media');
-const { frames, quietLog } = require('./helpers');
 
 // Fake connection: channels get handles 0x2001, 0x2002, ... in order of opening.
+import test from 'node:test';
+import assert from 'node:assert';
+import { EventEmitter } from 'events';
+import { CallHandler, videoSettings } from '../dist/call.js';
+import { parseFrame } from '../dist/ctp.js';
+import { buildRtp } from '../dist/media.js';
+import { frames, quietLog } from './helpers.js';
+
 function fakeClient() {
   const c = new EventEmitter();
   let next = 0x2001;

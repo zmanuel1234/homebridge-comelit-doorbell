@@ -1,8 +1,9 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { ackWord, finWord, buildFrame, parseFrame } = require('../dist/ctp');
-const { encodeCtppInit } = require('../dist/protocol');
-const { hex, frames } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { ackWord, finWord, buildFrame, parseFrame } from '../dist/ctp.js';
+import { encodeCtppInit } from '../dist/protocol.js';
+import { hex, frames } from './helpers.js';
 
 const word = (s) => hex(s).readUInt32LE(0);
 

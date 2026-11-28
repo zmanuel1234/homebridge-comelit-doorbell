@@ -1,5 +1,5 @@
 import type { PlatformAccessory, Service } from 'homebridge';
-import type { ComelitIntercomPlatform } from '../platform';
+import type { ComelitIntercomPlatform } from '../platform.js';
 
 export interface ModeSwitchOptions {
   /** Log label, e.g. 'Doctor mode'. */

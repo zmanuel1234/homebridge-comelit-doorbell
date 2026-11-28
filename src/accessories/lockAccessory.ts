@@ -1,6 +1,6 @@
 import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
-import type { Door } from '../models';
-import type { ComelitIntercomPlatform } from '../platform';
+import type { Door } from '../models.js';
+import type { ComelitIntercomPlatform } from '../platform.js';
 
 const SHOW_UNLOCKED_MS = 3_000;
 const REFUSED_LOG_INTERVAL_MS = 5_000;

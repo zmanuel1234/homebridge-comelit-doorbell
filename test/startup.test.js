@@ -1,11 +1,12 @@
 // Start-up: login, reading the intercom's configuration, and the keepalive / push registration.
-const test = require('node:test');
-const assert = require('node:assert');
-const { authenticate, AuthenticationError } = require('../dist/auth');
-const { getDeviceConfig, parseConfig } = require('../dist/configReader');
-const { ProtocolError } = require('../dist/client');
-const { registerPush, sendPushKeepalive } = require('../dist/push');
-const { ChannelType, CHANNEL_TYPE_PUSH } = require('../dist/channels');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { authenticate, AuthenticationError } from '../dist/auth.js';
+import { getDeviceConfig, parseConfig } from '../dist/configReader.js';
+import { ProtocolError } from '../dist/client.js';
+import { registerPush, sendPushKeepalive } from '../dist/push.js';
+import { ChannelType, CHANNEL_TYPE_PUSH } from '../dist/channels.js';
 
 /** A client that records the channels opened and the JSON sent, and answers with `reply`. */
 function jsonClient(reply = { 'response-code': 200 }) {

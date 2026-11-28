@@ -1,8 +1,16 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { ComelitIntercomPlatform, OFFLINE_AFTER_MS } = require('../dist/platform');
-const { quietLog, fakeApi } = require('./helpers');
 
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { ComelitIntercomPlatform, OFFLINE_AFTER_MS } from '../dist/platform.js';
+import { quietLog, fakeApi } from './helpers.js';
+import mod_net from 'node:net';
+import * as mod_accessories_nextVisitorSwitch from '../dist/accessories/nextVisitorSwitch.js';
+import * as mod_camera from '../dist/camera.js';
+import * as mod_accessories_doctorModeSwitch from '../dist/accessories/doctorModeSwitch.js';
+import mod_fs from 'node:fs';
+import mod_path from 'node:path';
+import mod_os from 'node:os';
 
 const deviceConfig = { aptAddress: 'SB000002', aptSubaddress: 3, doors: [{ index: 0, name: 'Entrance lock', aptAddress: 'SB100001', outputIndex: 1, isActuator: false }], cameras: [] };
 
@@ -173,7 +181,7 @@ test('cached accessories answer HomeKit before the first connection (beta.26)', 
 });
 
 test('shutting down while connecting closes the new connection (beta.26)', async () => {
-  const net = require('node:net');
+  const net = mod_net;
   let closed;
   const gone = new Promise((r) => (closed = r));
   const server = net.createServer((s) => { s.on('close', closed); s.on('error', () => undefined); });
@@ -282,7 +290,7 @@ test('next visitor with doctor mode on: one open per ring; Next Visitor counts a
 });
 
 test('next visitor: turns itself off at its time limit, also across a restart', async () => {
-  const { NextVisitorSwitch } = require('../dist/accessories/nextVisitorSwitch');
+  const { NextVisitorSwitch } = mod_accessories_nextVisitorSwitch;
   const { api, p } = platform({ nextVisitorSwitch: true });
   const acc = new api.platformAccessory('Next', 'uuid:x');
   const sw = new NextVisitorSwitch(p, acc, 50);
@@ -450,7 +458,7 @@ test('debug log: renewals every 2 min are summed up once an hour instead of logg
 });
 
 test('talk-back ffmpeg starts without buffering, so the door hears the phone sooner (2.3.0-beta.6)', () => {
-  const { TALK_BACK_ARGS } = require('../dist/camera');
+  const { TALK_BACK_ARGS } = mod_camera;
   const j = TALK_BACK_ARGS.join(' ');
   for (const opt of ['-fflags nobuffer', '-flags low_delay', '-probesize 512', '-analyzeduration 0', '-max_delay 0', '-reorder_queue_size 0', '-flush_packets 1']) {
     assert.ok(j.includes(opt), opt);
@@ -616,7 +624,7 @@ test('unlock: refused outside a ring and a live view (the message says so), allo
 // 2.5.0: doctor mode's time limit, and contact sensors for doctor mode and Next Visitor.
 
 test('doctor mode switch: turns itself off at its time limit, also across a restart; 0 means never', async () => {
-  const { DoctorModeSwitch } = require('../dist/accessories/doctorModeSwitch');
+  const { DoctorModeSwitch } = mod_accessories_doctorModeSwitch;
   const { api, p } = platform({ doctorMode: 'switch' });
   const acc = new api.platformAccessory('Doctor', 'uuid:d');
   const sw = new DoctorModeSwitch(p, acc, 50);
@@ -653,7 +661,7 @@ test('doctor mode switch: turns itself off at its time limit, also across a rest
 });
 
 test('doctor mode switch: on from before the update (no time limit stored) gets one starting now', async () => {
-  const { DoctorModeSwitch } = require('../dist/accessories/doctorModeSwitch');
+  const { DoctorModeSwitch } = mod_accessories_doctorModeSwitch;
   const { api, p } = platform({ doctorMode: 'switch' });
   const acc = new api.platformAccessory('Doctor', 'uuid:d');
   acc.context.on = true; // 2.4.0 kept only this
@@ -702,7 +710,7 @@ test('contact sensors: only when asked for; Open while the switch is on, Closed 
 });
 
 test('contact sensors: the sensor follows the time limit, and is removed when the setting is turned off', async () => {
-  const { DoctorModeSwitch } = require('../dist/accessories/doctorModeSwitch');
+  const { DoctorModeSwitch } = mod_accessories_doctorModeSwitch;
   const { api, p } = platform({ doctorMode: 'switch' });
   const acc = new api.platformAccessory('Doctor', 'uuid:d');
   const sw = new DoctorModeSwitch(p, acc, 50, true);
@@ -1016,8 +1024,8 @@ test('names: a new Name renames the tiles named by the plugin, not ones renamed 
 });
 
 test('names: Recent events from before a Name change are taken over at the next start', () => {
-  const fs = require('node:fs');
-  const dir = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'names-'));
+  const fs = mod_fs;
+  const dir = fs.mkdtempSync(mod_path.join(mod_os.tmpdir(), 'names-'));
   const api = fakeApi();
   api.user = { storagePath: () => dir };
   let launched;
@@ -1026,7 +1034,7 @@ test('names: Recent events from before a Name change are taken over at the next 
   p1.discoverAccessories(JSON.parse(JSON.stringify(deviceConfig)));
   const bell = [...p1.accessories.values()].find((a) => a.UUID.endsWith('-doorbell'));
   assert.strictEqual(bell.context.intercomName, 'Comelit Intercom');
-  fs.writeFileSync(require('node:path').join(dir, 'comelit-doorbell-events.json'), JSON.stringify([{ t: Date.now() - 5000, kind: 'ring', text: 'Ring' }]));
+  fs.writeFileSync(mod_path.join(dir, 'comelit-doorbell-events.json'), JSON.stringify([{ t: Date.now() - 5000, kind: 'ring', text: 'Ring' }]));
   const p2 = new ComelitIntercomPlatform(quietLog(), { platform: 'ComelitIntercom', name: 'Intercom' }, api);
   p2.configureAccessory(bell);
   p2.setupDevice = async () => {};

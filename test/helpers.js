@@ -1,4 +1,5 @@
 // Shared fakes and frames captured from a real 6741W (model MSVU, firmware 2.1.0).
+
 const hex = (s) => Buffer.from(s.replace(/\s/g, ''), 'hex');
 
 const frames = {
@@ -84,4 +85,4 @@ function fakeApi() {
   return api;
 }
 
-module.exports = { hex, frames, fakeClient, quietLog, fakeApi };
+export { hex, frames, fakeClient, quietLog, fakeApi };

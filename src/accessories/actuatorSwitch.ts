@@ -1,7 +1,7 @@
 import type { PlatformAccessory, Service } from 'homebridge';
-import type { ActuatorType } from '../config';
-import type { Door } from '../models';
-import type { ComelitIntercomPlatform } from '../platform';
+import type { ActuatorType } from '../config.js';
+import type { Door } from '../models.js';
+import type { ComelitIntercomPlatform } from '../platform.js';
 
 /** How long the button shows On after a press. */
 const SHOW_ON_MS = 1_000;

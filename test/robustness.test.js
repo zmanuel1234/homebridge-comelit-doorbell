@@ -1,9 +1,11 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { IconaBridgeClient } = require('../dist/client');
-const { AsyncQueue, createChannel } = require('../dist/channels');
-const { ctppInitSequence } = require('../dist/ctpp');
-const { frames, quietLog } = require('./helpers');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import { IconaBridgeClient } from '../dist/client.js';
+import { AsyncQueue, createChannel } from '../dist/channels.js';
+import { ctppInitSequence } from '../dist/ctpp.js';
+import { frames, quietLog } from './helpers.js';
+import * as mod_protocol from '../dist/protocol.js';
 
 test('a ring arriving during the CTPP registration is kept for the listener', async () => {
   const queue = new AsyncQueue();
@@ -42,7 +44,7 @@ test('a JSON request whose send fails rejects once, with no stray rejection late
 });
 
 test('a frame whose handler throws is logged and skipped, and the next frame still arrives', () => {
-  const { encodeHeader } = require('../dist/protocol');
+  const { encodeHeader } = mod_protocol;
   const log = quietLog();
   const client = new IconaBridgeClient('127.0.0.1', 1, log);
   const got = [];
@@ -56,7 +58,7 @@ test('a frame whose handler throws is logged and skipped, and the next frame sti
 });
 
 test('a channel the intercom closes is forgotten; closing CTPP is reported', () => {
-  const { encodeHeader } = require('../dist/protocol');
+  const { encodeHeader } = mod_protocol;
   const client = new IconaBridgeClient('127.0.0.1', 1, quietLog());
   const written = [];
   client.socket = { write: (b) => written.push(b), destroy() {} };
