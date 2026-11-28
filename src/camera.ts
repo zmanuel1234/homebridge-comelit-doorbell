@@ -10,7 +10,7 @@
  * and with talk-back on, HomeKit's microphone audio is turned back into A-law for the
  * intercom's speaker. The ffmpeg arguments follow homebridge-camera-ffmpeg.
  */
-import { PREBUFFER_MS, RingRecorder, spawnFfmpeg } from './recording';
+import { PREBUFFER_MS, RingRecorder, spawnFfmpeg } from './recording.js';
 import { type ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { createSocket, type Socket } from 'dgram';
 import { createWriteStream, existsSync, promises as fs, type WriteStream } from 'fs';
@@ -31,9 +31,10 @@ import type {
   StreamingRequest,
   StreamRequestCallback,
 } from 'homebridge';
-import type { CallHandler, MediaSession } from './call';
-import type { Settings } from './config';
-import { ALAW_FRAME_BYTES, KeyframeCache, nalType } from './media';
+import type { CallHandler, MediaSession } from './call.js';
+import type { Settings } from './config.js';
+import { ALAW_FRAME_BYTES, KeyframeCache, nalType } from './media.js';
+import { createRequire } from 'node:module';
 
 /** A new viewer of an ongoing call starts from the latest keyframe if it is this recent. */
 const FRESH_KEYFRAME_MS = 10_000;
@@ -152,20 +153,19 @@ function freePort(ipv6: boolean): Promise<number> {
 }
 
 /** The picture shown when there is no call, shipped with the plugin. */
-export const DEFAULT_STILL = path.join(__dirname, '..', 'assets', 'doorbell-idle.jpg');
+export const DEFAULT_STILL = path.join(import.meta.dirname, '..', 'assets', 'doorbell-idle.jpg');
 
 /**
  * ffmpeg: the configured path; else ffmpeg-for-homebridge (installed on its own, or inside
  * homebridge-camera-ffmpeg); else /usr/local/bin/ffmpeg (the Homebridge Raspberry Pi image);
  * else `ffmpeg` from PATH.
  */
-export function resolveFfmpeg(configured: string, nodeModules = path.join(__dirname, '..', '..')): string {
+export function resolveFfmpeg(configured: string, nodeModules = path.join(import.meta.dirname, '..', '..')): string {
   if (configured) {
     return configured;
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const bundled = require('ffmpeg-for-homebridge') as string | undefined;
+    const bundled = createRequire(import.meta.url)('ffmpeg-for-homebridge') as string | undefined;
     if (bundled && existsSync(bundled)) {
       return bundled;
     }

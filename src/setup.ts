@@ -6,12 +6,12 @@
 import { execFile } from 'node:child_process';
 import dgram from 'node:dgram';
 import os from 'node:os';
-import { authenticate } from './auth';
-import { resolveFfmpeg } from './camera';
-import { ChannelType, ViperMessageId } from './channels';
-import { IconaBridgeClient } from './client';
-import { type ComelitPlatformConfig, resolveSettings, settingsWarnings } from './config';
-import type { JsonMessage } from './protocol';
+import { authenticate } from './auth.js';
+import { resolveFfmpeg } from './camera.js';
+import { ChannelType, ViperMessageId } from './channels.js';
+import { IconaBridgeClient } from './client.js';
+import { type ComelitPlatformConfig, resolveSettings, settingsWarnings } from './config.js';
+import type { JsonMessage } from './protocol.js';
 
 /** The UDP port Comelit devices answer an `INFO` search on. */
 export const DISCOVERY_PORT = 24199;

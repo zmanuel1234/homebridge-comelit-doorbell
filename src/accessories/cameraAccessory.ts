@@ -1,6 +1,6 @@
 import type { PlatformAccessory, Service } from 'homebridge';
-import type { Camera } from '../models';
-import type { ComelitIntercomPlatform } from '../platform';
+import type { Camera } from '../models.js';
+import type { ComelitIntercomPlatform } from '../platform.js';
 
 /**
  * Placeholder for an RTSP camera listed on the intercom: a motion sensor that never

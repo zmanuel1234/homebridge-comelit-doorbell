@@ -1,5 +1,5 @@
 import type { PlatformConfig } from 'homebridge';
-import type { AnswerMode } from './call';
+import type { AnswerMode } from './call.js';
 
 /** Sound in live view without a ring. */
 export type LiveViewSound = 'off' | 'talk' | 'always';
@@ -12,7 +12,7 @@ export function actuatorKey(name: string): string {
 }
 
 export type DoctorMode = 'off' | 'switch' | 'always';
-import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_MS } from './settings';
+import { DEFAULT_RECONNECT_DELAY_S, ICONA_BRIDGE_PORT, PLANNED_RECONNECT_DELAY_MS } from './settings.js';
 
 /** The plugin's block in config.json (see config.schema.json). */
 export interface ComelitPlatformConfig extends PlatformConfig {

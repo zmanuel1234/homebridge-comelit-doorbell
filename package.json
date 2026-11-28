@@ -1,7 +1,7 @@
 {
   "name": "homebridge-comelit-doorbell",
   "displayName": "Comelit Doorbell",
-  "version": "2.8.3",
+  "version": "2.9.0",
   "description": "Comelit ViP intercoms (6701W/6741W Mini) in HomeKit: a video doorbell with live video, talk-back, the visitor's picture in the ring notification and HomeKit Secure Video recording, plus door unlock from Home, Siri or Apple Watch. Fully local.",
   "author": "Manuel Zamfir",
   "contributors": [
@@ -26,12 +26,11 @@
       "url": "https://www.buymeacoffee.com/zmanuel"
     }
   ],
+  "type": "module",
   "main": "dist/index.js",
   "files": [
     "dist",
     "assets",
-    "src",
-    "homebridge-ui",
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
@@ -39,15 +38,16 @@
     "NOTICE"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"require('fs').cpSync('src/homebridge-ui/public','dist/homebridge-ui/public',{recursive:true})\"",
+    "check": "tsc -p .",
     "lint": "oxlint",
     "test": "node --test test/*.test.js",
     "prepare": "npm run build",
     "prepublishOnly": "npm run verify",
     "verify": "npm run check && npm run lint && npm run build && npm test && node .github/scripts/check-homebridge.mjs && node .github/scripts/check-config-schema.mjs",
     "test:matrix": "npm run build && npm test",
-    "release:check": "npm run verify && node .github/scripts/check-homebridge.mjs --release"
+    "release:check": "npm run verify && node .github/scripts/check-homebridge.mjs --release",
+    "watch": "npm run build && npm link && nodemon"
   },
   "keywords": [
     "homebridge-plugin",
@@ -79,8 +79,15 @@
     "@types/node": "^22.20.5",
     "ajv": "8.20.0",
     "homebridge": "^2.5.0",
+    "nodemon": "^3.1.14",
     "oxlint": "1.95.0",
     "oxlint-tsgolint": "7.0.2008",
+    "tsx": "^4.23.15",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "nodemon": {
+      "minimatch": "^11.0.9"
+    }
   }
 }

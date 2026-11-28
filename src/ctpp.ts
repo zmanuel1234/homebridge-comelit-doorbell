@@ -1,8 +1,8 @@
 import type { Logging } from 'homebridge';
-import type { Channel } from './channels';
-import type { IconaBridgeClient } from './client';
-import { ackWord } from './ctp';
-import { encodeCallResponseAck, encodeCtppInit } from './protocol';
+import type { Channel } from './channels.js';
+import type { IconaBridgeClient } from './client.js';
+import { ackWord } from './ctp.js';
+import { encodeCallResponseAck, encodeCtppInit } from './protocol.js';
 
 const PREFIX_VIP_EVENT = 0x1860;
 /** A new call from the intercom (a ring's INVITE starts with this). */

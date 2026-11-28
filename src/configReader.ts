@@ -1,7 +1,7 @@
-import { ChannelType, ViperMessageId } from './channels';
-import { type IconaBridgeClient, ProtocolError } from './client';
-import type { DeviceConfig, Door } from './models';
-import type { JsonMessage } from './protocol';
+import { ChannelType, ViperMessageId } from './channels.js';
+import { type IconaBridgeClient, ProtocolError } from './client.js';
+import type { DeviceConfig, Door } from './models.js';
+import type { JsonMessage } from './protocol.js';
 
 type Obj = Record<string, unknown>;
 

@@ -172,7 +172,7 @@
       }
     },
     // ---- This repository ----
-    // No `any`: values from the intercom, HAP and the config get a type (or `unknown`, checked);
+    // No `any`: values from devices, HAP and the config get a type (or `unknown`, checked);
     // and none logged or shown as "[object Object]".
     {"files": ["**/*.ts"], "rules": {"typescript/no-explicit-any": "error", "typescript/no-unsafe-argument": "error", "typescript/no-unsafe-assignment": "error", "typescript/no-unsafe-call": "error", "typescript/no-unsafe-member-access": "error", "typescript/no-unsafe-return": "error", "typescript/no-base-to-string": "error"}}
     // -------------------------

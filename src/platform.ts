@@ -1,27 +1,27 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, Service } from 'homebridge';
-import { CameraAccessory } from './accessories/cameraAccessory';
-import { DoctorModeSwitch } from './accessories/doctorModeSwitch';
-import { NextVisitorSwitch } from './accessories/nextVisitorSwitch';
-import { OfflineSensor } from './accessories/offlineSensor';
-import { DoorbellAccessory } from './accessories/doorbellAccessory';
-import { ActuatorSwitchAccessory } from './accessories/actuatorSwitch';
-import { LockAccessory } from './accessories/lockAccessory';
-import { authenticate } from './auth';
-import { CallHandler } from './call';
-import { DoorbellCamera } from './camera';
-import { EventLog, eventsFileFor } from './events';
-import { ChannelType, ViperMessageId } from './channels';
-import { IconaBridgeClient } from './client';
-import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings, actuatorKey, type ActuatorType } from './config';
-import { getDeviceConfig } from './configReader';
-import { ctppInitSequence } from './ctpp';
-import { openDoor } from './door';
-import type { DeviceConfig, Door, IntercomEvent, OpenResult } from './models';
-import { encodeCtppInit } from './protocol';
-import { registerPush, sendPushKeepalive } from './push';
-import { KEEPALIVE_INTERVAL_MS, PLATFORM_NAME, PLUGIN_NAME, UUID_SEED } from './settings';
-import { VipEventListener } from './vipListener';
-import { followName } from './names';
+import { CameraAccessory } from './accessories/cameraAccessory.js';
+import { DoctorModeSwitch } from './accessories/doctorModeSwitch.js';
+import { NextVisitorSwitch } from './accessories/nextVisitorSwitch.js';
+import { OfflineSensor } from './accessories/offlineSensor.js';
+import { DoorbellAccessory } from './accessories/doorbellAccessory.js';
+import { ActuatorSwitchAccessory } from './accessories/actuatorSwitch.js';
+import { LockAccessory } from './accessories/lockAccessory.js';
+import { authenticate } from './auth.js';
+import { CallHandler } from './call.js';
+import { DoorbellCamera } from './camera.js';
+import { EventLog, eventsFileFor } from './events.js';
+import { ChannelType, ViperMessageId } from './channels.js';
+import { IconaBridgeClient } from './client.js';
+import { callHandlerMode, type ComelitPlatformConfig, reconnectDelay, resolveSettings, type Settings, settingsWarnings, actuatorKey, type ActuatorType } from './config.js';
+import { getDeviceConfig } from './configReader.js';
+import { ctppInitSequence } from './ctpp.js';
+import { openDoor } from './door.js';
+import type { DeviceConfig, Door, IntercomEvent, OpenResult } from './models.js';
+import { encodeCtppInit } from './protocol.js';
+import { registerPush, sendPushKeepalive } from './push.js';
+import { KEEPALIVE_INTERVAL_MS, PLATFORM_NAME, PLUGIN_NAME, UUID_SEED } from './settings.js';
+import { VipEventListener } from './vipListener.js';
+import { followName } from './names.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -964,7 +964,7 @@ export class ComelitIntercomPlatform implements DynamicPlatformPlugin {
 /** The plugin's version, for the Recent events tab ('?' if it can't be read). */
 function pluginVersion(): string {
   try {
-    return `plugin ${(JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? '?'}`;
+    return `plugin ${(JSON.parse(readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? '?'}`;
   } catch {
     return 'plugin ?';
   }

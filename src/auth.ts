@@ -1,5 +1,5 @@
-import { ChannelType, ViperMessageId } from './channels';
-import type { IconaBridgeClient } from './client';
+import { ChannelType, ViperMessageId } from './channels.js';
+import type { IconaBridgeClient } from './client.js';
 
 export class AuthenticationError extends Error {}
 

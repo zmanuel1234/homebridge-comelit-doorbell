@@ -29,15 +29,15 @@
  * Every frame of a call is logged with the prefix `call:`.
  */
 import { randomBytes } from 'crypto';
-import { KeyframeTrace, type VideoSource } from './keyframes';
+import { KeyframeTrace, type VideoSource } from './keyframes.js';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
-import { ChannelType } from './channels';
-import type { IconaBridgeClient } from './client';
-import { buildFrame, type CtpFrame, Flag, logicalAddress, Opcode } from './ctp';
-import { RECORDING_MAX_MS } from './settings';
-import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media';
-import type { Door, OpenResult } from './models';
+import { ChannelType } from './channels.js';
+import type { IconaBridgeClient } from './client.js';
+import { buildFrame, type CtpFrame, Flag, logicalAddress, Opcode } from './ctp.js';
+import { RECORDING_MAX_MS } from './settings.js';
+import { ALAW_PAYLOAD_TYPE, buildRtp, H264Depacketizer, LEFTOVER_GAP_MS, MIN_PICTURE_BYTES, nalType, parseRtp, parseSps } from './media.js';
+import type { Door, OpenResult } from './models.js';
 
 export type AnswerMode = 'off' | 'handshake' | 'answer-on-open' | 'answer-on-view';
 

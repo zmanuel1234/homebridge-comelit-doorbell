@@ -5,7 +5,7 @@
 import net from 'net';
 import { EventEmitter } from 'events';
 import type { Logging } from 'homebridge';
-import { type Channel, createChannel } from './channels';
+import { type Channel, createChannel } from './channels.js';
 import {
   HEADER_SIZE,
   decodeHeader,
@@ -22,8 +22,8 @@ import {
   isJsonBody,
   type JsonMessage,
   parseCommandResponse,
-} from './protocol';
-import { CONNECT_TIMEOUT_MS, DEAD_CONNECTION_TIMEOUT_MS, ICONA_BRIDGE_PORT, READ_TIMEOUT_MS } from './settings';
+} from './protocol.js';
+import { CONNECT_TIMEOUT_MS, DEAD_CONNECTION_TIMEOUT_MS, ICONA_BRIDGE_PORT, READ_TIMEOUT_MS } from './settings.js';
 
 export class ConnectionError extends Error {}
 export class ProtocolError extends Error {}
